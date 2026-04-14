@@ -1,0 +1,82 @@
+/**
+ * Aparición al entrar en viewport (scroll-driven) en .viterra-page.
+ * Respeto a prefers-reduced-motion.
+ */
+
+@keyframes viterra-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(1.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .viterra-page > section:not(.viterra-reveal-off),
+    .viterra-page [data-reveal]:not(.viterra-reveal-off) {
+      animation: viterra-reveal-in linear both;
+      animation-timeline: view(block);
+      animation-range: entry 0% cover 26%;
+    }
+  }
+
+  @supports not (animation-timeline: view()) {
+    .viterra-page > section:not(.viterra-reveal-off),
+    .viterra-page [data-reveal]:not(.viterra-reveal-off) {
+      opacity: 0;
+      animation: viterra-reveal-in 0.58s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viterra-page > section,
+  .viterra-page [data-reveal] {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .scroll-fade-exit-white::after {
+    content: none !important;
+  }
+}
+
+/**
+ * Al hacer scroll y la sección sale por arriba del viewport, velo blanco
+ * (continuidad con el bloque blanco siguiente / barra clara del header).
+ */
+@keyframes viterra-scroll-exit-white {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.96;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .scroll-fade-exit-white {
+      position: relative;
+    }
+
+    .scroll-fade-exit-white::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 25;
+      pointer-events: none;
+      background: #ffffff;
+      opacity: 0;
+      animation: viterra-scroll-exit-white linear both;
+      animation-timeline: view(block);
+      /* Empieza un poco antes de que el bloque desaparezca por arriba */
+      animation-range: exit 0% exit 90%;
+    }
+  }
+}

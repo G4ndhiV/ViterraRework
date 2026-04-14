@@ -1,0 +1,89 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap');
+
+/* Cera Pro — local en /public/fonts/cera-pro (Demo Fontspring; reemplazar por licencia completa si aplica) */
+@font-face {
+  font-family: "Cera Pro";
+  src: url("/fonts/cera-pro/Fontspring-DEMO-cerapro-thin.otf") format("opentype");
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cera Pro";
+  src: url("/fonts/cera-pro/Fontspring-DEMO-cerapro-thinitalic.otf") format("opentype");
+  font-weight: 100;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cera Pro";
+  src: url("/fonts/cera-pro/Fontspring-DEMO-cerapro-light.otf") format("opentype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cera Pro";
+  src: url("/fonts/cera-pro/Fontspring-DEMO-cerapro-lightitalic.otf") format("opentype");
+  font-weight: 300;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cera Pro";
+  src: url("/fonts/cera-pro/Fontspring-DEMO-cerapro-regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cera Pro";
+  src: url("/fonts/cera-pro/Fontspring-DEMO-cerapro-regularitalic.otf") format("opentype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cera Pro";
+  src: url("/fonts/cera-pro/Fontspring-DEMO-cerapro-medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cera Pro";
+  src: url("/fonts/cera-pro/Fontspring-DEMO-cerapro-mediumitalic.otf") format("opentype");
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cera Pro";
+  src: url("/fonts/cera-pro/Fontspring-DEMO-cerapro-bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cera Pro";
+  src: url("/fonts/cera-pro/Fontspring-DEMO-cerapro-bolditalic.otf") format("opentype");
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cera Pro";
+  src: url("/fonts/cera-pro/Fontspring-DEMO-cerapro-black.otf") format("opentype");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cera Pro";
+  src: url("/fonts/cera-pro/Fontspring-DEMO-cerapro-blackitalic.otf") format("opentype");
+  font-weight: 900;
+  font-style: italic;
+  font-display: swap;
+}
