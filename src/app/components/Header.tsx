@@ -3,18 +3,10 @@ import { Menu, X, Search, User } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { usePreviewCanvas } from "../../contexts/PreviewCanvasContext";
 import { cn } from "./ui/utils";
+import { VITERRA_NAV_ITEMS } from "../config/siteNav";
 
 /** Recorrido de scroll (px) para interpolar header (home e internas) */
 const SCROLL_RANGE = 200;
-
-const navItems = [
-  ["/", "INICIO"],
-  ["/renta", "RENTAR"],
-  ["/venta", "COMPRAR"],
-  ["/desarrollos", "DESARROLLOS"],
-  ["/servicios", "SERVICIOS"],
-  ["/nosotros", "ACERCA DE"],
-] as const;
 
 const NAVY = { r: 20, g: 28, b: 46 } as const;
 
@@ -81,6 +73,7 @@ export function Header() {
 
   const bgAlpha = lerp(0, BG_ALPHA_MAX, p);
   const blurPx = lerp(0, 18, p);
+  const headerBgAlpha = bgAlpha;
   const shadowY = lerp(0, 14, p);
   const shadowBlur = lerp(0, 36, p);
   const shadowAlpha = lerp(0, 0.38, p);
@@ -115,7 +108,7 @@ export function Header() {
       }`}
       style={{
         fontFamily: "Poppins, sans-serif",
-        backgroundColor: `rgba(${NAVY.r},${NAVY.g},${NAVY.b},${bgAlpha})`,
+        backgroundColor: `rgba(${NAVY.r},${NAVY.g},${NAVY.b},${headerBgAlpha})`,
         backgroundImage: `linear-gradient(180deg, rgba(0,0,0,${gTop.toFixed(3)}) 0%, rgba(0,0,0,${gMid.toFixed(3)}) 42%, rgba(0,0,0,${gBot.toFixed(3)}) 100%)`,
         backdropFilter: `saturate(140%) blur(${blurPx}px)`,
         WebkitBackdropFilter: `saturate(140%) blur(${blurPx}px)`,
@@ -166,7 +159,7 @@ export function Header() {
           >
             <div className="w-20 shrink-0" aria-hidden />
             <div className="flex min-w-0 flex-1 items-center justify-center" style={{ gap: `${navGap}px` }}>
-              {navItems.map(([to, label]) => (
+              {VITERRA_NAV_ITEMS.map(([to, label]) => (
                 <Link key={`c-${to}`} to={to} className={navLinkClass} style={{ fontSize: `${navFontPx}px`, letterSpacing: `${navTrackEm}em` }}>
                   {label}
                 </Link>
@@ -195,7 +188,7 @@ export function Header() {
               <button type="button" className="-ml-1 shrink-0 p-2 text-white/85 hover:text-white" aria-label="Buscar">
                 <Search className="h-[18px] w-[18px]" strokeWidth={1.5} />
               </button>
-              {navItems.slice(0, 3).map(([to, label]) => (
+              {VITERRA_NAV_ITEMS.slice(0, 3).map(([to, label]) => (
                 <Link key={`l-${to}`} to={to} className={`${navLinkClass} text-white/90`} style={{ fontSize: `${navFontPx}px`, letterSpacing: `${navTrackEm}em` }}>
                   {label}
                 </Link>
@@ -203,7 +196,7 @@ export function Header() {
             </div>
             <div className="w-28 shrink-0" aria-hidden />
             <div className="flex min-w-0 items-center justify-end gap-4 xl:gap-5">
-              {navItems.slice(3).map(([to, label]) => (
+              {VITERRA_NAV_ITEMS.slice(3).map(([to, label]) => (
                 <Link key={`r-${to}`} to={to} className={`${navLinkClass} text-white/90`} style={{ fontSize: `${navFontPx}px`, letterSpacing: `${navTrackEm}em` }}>
                   {label}
                 </Link>
@@ -253,8 +246,13 @@ export function Header() {
           }}
         >
           <div className="mx-auto max-w-7xl space-y-1 px-4 py-5 sm:px-6 sm:py-6">
-            {navItems.map(([to, label]) => (
-              <Link key={to} to={to} onClick={() => setIsMenuOpen(false)} className="block py-3 text-sm uppercase tracking-[0.14em] text-white/90">
+            {VITERRA_NAV_ITEMS.map(([to, label]) => (
+              <Link
+                key={to}
+                to={to}
+                onClick={() => setIsMenuOpen(false)}
+                className="block py-3 text-sm uppercase tracking-[0.14em] text-white/90"
+              >
                 {label}
               </Link>
             ))}

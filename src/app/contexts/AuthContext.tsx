@@ -1,10 +1,12 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
 
+export type UserRole = 'admin' | 'lider_grupo' | 'asesor';
+
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'agente';
+  role: UserRole;
 }
 
 interface AuthContextType {
@@ -17,29 +19,40 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock users para demo
+/** Demo: tres usuarios para probar permisos en leads (Kanban / listas). */
 const mockUsers: { email: string; password: string; user: User }[] = [
   {
     email: 'admin@viterra.com',
     password: 'admin123',
-    user: { id: '1', email: 'admin@viterra.com', name: 'Admin Viterra', role: 'admin' }
+    user: { id: '1', email: 'admin@viterra.com', name: 'Admin Viterra', role: 'admin' },
   },
   {
-    email: 'carlos@viterra.com',
-    password: 'agente123',
-    user: { id: '2', email: 'carlos@viterra.com', name: 'Carlos Rodríguez', role: 'agente' }
+    email: 'lider@viterra.com',
+    password: 'lider123',
+    user: { id: '2', email: 'lider@viterra.com', name: 'Patricia López', role: 'lider_grupo' },
   },
   {
-    email: 'ana@viterra.com',
-    password: 'agente123',
-    user: { id: '3', email: 'ana@viterra.com', name: 'Ana Martínez', role: 'agente' }
-  }
+    email: 'asesor@viterra.com',
+    password: 'asesor123',
+    user: { id: '3', email: 'asesor@viterra.com', name: 'Laura Méndez', role: 'asesor' },
+  },
 ];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
     const savedUser = localStorage.getItem('viterra_user');
-    return savedUser ? JSON.parse(savedUser) : null;
+    if (!savedUser) return null;
+    try {
+      const parsed = JSON.parse(savedUser) as User & { role?: string };
+      if (parsed.role === 'agente') {
+        const migrated: User = { ...parsed, role: 'asesor' };
+        localStorage.setItem('viterra_user', JSON.stringify(migrated));
+        return migrated;
+      }
+      return parsed as User;
+    } catch {
+      return null;
+    }
   });
 
   const login = (email: string, password: string): boolean => {

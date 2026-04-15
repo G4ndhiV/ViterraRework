@@ -81,9 +81,10 @@
 
 @theme inline {
   --font-serif: "Cormorant Garamond", ui-serif, Georgia, "Times New Roman", serif;
-  /* Manual Viterra: titulares — Cera Pro local (/public/fonts/cera-pro), luego DM Sans */
-  --font-heading: "Cera Pro", "DM Sans", ui-sans-serif, system-ui, sans-serif;
-  /* Manual Viterra: leyendas / acentos terciarios (Perpetua + fallback) */
+  /* Titulares / alta jerarquía: Montserrat (sustituye Cera Pro en guía) */
+  --font-heading: "Montserrat", "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  /* Cuerpo UI: Poppins vía --font-family en :root */
+  /* Leyendas discretas: Perpetua + fallback */
   --font-tertiary: Perpetua, "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
   --color-brand-canvas: #f4f2ef;
   --color-brand-navy: #141c2e;

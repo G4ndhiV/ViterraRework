@@ -136,15 +136,21 @@ export function LoginPage() {
             </p>
             <div className="space-y-3">
               <div>
-                <p className="text-xs text-slate-500 mb-1" style={{ fontWeight: 500 }}>Admin:</p>
+                <p className="text-xs text-slate-500 mb-1" style={{ fontWeight: 500 }}>Administrador (todos los leads):</p>
                 <code className="text-xs font-mono bg-white px-2 py-1 rounded border border-slate-200 text-slate-900">
                   admin@viterra.com / admin123
                 </code>
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-1" style={{ fontWeight: 500 }}>Agente:</p>
+                <p className="text-xs text-slate-500 mb-1" style={{ fontWeight: 500 }}>Líder de grupo (todos los leads):</p>
                 <code className="text-xs font-mono bg-white px-2 py-1 rounded border border-slate-200 text-slate-900">
-                  carlos@viterra.com / agente123
+                  lider@viterra.com / lider123
+                </code>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1" style={{ fontWeight: 500 }}>Asesor (solo leads asignados):</p>
+                <code className="text-xs font-mono bg-white px-2 py-1 rounded border border-slate-200 text-slate-900">
+                  asesor@viterra.com / asesor123
                 </code>
               </div>
             </div>
