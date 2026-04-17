@@ -4,9 +4,9 @@ import { HomePage } from "./pages/HomePage";
 import { RentPage } from "./pages/RentPage";
 import { SalePage } from "./pages/SalePage";
 import { ServicesPage } from "./pages/ServicesPage";
-import { PropertiesPage } from "./pages/PropertiesPage";
 import { MapSearchPage } from "./pages/MapSearchPage";
 import { PropertyDetailPage } from "./pages/PropertyDetailPage";
+import { PropertiesRedirectPage } from "./pages/PropertiesRedirectPage";
 import { DevelopmentsPage } from "./pages/DevelopmentsPage";
 import { DevelopmentDetailPage } from "./pages/DevelopmentDetailPage";
 import { AboutPage } from "./pages/AboutPage";
@@ -41,7 +41,7 @@ export const router = createBrowserRouter([
       },
       {
         path: "/propiedades",
-        Component: PropertiesPage,
+        Component: PropertiesRedirectPage,
       },
       {
         path: "/propiedades/:id",

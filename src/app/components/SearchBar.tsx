@@ -75,13 +75,13 @@ export function SearchBar({
 
   const labelClass = cn(
     "block mb-2 uppercase tracking-[0.16em]",
-    isPremium ? "text-[10px] text-neutral-600 font-medium" : "text-sm font-medium text-slate-700"
+    isPremium ? "text-[10px] text-brand-navy/60 font-medium" : "text-sm font-medium text-slate-700"
   );
 
   const fieldClass = cn(
     fieldBase,
     isPremium
-      ? "rounded-none border-neutral-300 bg-[#faf9f7] text-neutral-900 placeholder:text-neutral-400 focus-visible:border-neutral-900 focus-visible:ring-neutral-900/25"
+      ? "rounded-none border-brand-navy/20 bg-brand-canvas text-brand-navy placeholder:text-brand-navy/45 focus-visible:border-brand-navy focus-visible:ring-brand-navy/20"
       : "rounded-lg border-slate-300 focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
   );
 
@@ -89,8 +89,8 @@ export function SearchBar({
     CONTROL_H,
     "inline-flex w-full shrink-0 items-center justify-center gap-2 text-sm font-medium transition-colors",
     isPremium
-      ? "rounded-none bg-[#C8102E] px-5 text-white tracking-[0.12em] text-[11px] uppercase hover:bg-[#a00d25] focus-visible:ring-1 focus-visible:ring-[#7f1d1d] focus-visible:ring-offset-2"
-      : "rounded-lg bg-[#C8102E] px-5 text-white hover:bg-[#a00d25]"
+      ? "rounded-none bg-primary px-5 text-white tracking-[0.12em] text-[11px] uppercase hover:bg-brand-red-hover focus-visible:ring-1 focus-visible:ring-brand-burgundy focus-visible:ring-offset-2"
+      : "rounded-lg bg-primary px-5 text-white hover:bg-brand-red-hover"
   );
 
   return (
@@ -183,7 +183,7 @@ export function SearchBar({
         <div
           className={cn(
             "mt-6 flex justify-center border-t pt-6",
-            isPremium ? "border-neutral-200/70" : "border-slate-200"
+            isPremium ? "border-brand-navy/10" : "border-slate-200"
           )}
         >
           <Link
@@ -191,7 +191,7 @@ export function SearchBar({
             aria-label="Ir a la búsqueda en mapa"
             className={cn(
               "group font-heading text-[15px] tracking-tight transition-colors duration-200 sm:text-base",
-              isPremium ? "text-neutral-900" : "text-brand-navy"
+              "text-brand-navy"
             )}
             style={{ fontWeight: 600 }}
           >
@@ -199,7 +199,7 @@ export function SearchBar({
               className={cn(
                 "border-b border-current pb-0.5 transition-[border-color,color] duration-200",
                 isPremium
-                  ? "border-neutral-400/90 group-hover:border-primary group-hover:text-primary"
+                  ? "border-brand-navy/30 group-hover:border-primary group-hover:text-primary"
                   : "border-slate-400 group-hover:border-primary group-hover:text-primary"
               )}
             >
@@ -212,7 +212,7 @@ export function SearchBar({
       <div
         className={cn(
           "mt-6 grid grid-cols-1 gap-4 border-t pt-6 md:grid-cols-2 md:gap-6",
-          isPremium ? "border-neutral-200/90" : "border-slate-200"
+          isPremium ? "border-brand-navy/10" : "border-slate-200"
         )}
       >
         <div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
@@ -86,40 +86,31 @@ export function RentPage() {
     <div className="viterra-page min-h-screen flex flex-col bg-white" >
       <Header />
 
-      <section className="relative flex min-h-[58vh] flex-col justify-center overflow-hidden bg-brand-navy py-14 sm:min-h-[64vh] md:min-h-[72vh] md:py-20">
+      <section className="relative flex min-h-[100svh] flex-col justify-end overflow-hidden bg-brand-navy pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] pt-[calc(env(safe-area-inset-top,0px)+5.25rem)] sm:pb-16 sm:pt-[calc(env(safe-area-inset-top,0px)+6.5rem)] md:pb-24 md:pt-52">
         <div className="absolute inset-0 z-0">
           <img
-            src="https://images.unsplash.com/photo-1758448511322-8bfc73daf606?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwyfHxsdXh1cnklMjBwZW50aG91c2UlMjBpbnRlcmlvciUyMGxpdmluZyUyMHJvb218ZW58MXx8fHwxNzc2MDk1NzU3fDA&ixlib=rb-4.1.0&q=80&w=1080"
+            src="https://media.admagazine.com/photos/686d8644af6250fff2506526/16:9/w_2560%2Cc_limit/departamento-tipo-loft-forma-optima-aprovechar-espacios-pequenos.jpg"
             alt="Propiedades en Renta"
             className="h-full w-full object-cover"
           />
           <div
-            className="absolute inset-0 bg-gradient-to-b from-brand-navy/75 via-black/45 to-brand-burgundy/35"
+            className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60"
             aria-hidden
           />
         </div>
 
         <div className="relative z-10 mx-auto max-w-7xl px-6 py-6 text-center lg:px-8">
-          <p
-            className="font-tertiary text-[11px] font-normal uppercase tracking-[0.28em] text-white/75 md:text-xs"
-            style={{ fontWeight: 400 }}
-          >
+          <p className="font-heading text-[11px] font-normal uppercase tracking-[0.28em] text-white/75 md:text-xs not-italic">
             Viterra · Listados
           </p>
           <span className="mx-auto mt-3 block h-px w-12 bg-primary" aria-hidden />
           <div className="mt-5 flex justify-center text-primary" aria-hidden>
             <ChevronsDown className="h-8 w-8" strokeWidth={1.5} />
           </div>
-          <h1
-            className="font-heading mt-6 text-4xl font-light tracking-tight text-white sm:text-5xl md:text-6xl"
-            style={{ letterSpacing: "-0.02em", fontWeight: 300 }}
-          >
+          <h1 className="font-heading mt-6 text-4xl font-light tracking-[-0.02em] text-white sm:text-5xl md:text-6xl">
             Propiedades en Renta
           </h1>
-          <p
-            className="mx-auto mt-4 max-w-2xl text-lg leading-relaxed text-white/90 md:text-xl"
-            style={{ fontFamily: "Poppins, sans-serif", fontWeight: 300 }}
-          >
+          <p className="font-heading mx-auto mt-4 max-w-2xl text-lg font-light leading-relaxed text-white/90 md:text-xl not-italic">
             Encuentra tu hogar ideal en las mejores ubicaciones de Guadalajara
           </p>
         </div>
@@ -131,19 +122,19 @@ export function RentPage() {
         </div>
       </section>
 
-      <section className="bg-white py-8">
+      <section id="renta-catalogo" className="bg-white py-8">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
             <div className="flex items-center gap-3">
               <SlidersHorizontal className="h-5 w-5 text-primary" strokeWidth={1.5} />
-              <p className="text-sm text-slate-700" style={{ fontFamily: "Poppins, sans-serif", fontWeight: 500 }}>
+              <p className="font-heading text-sm font-medium text-brand-navy/90 not-italic">
                 {filteredProperties.length} propiedad{filteredProperties.length !== 1 ? "es" : ""} disponible
                 {filteredProperties.length !== 1 ? "s" : ""}
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-1 rounded-lg border border-slate-200/80 bg-slate-50 p-1">
+              <div className="flex items-center gap-1 rounded-lg border border-brand-navy/10 bg-brand-canvas p-1">
                 <button
                   type="button"
                   onClick={() => setViewMode("grid")}
@@ -151,7 +142,7 @@ export function RentPage() {
                     "rounded-md px-3 py-2 transition-colors",
                     viewMode === "grid"
                       ? "bg-white text-brand-navy shadow-sm ring-1 ring-primary/25"
-                      : "text-slate-600 hover:text-brand-navy"
+                      : "text-brand-navy/60 hover:text-brand-navy"
                   )}
                   aria-pressed={viewMode === "grid"}
                   aria-label="Vista en cuadrícula"
@@ -165,7 +156,7 @@ export function RentPage() {
                     "rounded-md px-3 py-2 transition-colors",
                     viewMode === "map"
                       ? "bg-white text-brand-navy shadow-sm ring-1 ring-primary/25"
-                      : "text-slate-600 hover:text-brand-navy"
+                      : "text-brand-navy/60 hover:text-brand-navy"
                   )}
                   aria-pressed={viewMode === "map"}
                   aria-label="Vista en mapa"
@@ -177,8 +168,7 @@ export function RentPage() {
               <select
                 value={sortBy}
                 onChange={(e) => handleSort(e.target.value)}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-                style={{ fontFamily: "Poppins, sans-serif", fontWeight: 400 }}
+                className="font-heading rounded-lg border border-brand-navy/15 bg-white px-4 py-2 text-sm font-normal text-brand-navy not-italic focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
               >
                 <option value="newest">Más recientes</option>
                 <option value="price-low">Precio: Menor a mayor</option>
@@ -192,16 +182,16 @@ export function RentPage() {
           {viewMode === "grid" ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredProperties.map((property) => (
-                <PropertyCard key={property.id} property={property} />
+                <PropertyCard key={property.id} property={property} disablePreview />
               ))}
             </div>
           ) : (
-            <PropertyMap properties={filteredProperties} />
+            <PropertyMap properties={filteredProperties} mapHeightClassName="h-[58vh] min-h-[320px] max-h-[460px]" />
           )}
 
           {filteredProperties.length === 0 && (
             <div className="py-20 text-center">
-              <p className="font-tertiary text-lg italic text-slate-600" style={{ fontWeight: 400 }}>
+              <p className="font-heading text-lg font-light not-italic text-brand-navy/65">
                 No se encontraron propiedades que coincidan con tu búsqueda
               </p>
             </div>

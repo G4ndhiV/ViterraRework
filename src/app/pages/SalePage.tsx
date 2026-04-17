@@ -6,7 +6,8 @@ import { SearchBar, SearchFilters } from "../components/SearchBar";
 import { PropertyCard } from "../components/PropertyCard";
 import { PropertyMap } from "../components/PropertyMap";
 import { mockProperties } from "../data/properties";
-import { SlidersHorizontal, Map, LayoutGrid } from "lucide-react";
+import { SlidersHorizontal, Map, LayoutGrid, ChevronsDown } from "lucide-react";
+import { cn } from "../components/ui/utils";
 
 export function SalePage() {
   const [searchParams] = useSearchParams();
@@ -85,67 +86,89 @@ export function SalePage() {
     <div className="viterra-page min-h-screen flex flex-col bg-white" >
       <Header />
 
-      <section className="relative min-h-[58vh] sm:min-h-[64vh] md:min-h-[72vh] flex flex-col justify-center bg-brand-navy overflow-hidden py-14 md:py-20">
+      <section className="relative flex min-h-[100svh] flex-col justify-end overflow-hidden bg-brand-navy pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] pt-[calc(env(safe-area-inset-top,0px)+5.25rem)] sm:pb-16 sm:pt-[calc(env(safe-area-inset-top,0px)+6.5rem)] md:pb-24 md:pt-52">
         <div className="absolute inset-0 z-0">
           <img
-            src="https://images.unsplash.com/photo-1774685110718-c5b4fe026144?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBtb2Rlcm4lMjBob21lJTIwZXh0ZXJpb3IlMjBhcmNoaXRlY3R1cmV8ZW58MXx8fHwxNzc2MDk1NzU3fDA&ixlib=rb-4.1.0&q=80&w=1080"
+            src="https://plus.unsplash.com/premium_photo-1661954372617-15780178eb2e?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8bHV4dXJ5JTIwaG91c2V8ZW58MHx8MHx8fDA%3D"
             alt="Propiedades en Venta"
-            className="w-full h-full object-cover"
+            className="h-full w-full object-cover"
           />
-          <div className="absolute inset-0 bg-black/50"></div>
+          <div
+            className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60"
+            aria-hidden
+          />
         </div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 text-center py-6">
-          <h1 className="font-heading text-5xl md:text-6xl text-white mb-4 tracking-tight font-light" style={{ letterSpacing: "-0.02em" }}>
+        <div className="relative z-10 mx-auto max-w-7xl px-6 py-6 text-center lg:px-8">
+          <p className="font-heading text-[11px] font-normal uppercase tracking-[0.28em] text-white/75 md:text-xs not-italic">
+            Viterra · Listados
+          </p>
+          <span className="mx-auto mt-3 block h-px w-12 bg-primary" aria-hidden />
+          <div className="mt-5 flex justify-center text-primary" aria-hidden>
+            <ChevronsDown className="h-8 w-8" strokeWidth={1.5} />
+          </div>
+          <h1 className="font-heading mt-6 text-4xl font-light tracking-[-0.02em] text-white sm:text-5xl md:text-6xl">
             Propiedades en Venta
           </h1>
-          <p className="text-xl text-white/90 max-w-2xl mx-auto" style={{ fontWeight: 300 }}>
+          <p className="font-heading mx-auto mt-4 max-w-2xl text-lg font-light leading-relaxed text-white/90 md:text-xl not-italic">
             Invierte en tu patrimonio con las mejores opciones del mercado
           </p>
         </div>
       </section>
 
-      <section className="py-12 border-b border-slate-200">
+      <section className="border-b border-brand-navy/10 bg-brand-canvas py-12">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <SearchBar onSearch={handleSearch} defaultStatus="venta" />
         </div>
       </section>
 
-      <section className="py-8 bg-white">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+      <section className="bg-white py-8">
+        <div className="mx-auto max-w-7xl px-6 lg:px-8">
+          <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
             <div className="flex items-center gap-3">
-              <SlidersHorizontal className="w-5 h-5 text-slate-600" />
-              <p className="text-sm text-slate-600" style={{ fontWeight: 400 }}>
-                {filteredProperties.length} propiedad{filteredProperties.length !== 1 ? 'es' : ''} disponible{filteredProperties.length !== 1 ? 's' : ''}
+              <SlidersHorizontal className="h-5 w-5 text-primary" strokeWidth={1.5} />
+              <p className="font-heading text-sm font-medium text-brand-navy/90 not-italic">
+                {filteredProperties.length} propiedad{filteredProperties.length !== 1 ? "es" : ""} disponible
+                {filteredProperties.length !== 1 ? "s" : ""}
               </p>
             </div>
 
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-1 rounded-lg border border-brand-navy/10 bg-brand-canvas p-1">
                 <button
+                  type="button"
                   onClick={() => setViewMode("grid")}
-                  className={`px-3 py-2 rounded-md transition-colors ${
-                    viewMode === "grid" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
-                  }`}
+                  className={cn(
+                    "rounded-md px-3 py-2 transition-colors",
+                    viewMode === "grid"
+                      ? "bg-white text-brand-navy shadow-sm ring-1 ring-primary/25"
+                      : "text-brand-navy/60 hover:text-brand-navy"
+                  )}
+                  aria-pressed={viewMode === "grid"}
+                  aria-label="Vista en cuadrícula"
                 >
-                  <LayoutGrid className="w-4 h-4" />
+                  <LayoutGrid className="h-4 w-4" />
                 </button>
                 <button
+                  type="button"
                   onClick={() => setViewMode("map")}
-                  className={`px-3 py-2 rounded-md transition-colors ${
-                    viewMode === "map" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
-                  }`}
+                  className={cn(
+                    "rounded-md px-3 py-2 transition-colors",
+                    viewMode === "map"
+                      ? "bg-white text-brand-navy shadow-sm ring-1 ring-primary/25"
+                      : "text-brand-navy/60 hover:text-brand-navy"
+                  )}
+                  aria-pressed={viewMode === "map"}
+                  aria-label="Vista en mapa"
                 >
-                  <Map className="w-4 h-4" />
+                  <Map className="h-4 w-4" />
                 </button>
               </div>
 
               <select
                 value={sortBy}
                 onChange={(e) => handleSort(e.target.value)}
-                className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-                style={{ fontWeight: 400 }}
+                className="font-heading rounded-lg border border-brand-navy/15 bg-white px-4 py-2 text-sm font-normal text-brand-navy not-italic focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
               >
                 <option value="newest">Más recientes</option>
                 <option value="price-low">Precio: Menor a mayor</option>
@@ -159,16 +182,16 @@ export function SalePage() {
           {viewMode === "grid" ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredProperties.map((property) => (
-                <PropertyCard key={property.id} property={property} />
+                <PropertyCard key={property.id} property={property} disablePreview />
               ))}
             </div>
           ) : (
-            <PropertyMap properties={filteredProperties} />
+            <PropertyMap properties={filteredProperties} mapHeightClassName="h-[58vh] min-h-[320px] max-h-[460px]" />
           )}
 
           {filteredProperties.length === 0 && (
-            <div className="text-center py-20">
-              <p className="text-slate-600 text-lg" style={{ fontWeight: 300 }}>
+            <div className="py-20 text-center">
+              <p className="font-heading text-lg font-light not-italic text-brand-navy/65">
                 No se encontraron propiedades que coincidan con tu búsqueda
               </p>
             </div>

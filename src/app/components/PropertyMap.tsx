@@ -3,11 +3,16 @@ import { Property } from './PropertyCard';
 
 interface PropertyMapProps {
   properties: Property[];
+  mapHeightClassName?: string;
 }
 
-/** Paleta manual Viterra: venta = rojo primario, alquiler = navy */
+/** Paleta Viterra: venta = primario, alquiler = navy */
 const MAP_COLOR_VENTA = "#C8102E";
 const MAP_COLOR_ALQUILER = "#141c2e";
+const MAP_TEXT_NAVY = "#141c2e";
+const MAP_TEXT_MUTED = "rgba(20, 28, 46, 0.62)";
+const MAP_BORDER = "rgba(20, 28, 46, 0.12)";
+const MAP_BG_HOVER = "#f4f2ef";
 
 // Función para obtener el icono según el tipo de propiedad
 const getPropertyIcon = (type: string, status: string) => {
@@ -58,7 +63,7 @@ const getPropertyIcon = (type: string, status: string) => {
   return icons[type] || icons['Casa'];
 };
 
-export function PropertyMap({ properties }: PropertyMapProps) {
+export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: PropertyMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const isInitializingRef = useRef(false);
@@ -155,21 +160,21 @@ export function PropertyMap({ properties }: PropertyMapProps) {
                           font-size: 12px; 
                           font-weight: 600;
                           background: rgba(255, 255, 255, 0.95);
-                          color: #0F172A;
+                          color: ${MAP_TEXT_NAVY};
                           backdrop-filter: blur(8px);
                         ">
                           ${property.type}
                         </span>
                       </div>
                     </div>
-                    <h3 style="font-weight: 600; font-size: 18px; color: #0F172A; margin: 0 0 8px 0; line-height: 1.4;">
+                    <h3 style="font-weight: 600; font-size: 18px; color: ${MAP_TEXT_NAVY}; margin: 0 0 8px 0; line-height: 1.4;">
                       ${property.title}
                     </h3>
-                    <p style="font-size: 14px; color: #64748B; margin: 0 0 16px 0;">
+                    <p style="font-size: 14px; color: ${MAP_TEXT_MUTED}; margin: 0 0 16px 0;">
                       ${property.location}
                     </p>
                     <div style="display: flex; align-items: center; justify-content: space-between;">
-                      <p style="font-weight: 700; font-size: 24px; color: #0F172A; margin: 0;">
+                      <p style="font-weight: 700; font-size: 24px; color: ${MAP_TEXT_NAVY}; margin: 0;">
                         $${property.price.toLocaleString()}
                       </p>
                       <span style="
@@ -273,21 +278,21 @@ export function PropertyMap({ properties }: PropertyMapProps) {
                         font-size: 12px; 
                         font-weight: 600;
                         background: rgba(255, 255, 255, 0.95);
-                        color: #0F172A;
+                        color: ${MAP_TEXT_NAVY};
                         backdrop-filter: blur(8px);
                       ">
                         ${property.type}
                       </span>
                     </div>
                   </div>
-                  <h3 style="font-weight: 600; font-size: 18px; color: #0F172A; margin: 0 0 8px 0; line-height: 1.4;">
+                  <h3 style="font-weight: 600; font-size: 18px; color: ${MAP_TEXT_NAVY}; margin: 0 0 8px 0; line-height: 1.4;">
                     ${property.title}
                   </h3>
-                  <p style="font-size: 14px; color: #64748B; margin: 0 0 16px 0;">
+                  <p style="font-size: 14px; color: ${MAP_TEXT_MUTED}; margin: 0 0 16px 0;">
                     ${property.location}
                   </p>
                   <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <p style="font-weight: 700; font-size: 24px; color: #0F172A; margin: 0;">
+                    <p style="font-weight: 700; font-size: 24px; color: ${MAP_TEXT_NAVY}; margin: 0;">
                       $${property.price.toLocaleString()}
                     </p>
                     <span style="
@@ -374,7 +379,7 @@ export function PropertyMap({ properties }: PropertyMapProps) {
           border-radius: 16px;
           padding: 20px;
           box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-          border: 1px solid #E2E8F0;
+          border: 1px solid ${MAP_BORDER};
         }
         
         .custom-popup .leaflet-popup-content {
@@ -384,13 +389,13 @@ export function PropertyMap({ properties }: PropertyMapProps) {
         
         .custom-popup .leaflet-popup-tip {
           background: white;
-          border: 1px solid #E2E8F0;
+          border: 1px solid ${MAP_BORDER};
           border-top: none;
           border-left: none;
         }
         
         .custom-popup .leaflet-popup-close-button {
-          color: #64748B;
+          color: ${MAP_TEXT_MUTED};
           font-size: 24px;
           font-weight: 600;
           padding: 8px 12px;
@@ -404,12 +409,13 @@ export function PropertyMap({ properties }: PropertyMapProps) {
         }
         
         .custom-popup .leaflet-popup-close-button:hover {
-          color: #0F172A;
-          background: #F1F5F9;
+          color: ${MAP_TEXT_NAVY};
+          background: ${MAP_BG_HOVER};
         }
         
         .custom-popup a:hover h3 {
-          color: #334155;
+          color: ${MAP_TEXT_NAVY};
+          opacity: 0.88;
         }
         
         .custom-marker:hover {
@@ -419,7 +425,7 @@ export function PropertyMap({ properties }: PropertyMapProps) {
       `}</style>
       <div 
         ref={mapRef} 
-        className="h-[500px] w-full rounded-lg overflow-hidden border border-slate-200 shadow-lg" 
+        className={`${mapHeightClassName} w-full rounded-lg overflow-hidden border border-brand-navy/10 shadow-lg`} 
         
       />
     </div>
