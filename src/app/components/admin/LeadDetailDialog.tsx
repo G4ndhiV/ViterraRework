@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Calendar, Mail, Phone, Plus, Tag, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Calendar, History, Mail, MessageCircle, Phone, Plus, Tag, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,8 +10,10 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
+import type { User } from "../../contexts/AuthContext";
 import type { Lead, LeadPriorityStars } from "../../data/leads";
-import { labelForLeadStatus, newLeadClientNoteId, sortLeadClientNotesNewestFirst } from "../../data/leads";
+import { isClickableTeamMemberProfile, resolveLeadTeamUser } from "../../lib/crmTeamUser";
+import { labelForLeadStatus, newLeadActivityId, newLeadClientNoteId, sortLeadClientNotesNewestFirst } from "../../data/leads";
 import { CRM_ASSIGNEES, getAssigneeNameById } from "../../data/crmAssignees";
 import { LeadPriorityBadge } from "./LeadPriorityBadge";
 import { LeadPriorityStarsInput } from "./LeadPriorityStarsInput";
@@ -42,6 +44,11 @@ type Props = {
   onStatusChange?: (leadId: string, newStatus: string) => void;
   onSave: (lead: Lead) => void;
   onDelete: (id: string) => void;
+  /** Usuarios del equipo (para abrir ficha desde el asignado). */
+  teamUsers?: User[];
+  currentUserId?: string;
+  /** Navega a Mi empresa → Usuarios y abre el detalle (solo lectura si no es admin). */
+  onViewTeamMember?: (userId: string) => void;
 };
 
 export function LeadDetailDialog({
@@ -53,22 +60,45 @@ export function LeadDetailDialog({
   onStatusChange,
   onSave,
   onDelete,
+  teamUsers = [],
+  currentUserId = "",
+  onViewTeamMember,
 }: Props) {
   const [editing, setEditing] = useState(defaultMode === "edit");
   const [draft, setDraft] = useState<Lead | null>(null);
+  const [activeTab, setActiveTab] = useState<"info" | "activity" | "contact">("info");
+  const [activityComment, setActivityComment] = useState("");
 
   useEffect(() => {
     if (open && lead) {
       setDraft({ ...lead });
       setEditing(defaultMode === "edit");
+      setActiveTab("info");
+      setActivityComment("");
     }
   }, [open, lead, defaultMode]);
+
+  /** Debe ejecutarse antes de cualquier return: mismas reglas de hooks en todos los renders. */
+  const displayLead = lead != null ? draft ?? lead : null;
+  const assigneeTeamUser = useMemo(() => {
+    if (!displayLead) return undefined;
+    const source = editing && draft ? draft : displayLead;
+    return resolveLeadTeamUser(teamUsers, source);
+  }, [editing, draft, displayLead, teamUsers]);
+  const assigneeProfileOpen =
+    !!onViewTeamMember && isClickableTeamMemberProfile(assigneeTeamUser, currentUserId);
 
   if (!lead) {
     return null;
   }
 
   const d = draft ?? lead;
+  const whatsappDigits = d.phone.replace(/\D/g, "");
+  const whatsappMessage = `Hola ${d.name}, te contacto de Viterra para dar seguimiento a tu solicitud inmobiliaria.`;
+  const whatsappHref = `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(whatsappMessage)}`;
+  const sortedActivity = [...(d.activity ?? [])].sort(
+    (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)
+  );
 
   const handleSave = () => {
     if (!draft) return;
@@ -85,6 +115,30 @@ export function LeadDetailDialog({
     onOpenChange(false);
   };
 
+  const handleAddActivityComment = () => {
+    const text = activityComment.trim();
+    if (!text) return;
+    const now = new Date().toISOString();
+    setDraft((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        updatedAt: now,
+        activity: [
+          {
+            id: newLeadActivityId(),
+            type: "comment",
+            createdAt: now,
+            description: text,
+            status: prev.status,
+          },
+          ...(prev.activity ?? []),
+        ],
+      };
+    });
+    setActivityComment("");
+  };
+
   const handleDelete = () => {
     if (window.confirm("¿Eliminar este lead de forma permanente?")) {
       onDelete(lead.id);
@@ -95,6 +149,7 @@ export function LeadDetailDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange} key={lead.id}>
       <DialogContent
+        hideCloseButton
         className={cn(
           "!fixed !inset-0 !left-0 !top-0 z-50 flex !h-[100dvh] !max-h-[100dvh] !w-full !max-w-none !translate-x-0 !translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-none duration-200",
           "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
@@ -102,28 +157,89 @@ export function LeadDetailDialog({
         )}
       >
         <div className="h-0.5 shrink-0 bg-gradient-to-r from-brand-gold/90 via-primary to-brand-burgundy/90" aria-hidden />
-        <div className="shrink-0 border-b border-stone-200/80 bg-stone-50/90 px-4 py-2.5 pr-12 sm:px-5 sm:pr-14">
+        <div className="shrink-0 border-b border-stone-200/80 bg-stone-50/90 px-4 py-4 sm:px-5">
           <DialogHeader className="gap-0 p-0 text-left">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] text-slate-500" style={{ fontWeight: 500 }}>
-                  <span className="text-primary/90">CRM</span>
-                  <span className="text-slate-400"> · </span>
-                  {editing ? "Edición de lead" : "Detalle de lead"}
-                </p>
+            <p className="text-[11px] text-slate-500" style={{ fontWeight: 500 }}>
+              <span className="text-primary/90">CRM</span>
+              <span className="text-slate-400"> · </span>
+              {editing ? "Edición de lead" : "Detalle de lead"}
+            </p>
+            <div className="mt-3 grid grid-cols-[minmax(0,1fr)_minmax(18rem,32rem)_minmax(0,1fr)] items-center gap-4">
+              <div className="min-w-0">
                 <DialogTitle
-                  className="font-heading mt-0.5 truncate text-lg leading-tight text-brand-navy sm:text-xl"
-                  style={{ fontWeight: 600 }}
+                  className="font-heading truncate text-3xl leading-tight tracking-tight text-brand-navy sm:text-4xl"
+                  style={{ fontWeight: 700, textShadow: "0 1px 0 rgba(255,255,255,0.5)" }}
                 >
                   {d.name}
                 </DialogTitle>
               </div>
-              <span className="inline-flex max-w-[min(12rem,46%)] shrink-0 items-center justify-center rounded-full border border-primary/15 bg-primary/[0.05] px-3 py-1 text-center text-[11px] font-semibold uppercase leading-tight tracking-wide text-primary">
-                {labelForLeadStatus(
-                  d.status,
-                  statusOptions.map((o) => ({ id: o.value, label: o.label }))
-                )}
-              </span>
+              <div className="justify-self-center">
+                <div className="inline-flex w-full min-w-[18rem] max-w-[32rem] items-center justify-center gap-1.5 rounded-xl border border-stone-200/90 bg-white/90 p-1 shadow-sm ring-1 ring-white/70">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("info")}
+                  className={`flex-1 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                    activeTab === "info"
+                      ? "bg-gradient-to-r from-brand-navy to-[#1f2d47] text-white shadow-md shadow-brand-navy/20"
+                      : "text-slate-600 hover:bg-stone-50 hover:text-brand-navy"
+                  }`}
+                >
+                  Información
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("activity")}
+                  className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                    activeTab === "activity"
+                      ? "bg-gradient-to-r from-brand-navy to-[#1f2d47] text-white shadow-md shadow-brand-navy/20"
+                      : "text-slate-600 hover:bg-stone-50 hover:text-brand-navy"
+                  }`}
+                >
+                  <History className="h-3.5 w-3.5" strokeWidth={1.9} />
+                  Actividad
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("contact")}
+                  className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                    activeTab === "contact"
+                      ? "bg-gradient-to-r from-brand-navy to-[#1f2d47] text-white shadow-md shadow-brand-navy/20"
+                      : "text-slate-600 hover:bg-stone-50 hover:text-brand-navy"
+                  }`}
+                >
+                  <MessageCircle className="h-3.5 w-3.5" strokeWidth={1.9} />
+                  Contacto
+                </button>
+                </div>
+              </div>
+              <div className="w-full max-w-[16rem] justify-self-end">
+                <label className="mb-1 block text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  Estado
+                </label>
+                <select
+                  value={
+                    statusOptions.some((o) => o.value === d.status)
+                      ? d.status
+                      : statusOptions[0]?.value ?? d.status
+                  }
+                  onChange={(e) => {
+                    if (editing && draft) {
+                      setDraft((prev) => (prev ? { ...prev, status: e.target.value } : prev));
+                    } else {
+                      onStatusChange?.(lead.id, e.target.value);
+                    }
+                  }}
+                  className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-brand-navy transition-colors focus:border-primary/35 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                  style={{ fontWeight: 600 }}
+                  aria-label="Cambiar estado del lead"
+                >
+                  {statusOptions.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <DialogDescription className="sr-only">
               Lead {d.name}, estado{" "}
@@ -135,7 +251,148 @@ export function LeadDetailDialog({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gradient-to-b from-stone-100/95 to-stone-100/80">
           <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
             <div className="mx-auto w-full max-w-[min(100%,88rem)]">
-          {editing && draft ? (
+          {activeTab === "contact" ? (
+            <section className="mx-auto w-full max-w-3xl rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
+              <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
+                Contactar cliente por WhatsApp
+              </h3>
+              <div className="mt-4 rounded-xl border border-stone-200 bg-stone-50/50 p-4">
+                <p className="text-xs uppercase tracking-wide text-slate-500" style={{ fontWeight: 600 }}>
+                  Cliente
+                </p>
+                <p className="mt-1 text-lg text-brand-navy" style={{ fontWeight: 700 }}>
+                  {d.name}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Teléfono: <span className="font-semibold text-slate-800">{d.phone}</span>
+                </p>
+                <p className="mt-3 text-sm text-slate-600">
+                  Mensaje sugerido:
+                </p>
+                <p className="mt-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-slate-700">
+                  {whatsappMessage}
+                </p>
+              </div>
+              <div className="mt-4">
+                <a
+                  href={whatsappHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white ${
+                    whatsappDigits.length >= 8
+                      ? "bg-[#25D366] hover:bg-[#1fb458]"
+                      : "pointer-events-none bg-slate-300"
+                  }`}
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  Abrir WhatsApp
+                </a>
+                {whatsappDigits.length < 8 && (
+                  <p className="mt-2 text-xs text-amber-700">
+                    El teléfono del lead no parece válido para WhatsApp. Edítalo en la pestaña de información.
+                  </p>
+                )}
+              </div>
+            </section>
+          ) : activeTab === "activity" ? (
+            <section className="mx-auto w-full max-w-5xl rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
+              <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
+                Historial de movimientos del lead
+              </h3>
+              <div className="mt-4 space-y-3">
+                <div className="rounded-xl border border-stone-200/90 bg-stone-50/60 p-3">
+                  <label className="mb-1.5 block text-xs text-slate-600" style={{ fontWeight: 600 }}>
+                    Añadir comentario
+                  </label>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <textarea
+                      rows={2}
+                      value={activityComment}
+                      onChange={(e) => setActivityComment(e.target.value)}
+                      className="flex-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-brand-navy placeholder:text-slate-400"
+                      placeholder="Escribe un comentario sobre este lead..."
+                    />
+                    <Button
+                      type="button"
+                      className="bg-primary text-primary-foreground hover:bg-brand-red-hover sm:self-end"
+                      onClick={handleAddActivityComment}
+                    >
+                      Agregar comentario
+                    </Button>
+                  </div>
+                </div>
+                {sortedActivity.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50/50 px-4 py-8 text-center text-sm text-slate-500">
+                    Sin actividad registrada.
+                  </p>
+                ) : (
+                  <div className="relative pl-8">
+                    <div className="absolute bottom-3 left-[15px] top-3 w-px bg-gradient-to-b from-primary/40 via-primary/20 to-transparent" />
+                    <div className="space-y-4">
+                      {sortedActivity.map((entry) => {
+                        const statusLabel = labelForLeadStatus(
+                          entry.status ?? d.status,
+                          statusOptions.map((o) => ({ id: o.value, label: o.label }))
+                        );
+                        const timelineMeta: Record<
+                          "created" | "status_change" | "updated" | "comment",
+                          { title: string; icon: typeof History; iconClassName: string; badgeClassName: string }
+                        > = {
+                          created: {
+                            title: "Lead creado",
+                            icon: Plus,
+                            iconClassName: "text-emerald-600",
+                            badgeClassName: "bg-emerald-100 text-emerald-700",
+                          },
+                          status_change: {
+                            title: "Cambio de estado",
+                            icon: Tag,
+                            iconClassName: "text-primary",
+                            badgeClassName: "bg-primary/10 text-primary",
+                          },
+                          updated: {
+                            title: "Información actualizada",
+                            icon: History,
+                            iconClassName: "text-amber-700",
+                            badgeClassName: "bg-amber-100 text-amber-700",
+                          },
+                          comment: {
+                            title: "Comentario",
+                            icon: MessageCircle,
+                            iconClassName: "text-brand-navy",
+                            badgeClassName: "bg-brand-navy/10 text-brand-navy",
+                          },
+                        };
+                        const meta = timelineMeta[entry.type];
+                        const Icon = meta.icon;
+
+                        return (
+                          <article key={entry.id} className="relative rounded-xl border border-stone-200/90 bg-stone-50/40 p-4 shadow-sm">
+                            <span className="absolute -left-8 top-4 inline-flex h-7 w-7 items-center justify-center rounded-full border border-stone-200 bg-white shadow-sm">
+                              <Icon className={cn("h-3.5 w-3.5", meta.iconClassName)} strokeWidth={2} />
+                            </span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
+                                {meta.title}
+                              </p>
+                              <span className={cn("rounded-full px-2 py-0.5 text-[11px]", meta.badgeClassName)}>
+                                {statusLabel}
+                              </span>
+                            </div>
+                            <p className="mt-1.5 text-sm text-slate-700">{entry.description}</p>
+                            <p className="mt-2 inline-flex items-center gap-1 text-xs text-slate-500">
+                              <Calendar className="h-3.5 w-3.5" />
+                              {formatLeadDate(entry.createdAt)}
+                            </p>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          ) : editing && draft ? (
             <div className="grid grid-cols-1 gap-6 text-sm lg:grid-cols-12 lg:items-start lg:gap-8 xl:gap-10">
               <div className="flex flex-col gap-5 lg:col-span-7 xl:col-span-8">
                 <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
@@ -281,7 +538,7 @@ export function LeadDetailDialog({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-8 border-stone-300 bg-white text-xs hover:bg-stone-50"
+                      className="h-8 border-stone-300 bg-white text-xs text-slate-700 hover:bg-stone-50 hover:text-slate-800"
                       onClick={() =>
                         setDraft((prev) =>
                           prev
@@ -439,47 +696,22 @@ export function LeadDetailDialog({
                         </option>
                       ))}
                     </select>
+                    {assigneeProfileOpen && assigneeTeamUser ? (
+                      <button
+                        type="button"
+                        className="mt-2 text-left text-xs font-semibold text-primary underline decoration-primary/50 underline-offset-2 hover:text-primary/90"
+                        style={{ fontWeight: 600 }}
+                        onClick={() => onViewTeamMember?.(assigneeTeamUser.id)}
+                      >
+                        Ver ficha de {assigneeTeamUser.name}
+                      </button>
+                    ) : null}
                   </div>
                 </section>
               </aside>
             </div>
           ) : (
             <div className="flex flex-col gap-6 text-sm lg:gap-8">
-              <section className="relative overflow-hidden rounded-2xl border border-stone-200/90 bg-white p-5 shadow-[0_6px_28px_-10px_rgba(20,28,46,0.14)] sm:flex sm:flex-row sm:items-end sm:justify-between sm:gap-6 sm:p-6">
-                <div
-                  className="pointer-events-none absolute inset-y-4 left-0 w-[3px] rounded-full bg-gradient-to-b from-primary via-primary/85 to-brand-navy"
-                  aria-hidden
-                />
-                <div className="pl-5 sm:min-w-0 sm:flex-1 sm:pl-6">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
-                    Pipeline
-                  </p>
-                  <label className="mt-1 block text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                    Etapa en el embudo
-                  </label>
-                </div>
-                <div className="mt-3 pl-5 sm:mt-0 sm:max-w-md sm:flex-1 sm:pl-0 lg:max-w-lg">
-                  <select
-                    value={
-                      statusOptions.some((o) => o.value === d.status)
-                        ? d.status
-                        : statusOptions[0]?.value ?? d.status
-                    }
-                    onChange={(e) => onStatusChange?.(lead.id, e.target.value)}
-                    disabled={!onStatusChange}
-                    className="w-full rounded-xl border border-stone-200 bg-stone-50/60 px-3 py-3 text-sm text-brand-navy transition-colors focus:border-primary/35 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
-                    style={{ fontWeight: 600 }}
-                    aria-label="Cambiar fase del lead"
-                  >
-                    {statusOptions.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </section>
-
               <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-8 xl:gap-10">
                 <main className="flex flex-col gap-6 lg:col-span-7 xl:col-span-8">
                   <div className="flex items-center gap-2 border-b border-stone-200/90 pb-2">
@@ -693,7 +925,18 @@ export function LeadDetailDialog({
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                           Asignado a
                         </p>
-                        <p className="truncate text-lg font-bold text-brand-navy">{d.assignedTo}</p>
+                        {assigneeProfileOpen && assigneeTeamUser ? (
+                          <button
+                            type="button"
+                            className="truncate text-left text-lg font-bold text-primary underline decoration-primary/50 underline-offset-2 hover:text-primary/90"
+                            style={{ fontWeight: 700 }}
+                            onClick={() => onViewTeamMember?.(assigneeTeamUser.id)}
+                          >
+                            {d.assignedTo}
+                          </button>
+                        ) : (
+                          <p className="truncate text-lg font-bold text-brand-navy">{d.assignedTo}</p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -712,12 +955,30 @@ export function LeadDetailDialog({
             </Button>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
-            {editing ? (
+            {activeTab === "activity" || activeTab === "contact" ? (
               <>
                 <Button
                   type="button"
                   variant="outline"
-                  className="border-stone-300 bg-white hover:bg-stone-50"
+                  className="border-stone-300 bg-white text-slate-700 hover:bg-stone-50 hover:text-slate-800"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Cerrar
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-primary hover:bg-brand-red-hover text-primary-foreground"
+                  onClick={handleSave}
+                >
+                  Guardar cambios
+                </Button>
+              </>
+            ) : editing ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-stone-300 bg-white text-slate-700 hover:bg-stone-50 hover:text-slate-800"
                   onClick={() => {
                     setDraft({ ...lead });
                     setEditing(false);
@@ -738,7 +999,7 @@ export function LeadDetailDialog({
                 <Button
                   type="button"
                   variant="outline"
-                  className="border-stone-300 bg-white hover:bg-stone-50"
+                  className="border-stone-300 bg-white text-slate-700 hover:bg-stone-50 hover:text-slate-800"
                   onClick={() => onOpenChange(false)}
                 >
                   Cerrar

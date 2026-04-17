@@ -10,6 +10,11 @@
   -webkit-font-smoothing: antialiased;
 }
 
+body.admin-crm-montserrat,
+body.admin-crm-montserrat * {
+  font-family: var(--font-heading), system-ui, sans-serif;
+}
+
 .viterra-crm .crm-hero-title {
   font-family: var(--font-heading), system-ui, sans-serif;
 }

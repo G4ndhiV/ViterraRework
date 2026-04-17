@@ -70,18 +70,22 @@ export function DevelopmentsPage() {
                   className={cn("grid gap-12 items-center", pl.gridCols("grid-cols-1 lg:grid-cols-2"))}
                 >
                   <div className={cn(index % 2 === 1 && !pl.preview && "lg:order-2")}>
-                    <div className="relative h-[500px] rounded-lg overflow-hidden group">
+                    <Link
+                      to={`/desarrollos/${dev.id}`}
+                      className="relative block h-[500px] overflow-hidden rounded-lg group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                      aria-label={`Ver desarrollo: ${dev.name}`}
+                    >
                       <img
                         src={dev.image}
-                        alt={dev.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                        alt=""
+                        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                       />
-                      <div className="absolute top-6 left-6">
+                      <div className="pointer-events-none absolute top-6 left-6">
                         <span className={`px-3 py-1.5 rounded-lg text-xs font-semibold backdrop-blur-sm ${getStatusColor(dev.status)}`} style={{ fontWeight: 600 }}>
                           {dev.status}
                         </span>
                       </div>
-                    </div>
+                    </Link>
                   </div>
 
                   <div className={cn(index % 2 === 1 && !pl.preview && "lg:order-1")}>
@@ -156,18 +160,22 @@ export function DevelopmentsPage() {
             <div className={cn("grid gap-8", pl.gridCols("grid-cols-1 md:grid-cols-2"))}>
               {otherDevelopments.map((dev) => (
                 <div key={dev.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden hover:border-slate-300 transition-all group">
-                  <div className="relative h-72 overflow-hidden">
+                  <Link
+                    to={`/desarrollos/${dev.id}`}
+                    className="relative block h-72 overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                    aria-label={`Ver desarrollo: ${dev.name}`}
+                  >
                     <img
                       src={dev.image}
-                      alt={dev.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                      alt=""
+                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                     />
-                    <div className="absolute top-6 left-6">
+                    <div className="pointer-events-none absolute top-6 left-6">
                       <span className={`px-3 py-1.5 rounded-lg text-xs font-semibold backdrop-blur-sm ${getStatusColor(dev.status)}`} style={{ fontWeight: 600 }}>
                         {dev.status}
                       </span>
                     </div>
-                  </div>
+                  </Link>
 
                   <div className="p-8">
                     <div className="flex items-center gap-2 text-slate-600 mb-3">

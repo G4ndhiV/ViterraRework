@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
+import { cn } from "../ui/utils";
+import { copyPublicPageUrl } from "../../lib/copyPublicLink";
 import type { Property } from "../PropertyCard";
+import { Download, Link2 } from "lucide-react";
 
 type Props = {
   open: boolean;
@@ -78,27 +81,91 @@ export function PropertyFormDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[min(90vh,720px)] gap-0 overflow-y-auto border-slate-200/80 p-0 sm:max-w-lg">
-        <div className="h-1.5 bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy" aria-hidden />
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      key={mode === "edit" && property ? property.id : `create-${newId}`}
+    >
+      <DialogContent
+        hideCloseButton
+        className={cn(
+          "!fixed !inset-0 !left-0 !top-0 z-50 flex !h-[100dvh] !max-h-[100dvh] !w-full !max-w-none !translate-x-0 !translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-none duration-200",
+          "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
+          "data-[state=open]:!zoom-in-100 data-[state=closed]:!zoom-out-100 sm:!max-w-none"
+        )}
+      >
+        <div className="h-0.5 shrink-0 bg-gradient-to-r from-brand-gold/90 via-primary to-brand-burgundy/90" aria-hidden />
         {!draft ? (
-          <div className="px-6 py-12 text-center text-sm text-slate-500" style={{ fontWeight: 500 }}>
+          <div className="flex flex-1 items-center justify-center px-6 py-12 text-sm text-slate-500" style={{ fontWeight: 500 }}>
             Cargando formulario…
           </div>
         ) : (
-        <form onSubmit={handleSubmit}>
-          <div className="border-b border-slate-100 px-6 pb-4 pt-5">
-            <DialogHeader className="space-y-1 text-left">
-              <DialogTitle className="font-heading text-xl text-brand-navy" style={{ fontWeight: 600 }}>
-                {mode === "create" ? "Nueva propiedad" : "Editar propiedad"}
-              </DialogTitle>
-              <DialogDescription className="text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                Completa los datos del inmueble. La ficha será visible en el sitio público.
-              </DialogDescription>
+        <form id="viterra-property-form" onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="shrink-0 border-b border-stone-200/80 bg-stone-50/90 px-4 py-4 sm:px-5">
+            <DialogHeader className="gap-0 p-0 text-left">
+              <p className="text-[11px] text-slate-500" style={{ fontWeight: 500 }}>
+                <span className="text-primary/90">Panel admin</span>
+                <span className="text-slate-400"> · </span>
+                Propiedades
+              </p>
+              <div className="mt-3 flex flex-col gap-4 min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-between min-[1100px]:gap-6">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <DialogTitle
+                    className="font-heading text-2xl leading-tight tracking-tight text-brand-navy sm:text-3xl"
+                    style={{ fontWeight: 700 }}
+                  >
+                    {mode === "create" ? "Nueva propiedad" : "Editar propiedad"}
+                  </DialogTitle>
+                  <DialogDescription className="text-sm text-slate-600" style={{ fontWeight: 500 }}>
+                    Completa los datos del inmueble. La ficha será visible en el sitio público.
+                  </DialogDescription>
+                </div>
+                <div className="flex w-full shrink-0 flex-col gap-2 min-[1100px]:w-auto min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-end min-[1100px]:gap-3">
+                  <div className="flex items-center gap-1 min-[1100px]:mr-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 shrink-0 border-stone-300 bg-white text-slate-600 hover:bg-stone-50 hover:text-slate-800"
+                      title="Copiar enlace público"
+                      aria-label="Copiar enlace público"
+                      onClick={() => copyPublicPageUrl(`/propiedades/${draft.id}`)}
+                    >
+                      <Link2 className="h-4 w-4" strokeWidth={1.5} />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 shrink-0 border-stone-300 bg-white text-slate-600 hover:bg-stone-50 hover:text-slate-800"
+                      title="Exportar información (próximamente)"
+                      aria-label="Exportar información"
+                    >
+                      <Download className="h-4 w-4" strokeWidth={1.5} />
+                    </Button>
+                  </div>
+                  <DialogClose asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 w-fit shrink-0 border-stone-300 bg-white px-4 text-slate-700 hover:bg-stone-50 hover:text-slate-800"
+                      style={{ fontWeight: 600 }}
+                    >
+                      Cerrar
+                    </Button>
+                  </DialogClose>
+                  <Button
+                    type="submit"
+                    className="h-10 w-full min-w-[10rem] bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-brand-red-hover min-[1100px]:w-auto"
+                  >
+                    {mode === "create" ? "Crear propiedad" : "Guardar cambios"}
+                  </Button>
+                </div>
+              </div>
             </DialogHeader>
           </div>
 
-          <div className="space-y-4 px-6 py-4">
+          <div className="min-h-0 flex-1 overflow-y-auto space-y-4 px-4 py-5 sm:px-6 lg:px-8">
             <div className="space-y-1.5">
               <Label className="text-xs uppercase text-slate-600" style={{ fontWeight: 600 }}>
                 Título
@@ -230,18 +297,6 @@ export function PropertyFormDialog({
               />
             </div>
           </div>
-
-          <DialogFooter className="gap-2 border-t border-slate-100 px-6 py-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              className="bg-primary hover:bg-brand-red-hover text-primary-foreground"
-            >
-              {mode === "create" ? "Crear propiedad" : "Guardar cambios"}
-            </Button>
-          </DialogFooter>
         </form>
         )}
       </DialogContent>

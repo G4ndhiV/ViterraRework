@@ -1,7 +1,7 @@
 import { useMemo, useCallback, useState } from "react";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import { Eye, MapPin, Plus } from "lucide-react";
+import { MapPin, Plus } from "lucide-react";
 import type { Lead } from "../../data/leads";
 import { LeadPriorityBadge } from "./LeadPriorityBadge";
 
@@ -42,9 +42,11 @@ function DraggableLeadCard({
   return (
     <div
       ref={dragRef}
-      className={`group relative cursor-grab overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm transition-all duration-200 active:cursor-grabbing ${
+      className={`group relative cursor-pointer overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm transition-all duration-200 active:cursor-grabbing ${
         isDragging ? "scale-[0.98] opacity-60 shadow-lg" : "hover:border-slate-300/90 hover:shadow-md"
       }`}
+      onClick={() => onOpenDetail?.(lead)}
+      title={`Abrir detalle de ${lead.name}`}
     >
       {/* Cabecera: solo aquí patrón navy + franja de acento */}
       <div className="relative overflow-hidden bg-gradient-to-br from-brand-navy via-[#182236] to-brand-navy px-3.5 pb-3 pt-3 pr-10">
@@ -58,20 +60,6 @@ function DraggableLeadCard({
           aria-hidden
         />
         <div className="relative">
-          {onOpenDetail && (
-            <button
-              type="button"
-              className="absolute right-0 top-0 z-10 rounded-lg bg-white/10 p-1.5 text-white/85 shadow-sm ring-1 ring-white/15 transition-colors hover:bg-primary hover:text-white hover:ring-primary"
-              title="Ver información y cambiar de fase"
-              aria-label={`Ver información de ${lead.name} y mover de fase`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenDetail(lead);
-              }}
-            >
-              <Eye className="h-3.5 w-3.5" strokeWidth={2} />
-            </button>
-          )}
           <p className="font-heading text-sm font-semibold leading-snug text-white" style={{ fontWeight: 600 }}>
             {lead.name}
           </p>
@@ -109,14 +97,12 @@ function KanbanColumn({
   status,
   leadsInColumn,
   onDropLead,
-  columnIndex,
   onLeadOpen,
   statusLabel,
 }: {
   status: string;
   leadsInColumn: Lead[];
   onDropLead: (leadId: string, status: string) => void;
-  columnIndex: number;
   onLeadOpen?: (lead: Lead) => void;
   statusLabel: (s: string) => string;
 }) {
@@ -136,12 +122,6 @@ function KanbanColumn({
       <div className="relative overflow-hidden rounded-t-2xl border border-b-0 border-slate-200/80 bg-gradient-to-b from-slate-100 to-slate-50/95 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
         <div className="absolute bottom-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-brand-gold/40 to-transparent" aria-hidden />
         <div className="flex items-center justify-between gap-2">
-          <span
-            className="font-heading flex h-7 w-7 items-center justify-center rounded-lg bg-brand-navy/5 text-xs font-bold text-brand-navy"
-            style={{ fontWeight: 700 }}
-          >
-            {columnIndex + 1}
-          </span>
           <span className="font-heading flex-1 text-center text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-navy" style={{ fontWeight: 600 }}>
             {statusLabel(status)}
           </span>
@@ -275,10 +255,9 @@ export function LeadsKanbanBoard({
             Arrastra las tarjetas entre columnas para actualizar el estado
           </p>
           <div className="flex gap-4 overflow-x-auto pb-1 md:gap-5">
-            {columnStatuses.map((status, i) => (
+            {columnStatuses.map((status) => (
               <KanbanColumn
                 key={status}
-                columnIndex={i}
                 status={status}
                 leadsInColumn={byStatus[status] ?? []}
                 onDropLead={handleDrop}
