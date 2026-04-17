@@ -1,6 +1,6 @@
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
-import { ArrowRight, MapPin, Calendar, Building2, Users, CheckCircle, Sparkles } from "lucide-react";
+import { ArrowRight, MapPin, CheckCircle, Sparkles, ChevronsDown } from "lucide-react";
 import { Link } from "react-router";
 import { developments } from "../data/developments";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
@@ -17,12 +17,12 @@ export function DevelopmentsPage() {
 
   const getStatusColor = (status: string) => {
     const colors = {
-      "En Construcción": "bg-amber-50 text-amber-700 border border-amber-200",
-      "Pre-venta": "bg-blue-50 text-blue-700 border border-blue-200",
-      "Disponible": "bg-green-50 text-green-700 border border-green-200",
-      "Próximamente": "bg-slate-100 text-slate-700 border border-slate-200"
+      "En Construcción": "bg-brand-gold/15 text-brand-navy border border-brand-gold/35",
+      "Pre-venta": "bg-brand-navy/10 text-brand-navy border border-brand-navy/25",
+      "Disponible": "bg-primary/10 text-primary border border-primary/30",
+      "Próximamente": "bg-brand-canvas text-brand-navy/80 border border-brand-navy/15"
     };
-    return colors[status as keyof typeof colors] || "bg-slate-100 text-slate-700";
+    return colors[status as keyof typeof colors] || "bg-brand-canvas text-brand-navy/80 border border-brand-navy/15";
   };
 
   return (
@@ -31,18 +31,29 @@ export function DevelopmentsPage() {
 
       {/* Hero Section */}
       <PreviewSectionChrome blockId="dev-hero" label="Cabecera">
-      <section className="relative min-h-[68vh] md:min-h-[76vh] flex items-center justify-center overflow-hidden">
+      <section className="relative flex min-h-[100svh] flex-col justify-end overflow-hidden bg-brand-navy pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] pt-[calc(env(safe-area-inset-top,0px)+5.25rem)] sm:pb-16 sm:pt-[calc(env(safe-area-inset-top,0px)+6.5rem)] md:pb-24 md:pt-52">
         <div className="absolute inset-0 z-0">
-          <img src={page.heroImage} alt="" className="h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/75 to-slate-900/60"></div>
+          <img
+            src="https://images.adsttc.com/media/images/5ef2/f7ce/b357/6589/8c00/019a/large_jpg/847A0737.jpg?1592981436"
+            alt=""
+            className="h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60"></div>
         </div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 text-center">
-          <h1 className="font-semibold text-white mb-6 tracking-tight text-5xl md:text-6xl" style={{ fontWeight: 700 }}>
+        <div className="relative z-10 mx-auto max-w-7xl px-4 py-6 text-center sm:px-6 lg:px-8">
+          <p className="font-heading text-[11px] font-normal uppercase tracking-[0.28em] text-white/75 md:text-xs not-italic">
+            Viterra · Desarrollos
+          </p>
+          <span className="mx-auto mt-3 block h-px w-12 bg-primary" aria-hidden />
+          <div className="mt-5 flex justify-center text-primary" aria-hidden>
+            <ChevronsDown className="h-7 w-7 sm:h-8 sm:w-8" strokeWidth={1.5} />
+          </div>
+          <h1 className="font-heading mt-5 text-3xl font-light tracking-[-0.02em] text-white sm:mt-6 sm:text-5xl md:text-6xl">
             {page.heroTitle}
           </h1>
 
-          <p className="mx-auto max-w-2xl text-lg leading-relaxed text-white/80 md:text-xl" style={{ fontWeight: 400 }}>
+          <p className="font-heading mx-auto mt-4 max-w-2xl text-base font-light leading-relaxed text-white/90 not-italic sm:text-lg md:text-xl">
             {page.heroSubtitle}
           </p>
         </div>
@@ -52,22 +63,22 @@ export function DevelopmentsPage() {
       {/* Featured Developments */}
       {featuredDevelopments.length > 0 && (
         <PreviewSectionChrome blockId="dev-featured" label="Proyectos destacados (títulos)">
-        <section className="py-24 bg-white">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8">
-            <div className="mb-12">
-              <p className="mb-3 text-sm uppercase tracking-wide text-slate-500" style={{ letterSpacing: "0.1em", fontWeight: 500 }}>
+        <section className="bg-white py-12 sm:py-16 md:py-24">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mb-8 sm:mb-12">
+              <p className="font-heading mb-2 text-xs uppercase tracking-[0.1em] text-brand-navy/65 sm:mb-3 sm:text-sm">
                 {page.featuredKicker}
               </p>
-              <h2 className="text-4xl font-semibold tracking-tight text-slate-900" style={{ fontWeight: 600 }}>
+              <h2 className="font-heading text-2xl font-semibold tracking-tight text-brand-navy sm:text-3xl md:text-4xl">
                 {page.featuredTitle}
               </h2>
             </div>
 
-            <div className="space-y-12">
+            <div className="space-y-10 md:space-y-12">
               {featuredDevelopments.map((dev, index) => (
                 <div
                   key={dev.id}
-                  className={cn("grid gap-12 items-center", pl.gridCols("grid-cols-1 lg:grid-cols-2"))}
+                  className={cn("grid items-center gap-8 md:gap-12", pl.gridCols("grid-cols-1 lg:grid-cols-2"))}
                 >
                   <div className={cn(index % 2 === 1 && !pl.preview && "lg:order-2")}>
                     <Link
@@ -80,8 +91,8 @@ export function DevelopmentsPage() {
                         alt=""
                         className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                       />
-                      <div className="pointer-events-none absolute top-6 left-6">
-                        <span className={`px-3 py-1.5 rounded-lg text-xs font-semibold backdrop-blur-sm ${getStatusColor(dev.status)}`} style={{ fontWeight: 600 }}>
+                      <div className="absolute left-4 top-4 sm:left-6 sm:top-6">
+                        <span className={`font-heading rounded-lg px-3 py-1.5 text-xs font-semibold backdrop-blur-sm ${getStatusColor(dev.status)}`}>
                           {dev.status}
                         </span>
                       </div>
@@ -89,41 +100,41 @@ export function DevelopmentsPage() {
                   </div>
 
                   <div className={cn(index % 2 === 1 && !pl.preview && "lg:order-1")}>
-                    <div className="flex items-center gap-2 text-slate-600 mb-4">
-                      <MapPin className="w-4 h-4" strokeWidth={1.5} />
-                      <span className="text-sm font-medium" style={{ fontWeight: 500 }}>{dev.location}</span>
+                    <div className="mb-3 flex items-center gap-2 text-brand-navy/70 sm:mb-4">
+                      <MapPin className="w-4 h-4 text-primary" strokeWidth={1.5} />
+                      <span className="font-heading text-sm font-medium">{dev.location}</span>
                     </div>
 
-                    <h3 className="text-3xl font-semibold text-slate-900 mb-4 tracking-tight" style={{ fontWeight: 600 }}>
+                    <h3 className="font-heading mb-3 text-2xl font-semibold tracking-tight text-brand-navy sm:mb-4 sm:text-3xl">
                       {dev.name}
                     </h3>
 
-                    <p className="text-lg text-slate-600 mb-6 leading-relaxed" style={{ fontWeight: 400 }}>
+                    <p className="font-heading mb-5 text-base font-normal leading-relaxed text-brand-navy/70 not-italic sm:mb-6 sm:text-lg">
                       {dev.description}
                     </p>
 
-                    <div className={cn("grid gap-4 mb-6 p-6 bg-slate-50 rounded-lg border border-slate-200", pl.gridCols("grid-cols-2"))}>
+                    <div className={cn("mb-6 grid gap-4 rounded-lg border border-brand-navy/10 bg-brand-canvas p-4 sm:p-6", pl.gridCols("grid-cols-1 sm:grid-cols-2"))}>
                       <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>Unidades</p>
-                        <p className="text-lg font-semibold text-slate-900" style={{ fontWeight: 600 }}>{dev.units}</p>
+                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Unidades</p>
+                        <p className="font-heading text-lg font-semibold text-brand-navy">{dev.units}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>Entrega</p>
-                        <p className="text-lg font-semibold text-slate-900" style={{ fontWeight: 600 }}>{dev.deliveryDate}</p>
+                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Entrega</p>
+                        <p className="font-heading text-lg font-semibold text-brand-navy">{dev.deliveryDate}</p>
                       </div>
                       <div className={pl.colSpan("col-span-2")}>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>Rango de Precios</p>
-                        <p className="text-lg font-semibold text-slate-900" style={{ fontWeight: 600 }}>{dev.priceRange}</p>
+                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Rango de Precios</p>
+                        <p className="font-heading text-lg font-semibold text-brand-navy">{dev.priceRange}</p>
                       </div>
                     </div>
 
-                    <div className="mb-8">
-                      <p className="text-xs text-slate-500 uppercase tracking-wide mb-4" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>Amenidades</p>
-                      <div className={cn("grid gap-3", pl.gridCols("grid-cols-2"))}>
+                    <div className="mb-6 sm:mb-8">
+                      <p className="font-heading mb-3 text-xs uppercase tracking-[0.05em] text-brand-navy/60 sm:mb-4">Amenidades</p>
+                      <div className={cn("grid gap-3", pl.gridCols("grid-cols-1 sm:grid-cols-2"))}>
                         {dev.amenities.map((amenity, idx) => (
                           <div key={idx} className="flex items-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-slate-700 flex-shrink-0" strokeWidth={1.5} />
-                            <span className="text-sm text-slate-700" style={{ fontWeight: 500 }}>{amenity}</span>
+                            <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" strokeWidth={1.5} />
+                            <span className="font-heading text-sm text-brand-navy/85 font-medium">{amenity}</span>
                           </div>
                         ))}
                       </div>
@@ -131,8 +142,7 @@ export function DevelopmentsPage() {
 
                     <Link
                       to={`/desarrollos/${dev.id}`}
-                      className="inline-flex items-center gap-2 bg-[#C8102E] text-white px-6 py-3 rounded-lg hover:bg-[#a00d25] hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 font-medium"
-                      style={{ fontWeight: 600 }}
+                      className="font-heading inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 font-medium text-white transition-all duration-300 hover:-translate-y-0.5 hover:bg-brand-red-hover hover:shadow-lg sm:w-auto"
                     >
                       Ver Detalles Completos
                       <ArrowRight className="w-4 h-4" strokeWidth={2} />
@@ -148,11 +158,11 @@ export function DevelopmentsPage() {
 
       {/* Other Developments Grid */}
       {otherDevelopments.length > 0 && (
-        <section className="py-24 bg-slate-50">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8">
-            <div className="mb-12">
-              <p className="text-sm text-slate-500 uppercase tracking-wide mb-3" style={{ letterSpacing: '0.1em', fontWeight: 500 }}>Más Proyectos</p>
-              <h2 className="text-4xl font-semibold text-slate-900 tracking-tight" style={{ fontWeight: 600 }}>
+        <section className="bg-brand-canvas py-12 sm:py-16 md:py-24">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mb-8 sm:mb-12">
+              <p className="font-heading mb-2 text-xs uppercase tracking-[0.1em] text-brand-navy/60 sm:mb-3 sm:text-sm">Más Proyectos</p>
+              <h2 className="font-heading text-2xl font-semibold tracking-tight text-brand-navy sm:text-3xl md:text-4xl">
                 Otros Desarrollos
               </h2>
             </div>
@@ -170,52 +180,51 @@ export function DevelopmentsPage() {
                       alt=""
                       className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                     />
-                    <div className="pointer-events-none absolute top-6 left-6">
-                      <span className={`px-3 py-1.5 rounded-lg text-xs font-semibold backdrop-blur-sm ${getStatusColor(dev.status)}`} style={{ fontWeight: 600 }}>
+                    <div className="absolute top-6 left-6">
+                      <span className={`font-heading px-3 py-1.5 rounded-lg text-xs font-semibold backdrop-blur-sm ${getStatusColor(dev.status)}`}>
                         {dev.status}
                       </span>
                     </div>
                   </Link>
 
-                  <div className="p-8">
-                    <div className="flex items-center gap-2 text-slate-600 mb-3">
-                      <MapPin className="w-4 h-4" strokeWidth={1.5} />
-                      <span className="text-sm font-medium" style={{ fontWeight: 500 }}>{dev.location}</span>
+                  <div className="p-5 sm:p-6 md:p-8">
+                    <div className="mb-2 flex items-center gap-2 text-brand-navy/70 sm:mb-3">
+                      <MapPin className="w-4 h-4 text-primary" strokeWidth={1.5} />
+                      <span className="font-heading text-sm font-medium">{dev.location}</span>
                     </div>
 
-                    <h3 className="text-2xl font-semibold text-slate-900 mb-3 tracking-tight" style={{ fontWeight: 600 }}>
+                    <h3 className="font-heading mb-2 text-xl font-semibold tracking-tight text-brand-navy sm:mb-3 sm:text-2xl">
                       {dev.name}
                     </h3>
 
-                    <p className="text-sm text-slate-600 mb-6 leading-relaxed" style={{ fontWeight: 400 }}>
+                    <p className="font-heading mb-5 text-sm font-normal leading-relaxed text-brand-navy/70 not-italic sm:mb-6">
                       {dev.description}
                     </p>
 
-                    <div className="grid grid-cols-2 gap-4 mb-6 pb-6 border-b border-slate-200">
+                    <div className="mb-5 grid grid-cols-2 gap-3 border-b border-brand-navy/10 pb-5 sm:mb-6 sm:gap-4 sm:pb-6">
                       <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>Unidades</p>
-                        <p className="text-base font-semibold text-slate-900" style={{ fontWeight: 600 }}>{dev.units}</p>
+                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Unidades</p>
+                        <p className="font-heading text-base font-semibold text-brand-navy">{dev.units}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>Entrega</p>
-                        <p className="text-base font-semibold text-slate-900" style={{ fontWeight: 600 }}>{dev.deliveryDate}</p>
+                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Entrega</p>
+                        <p className="font-heading text-base font-semibold text-brand-navy">{dev.deliveryDate}</p>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>Desde</p>
-                        <p className="text-lg font-semibold text-slate-900" style={{ fontWeight: 600 }}>
+                        <p className="font-heading mb-1 text-xs uppercase tracking-[0.05em] text-brand-navy/60">Desde</p>
+                        <p className="font-heading text-lg font-semibold text-brand-navy">
                           {dev.priceRange.split(' - ')[0]}
                         </p>
                       </div>
                       <Link
                         to={`/desarrollos/${dev.id}`}
-                        className="inline-flex items-center gap-2 text-sm text-slate-900 hover:text-slate-700 transition-colors font-medium"
-                        style={{ fontWeight: 600 }}
+                        className="font-heading inline-flex items-center justify-center gap-2 text-sm font-medium text-brand-navy transition-colors hover:text-brand-burgundy sm:justify-end"
                       >
                         Ver Detalles
-                        <ArrowRight className="w-4 h-4" strokeWidth={2} />
+                        <ArrowRight className="h-4 w-4" strokeWidth={2} />
                       </Link>
                     </div>
                   </div>
@@ -227,17 +236,17 @@ export function DevelopmentsPage() {
       )}
 
       {/* CTA Section */}
-      <section className="py-24 bg-brand-navy">
-        <div className="max-w-4xl mx-auto px-6 lg:px-8 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full mb-8">
+      <section className="bg-brand-navy py-12 sm:py-16 md:py-24">
+        <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
+          <div className="mb-6 inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 backdrop-blur-sm sm:mb-8 sm:px-4">
             <Sparkles className="w-4 h-4 text-white" strokeWidth={1.5} />
-            <span className="text-sm text-white font-medium tracking-wide" style={{ fontWeight: 500 }}>Invierte en Tu Futuro</span>
+            <span className="font-heading text-sm text-white font-medium tracking-wide">Invierte en Tu Futuro</span>
           </div>
 
-          <h2 className="font-heading text-4xl md:text-5xl font-semibold text-white mb-6 tracking-tight">
+          <h2 className="font-heading mb-4 text-2xl font-semibold tracking-tight text-white sm:mb-6 sm:text-4xl md:text-5xl">
             ¿Listo para invertir?
           </h2>
-          <p className="text-lg text-slate-300 mb-10 max-w-2xl mx-auto leading-relaxed" style={{ fontWeight: 400 }}>
+          <p className="font-heading mx-auto mb-8 max-w-2xl text-base font-normal leading-relaxed text-white/80 not-italic sm:mb-10 sm:text-lg">
             Agenda una cita con nuestros expertos y descubre las oportunidades de inversión 
             en nuestros desarrollos exclusivos.
           </p>
@@ -245,16 +254,14 @@ export function DevelopmentsPage() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               to="/contacto"
-              className="inline-flex items-center justify-center gap-2 bg-white text-brand-navy px-8 py-4 rounded-lg hover:bg-brand-canvas transition-all font-medium"
-              style={{ fontWeight: 600 }}
+              className="font-heading inline-flex items-center justify-center gap-2 bg-white text-brand-navy px-8 py-4 rounded-lg hover:bg-brand-canvas transition-all font-medium"
             >
               Agendar Cita
               <ArrowRight className="w-5 h-5" strokeWidth={2} />
             </Link>
             <a
               href="tel:+1234567890"
-              className="inline-flex items-center justify-center gap-2 bg-transparent text-white px-8 py-4 rounded-lg border border-white/30 hover:bg-white/10 transition-all font-medium"
-              style={{ fontWeight: 600 }}
+              className="font-heading inline-flex items-center justify-center gap-2 bg-transparent text-white px-8 py-4 rounded-lg border border-white/30 hover:bg-white/10 transition-all font-medium"
             >
               Llamar Ahora
             </a>

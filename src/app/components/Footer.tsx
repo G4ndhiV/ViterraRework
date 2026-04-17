@@ -25,15 +25,15 @@ export function Footer() {
               <h3 className="font-semibold text-lg text-white tracking-tight" style={{ fontWeight: 600 }}>
                 VITERRA
               </h3>
-              <span className="h-px w-full bg-[#C8102E] shrink-0 my-2.5" aria-hidden />
+              <span className="h-px w-full bg-primary shrink-0 my-2.5" aria-hidden />
               <p
-                className="text-xs text-[#C8102E] uppercase tracking-widest font-medium"
+                className="text-xs text-primary uppercase tracking-widest font-medium"
                 style={{ letterSpacing: "0.12em" }}
               >
                 Grupo Inmobiliario
               </p>
             </div>
-            <p className="text-sm mb-6 leading-relaxed" style={{ fontWeight: 400 }}>
+            <p className="text-sm mb-6 leading-relaxed not-italic" style={{ fontWeight: 400 }}>
               Tu socio de confianza en bienes raíces. Más de 15 años ayudando a personas a encontrar su hogar ideal.
             </p>
             <div className="flex gap-3">
@@ -70,7 +70,7 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link to="/propiedades" className="hover:text-white hover:translate-x-1 transition-all duration-200 inline-block" style={{ fontWeight: 400 }}>
+                <Link to="/renta" className="hover:text-white hover:translate-x-1 transition-all duration-200 inline-block" style={{ fontWeight: 400 }}>
                   Propiedades
                 </Link>
               </li>
@@ -154,7 +154,7 @@ export function Footer() {
         </div>
 
         <div className="border-t border-white/10 mt-12 pt-8 text-sm text-center">
-          <p className="text-slate-400" style={{ fontWeight: 400 }}>&copy; {new Date().getFullYear()} Viterra Inmobiliaria. Todos los derechos reservados.</p>
+          <p className="text-slate-400 not-italic" style={{ fontWeight: 400 }}>&copy; {new Date().getFullYear()} Viterra Inmobiliaria. Todos los derechos reservados.</p>
         </div>
       </div>
     </motion.footer>

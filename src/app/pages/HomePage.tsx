@@ -1,11 +1,11 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { PropertyCard } from "../components/PropertyCard";
 import { SearchBar, SearchFilters } from "../components/SearchBar";
 import { mockProperties } from "../data/properties";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion } from "motion/react";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
@@ -18,12 +18,12 @@ function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?
       <p
         className={cn(
           "text-[10px] uppercase tracking-[0.32em] font-normal",
-          tone === "light" ? "text-white/70" : "text-neutral-500"
+          tone === "light" ? "text-white/70" : "text-brand-navy/55"
         )}
       >
         {children}
       </p>
-      <span className="mt-4 mx-auto block h-px w-10 bg-[#C8102E]" aria-hidden />
+      <span className="mt-4 mx-auto block h-px w-10 bg-primary" aria-hidden />
     </div>
   );
 }
@@ -33,6 +33,15 @@ export function HomePage() {
   const { content } = useSiteContent();
   const h = content.home;
   const featuredProperties = mockProperties.slice(0, 6);
+  const [carouselIndex, setCarouselIndex] = useState(0);
+
+  const goPrev = () => {
+    setCarouselIndex((prev) => (prev - 1 + featuredProperties.length) % featuredProperties.length);
+  };
+
+  const goNext = () => {
+    setCarouselIndex((prev) => (prev + 1) % featuredProperties.length);
+  };
 
   const handleSearch = (filters: SearchFilters) => {
     const params = new URLSearchParams();
@@ -41,7 +50,8 @@ export function HomePage() {
     if (filters.status) params.append("status", filters.status);
     if (filters.minPrice) params.append("minPrice", filters.minPrice);
     if (filters.maxPrice) params.append("maxPrice", filters.maxPrice);
-    window.location.href = `/propiedades?${params.toString()}`;
+    const status = filters.status === "venta" ? "venta" : "renta";
+    window.location.href = `/${status}?${params.toString()}`;
   };
 
   const scrollToSearch = () => {
@@ -72,8 +82,8 @@ export function HomePage() {
             </p>
 
             <h1
-              className="font-serif text-white text-[2.35rem] leading-[1.05] sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-light tracking-tight px-2"
-              style={{ fontWeight: 300 }}
+              className="text-white text-[2.35rem] leading-[1.05] sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-light tracking-tight px-2 not-italic"
+              style={{ fontFamily: "var(--font-hero-display)", fontWeight: 300 }}
             >
               {h.heroTitle}
             </h1>
@@ -96,7 +106,7 @@ export function HomePage() {
               <button
                 type="button"
                 onClick={scrollToSearch}
-                className="w-full sm:w-auto min-w-[240px] border border-white text-white uppercase tracking-[0.22em] text-xs py-4 px-10 hover:bg-white hover:text-neutral-900 transition-colors duration-300 font-normal"
+                className="w-full sm:w-auto min-w-[240px] border border-white text-white uppercase tracking-[0.22em] text-xs py-4 px-10 hover:bg-white hover:text-brand-navy transition-colors duration-300 font-normal"
               >
                 {h.heroCtaPrimary}
               </button>
@@ -117,7 +127,7 @@ export function HomePage() {
       <PreviewSectionChrome blockId="home-search" label="Búsqueda">
       <section
         id="busqueda"
-        className="scroll-fade-exit-white relative scroll-mt-8 min-h-[72vh] md:min-h-[78vh] flex flex-col justify-center py-20 md:py-28 overflow-hidden border-b border-black/25"
+        className="scroll-fade-exit-white relative scroll-mt-8 min-h-[72vh] md:min-h-[78vh] flex flex-col justify-center py-20 md:py-28 overflow-hidden border-b border-brand-navy/20"
       >
         {/* Entre hero y búsqueda: cristal oscuro en lugar de línea blanca */}
         <div
@@ -141,7 +151,7 @@ export function HomePage() {
             <h2 className="font-heading font-light text-3xl md:text-4xl lg:text-[2.35rem] text-white tracking-tight text-center mt-8 leading-tight drop-shadow-sm">
               {h.searchTitle}
             </h2>
-            <p className="font-tertiary text-center text-base md:text-lg italic text-white/80 mt-4 max-w-xl mx-auto leading-relaxed">
+            <p className="font-heading text-center text-base md:text-lg not-italic text-white/80 mt-4 max-w-xl mx-auto leading-relaxed font-light">
               {h.searchSubtitle}
             </p>
           </div>
@@ -160,55 +170,87 @@ export function HomePage() {
         <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div
             className={cn(
-              "mb-14 flex gap-8 border-b border-neutral-200 pb-10 sm:gap-10 md:mb-16 md:pb-12",
+              "mb-14 flex gap-8 border-b border-brand-navy/10 pb-10 sm:gap-10 md:mb-16 md:pb-12",
               pl.preview ? "flex-col" : "flex-col lg:flex-row lg:items-end lg:justify-between"
             )}
           >
             <div className="lg:max-w-[65%]">
-              <p className="mb-4 text-[10px] font-normal uppercase tracking-[0.32em] text-neutral-500">{h.selectionKicker}</p>
-              <span className="mb-6 block h-px w-10 bg-[#C8102E]" aria-hidden />
-              <h2 className="font-heading text-3xl font-light leading-[1.12] tracking-tight text-neutral-900 sm:text-4xl md:text-5xl lg:text-[3.25rem]">
+              <p className="mb-4 text-[10px] font-normal uppercase tracking-[0.32em] text-brand-navy/55">{h.selectionKicker}</p>
+              <span className="mb-6 block h-px w-10 bg-primary" aria-hidden />
+              <h2 className="font-heading text-3xl font-light leading-[1.12] tracking-tight text-brand-navy sm:text-4xl md:text-5xl lg:text-[3.25rem]">
                 {h.selectionTitle}
               </h2>
-              <p className="mt-5 max-w-xl text-[15px] font-light leading-relaxed text-neutral-600 md:text-base">
+              <p className="mt-5 max-w-xl text-[15px] font-light leading-relaxed text-brand-navy/70 md:text-base">
                 {h.selectionSubtitle}
               </p>
             </div>
             <Link
               to="/venta"
-              className="inline-flex shrink-0 items-center gap-2 self-start border-b border-neutral-400 pb-1 text-[11px] uppercase tracking-[0.22em] text-neutral-800 transition-colors hover:border-[#C8102E] hover:text-[#C8102E] lg:self-auto"
+              className="inline-flex shrink-0 items-center gap-2 self-start border-b border-brand-navy/35 pb-1 text-[11px] uppercase tracking-[0.22em] text-brand-navy transition-colors hover:border-primary hover:text-primary lg:self-auto"
             >
               {h.selectionCatalogLink}
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
 
-          <div className={cn("grid gap-x-8 gap-y-12", pl.gridCols("grid-cols-1 md:grid-cols-2 lg:grid-cols-3"))}>
-            {featuredProperties.map((property, index) => (
-              <motion.div
-                key={property.id}
-                initial={{ opacity: 0, y: 18 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-40px" }}
-                transition={{ duration: 0.45, delay: index * 0.06 }}
+          <div className="mx-auto max-w-5xl">
+            <motion.div
+              key={featuredProperties[carouselIndex].id}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35 }}
+            >
+              <PropertyCard property={featuredProperties[carouselIndex]} variant="editorial" />
+            </motion.div>
+
+            <div className="mt-8 flex items-center justify-between gap-4">
+              <button
+                type="button"
+                onClick={goPrev}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-navy/20 text-brand-navy transition-colors hover:border-primary hover:text-primary"
+                aria-label="Propiedad anterior"
               >
-                <PropertyCard property={property} variant="editorial" />
-              </motion.div>
-            ))}
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+
+              <div className="flex items-center gap-2">
+                {featuredProperties.map((property, index) => (
+                  <button
+                    key={property.id}
+                    type="button"
+                    onClick={() => setCarouselIndex(index)}
+                    className={cn(
+                      "h-1.5 rounded-full transition-all",
+                      index === carouselIndex ? "w-8 bg-primary" : "w-3 bg-brand-navy/25 hover:bg-brand-navy/45"
+                    )}
+                    aria-label={`Ir a propiedad ${index + 1}`}
+                  />
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={goNext}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-navy/20 text-brand-navy transition-colors hover:border-primary hover:text-primary"
+                aria-label="Siguiente propiedad"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
-          <div className="mt-20 flex flex-col items-center justify-center gap-8 border-t border-neutral-200 pt-12 text-sm sm:flex-row">
+          <div className="mt-20 flex flex-col items-center justify-center gap-8 border-t border-brand-navy/10 pt-12 text-sm sm:flex-row">
             <Link
               to="/renta"
-              className="inline-flex items-center gap-2 border-b border-neutral-300 pb-1 text-[11px] uppercase tracking-[0.16em] text-neutral-700 transition-colors hover:border-[#C8102E] hover:text-[#C8102E]"
+              className="inline-flex items-center gap-2 border-b border-brand-navy/25 pb-1 text-[11px] uppercase tracking-[0.16em] text-brand-navy/85 transition-colors hover:border-primary hover:text-primary"
             >
               {h.selectionRentLabel}
               <ArrowRight className="h-4 w-4" />
             </Link>
-            <span className="hidden h-4 w-px bg-neutral-300 sm:inline" aria-hidden />
+            <span className="hidden h-4 w-px bg-brand-navy/15 sm:inline" aria-hidden />
             <Link
               to="/venta"
-              className="inline-flex items-center gap-2 border-b border-neutral-300 pb-1 text-[11px] uppercase tracking-[0.16em] text-neutral-700 transition-colors hover:border-[#C8102E] hover:text-[#C8102E]"
+              className="inline-flex items-center gap-2 border-b border-brand-navy/25 pb-1 text-[11px] uppercase tracking-[0.16em] text-brand-navy/85 transition-colors hover:border-primary hover:text-primary"
             >
               {h.selectionSaleLabel}
               <ArrowRight className="h-4 w-4" />
@@ -240,11 +282,11 @@ export function HomePage() {
           )}
         >
           <p className="text-[10px] uppercase tracking-[0.32em] text-white/45 font-normal mb-5">{h.experienceKicker}</p>
-          <span className="block h-px w-10 bg-[#C8102E] mb-8" aria-hidden />
+          <span className="block h-px w-10 bg-primary mb-8" aria-hidden />
           <h3 className="font-heading font-light text-3xl md:text-4xl lg:text-[2.65rem] tracking-tight leading-[1.15] mb-6">
             {h.experienceTitle}
           </h3>
-          <p className="font-tertiary text-lg md:text-xl italic text-white/70 leading-relaxed max-w-md mb-4">
+          <p className="font-heading text-lg md:text-xl not-italic text-white/70 leading-relaxed max-w-md mb-4 font-light">
             {h.experienceLead}
           </p>
           <p className="text-white/78 font-light leading-relaxed max-w-md mb-10 text-[15px]">
@@ -263,26 +305,26 @@ export function HomePage() {
 
       {/* Cierre — negro marca + acento rojo en hover */}
       <PreviewSectionChrome blockId="home-closing" label="Cierre">
-      <section className="py-24 md:py-32 bg-brand-canvas border-t border-neutral-200/60">
+      <section className="py-24 md:py-32 bg-brand-canvas border-t border-brand-navy/10">
         <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
           <SectionKicker>{h.closingKicker}</SectionKicker>
-          <h2 className="font-heading font-light text-3xl md:text-4xl lg:text-[2.65rem] text-neutral-900 tracking-tight mt-8 mb-5 leading-tight">
+          <h2 className="font-heading font-light text-3xl md:text-4xl lg:text-[2.65rem] text-brand-navy tracking-tight mt-8 mb-5 leading-tight">
             {h.closingTitle}
           </h2>
-          <p className="text-neutral-600 font-light mb-12 leading-relaxed text-[15px] md:text-base max-w-lg mx-auto">
+          <p className="text-brand-navy/70 font-light mb-12 leading-relaxed text-[15px] md:text-base max-w-lg mx-auto">
             {h.closingSubtitle}
           </p>
           <div className={cn("flex gap-4 justify-center", pl.preview ? "flex-col" : "flex-col sm:flex-row")}>
             <Link
               to="/contacto"
-              className="inline-flex items-center justify-center gap-2 uppercase tracking-[0.2em] text-[11px] bg-brand-navy text-white px-10 py-4 hover:bg-[#1e2a45] transition-colors"
+              className="inline-flex items-center justify-center gap-2 uppercase tracking-[0.2em] text-[11px] bg-brand-navy text-white px-10 py-4 transition-colors hover:brightness-110"
             >
               {h.closingBtnPrimary}
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
-              to="/propiedades"
-              className="inline-flex items-center justify-center gap-2 uppercase tracking-[0.2em] text-[11px] border border-neutral-900/25 text-neutral-900 px-10 py-4 hover:border-[#C8102E] hover:text-[#7f1d1d] transition-colors bg-white/60"
+              to="/renta"
+              className="inline-flex items-center justify-center gap-2 uppercase tracking-[0.2em] text-[11px] border border-brand-navy/25 text-brand-navy px-10 py-4 transition-colors hover:border-primary hover:text-brand-burgundy bg-white/70"
             >
               {h.closingBtnSecondary}
             </Link>

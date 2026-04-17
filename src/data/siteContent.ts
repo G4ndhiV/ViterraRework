@@ -186,7 +186,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
   },
   services: {
     heroImage:
-      "https://images.unsplash.com/photo-1757924461488-ef9ad0670978?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxsdXh1cnklMjBwZW50aG91c2UlMjBpbnRlcmlvciUyMGxpdmluZyUyMHJvb218ZW58MXx8fHwxNzc2MDk1NzU3fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "https://wallpapers.com/images/hd/4k-office-background-silapjkl0bkxakj4.jpg",
     heroTitle: "Nuestros servicios",
     heroSubtitle: "Soluciones integrales para todas tus necesidades inmobiliarias",
     cards: [
@@ -298,7 +298,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
   },
   developments: {
     heroImage:
-      "https://images.unsplash.com/photo-1764562155616-facdda23671a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjByZXNpZGVudGlhbCUyMGRldmVsb3BtZW50JTIwYXJjaGl0ZWN0dXJlJTIwYWVyaWFsfGVufDF8fHx8MTc3NDM5ODA0OHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "https://images.adsttc.com/media/images/5ef2/f7ce/b357/6589/8c00/019a/large_jpg/847A0737.jpg?1592981436",
     heroTitle: "Proyectos Excepcionales",
     heroSubtitle:
       "Descubre nuestros desarrollos inmobiliarios exclusivos con arquitectura vanguardista y amenidades de clase mundial.",

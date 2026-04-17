@@ -41,20 +41,10 @@ const MAP_CARD_GAP_ABOVE_DOT_PX = 18;
 const MAP_CARD_GAP_BELOW_DOT_PX = 14;
 /** Altura aproximada de la tarjeta (imagen + texto + CTA) para decidir si voltea arriba/abajo. */
 const MAP_CARD_ESTIMATED_HEIGHT_PX = 360;
-/** Margen respecto al borde del contenedor del mapa (al volteo arriba/abajo y al centrado horizontal). */
+/** Margen respecto al borde del contenedor del mapa (volteo arriba/abajo). */
 const MAP_CARD_VIEWPORT_PADDING_PX = 16;
-/** Ancho máximo de la tarjeta (debe alinearse con `max-w-[320px]` en el JSX). */
-const MAP_CARD_MAX_WIDTH_PX = 320;
 
 type MapPopupPlacement = "above" | "below";
-
-/** Centrado horizontal dentro del ancho del mapa (coords del contenedor Leaflet). */
-function clampCardCenterXInMap(mapW: number, x: number): number {
-  const pad = MAP_CARD_VIEWPORT_PADDING_PX;
-  const cardW = Math.min(MAP_CARD_MAX_WIDTH_PX, Math.max(0, mapW - 2 * pad));
-  const half = cardW / 2;
-  return Math.max(half + pad, Math.min(mapW - half - pad, x));
-}
 
 /** Volteo arriba/abajo según espacio dentro del pane del mapa; el recorte visual lo hace `overflow-hidden`. */
 function pickMapCardPlacement(
@@ -309,9 +299,7 @@ export function MapSearchPage() {
     const update = () => {
       const m = mapRef.current;
       if (!m) return;
-      const mapSize = m.getSize();
-      const mapW = mapSize.x;
-      const mapH = mapSize.y;
+      const mapH = m.getSize().y;
       const z = m.getZoom();
       if (z >= ZOOM_SHOW_PRICES) {
         const pillBottom = m.latLngToContainerPoint(L.latLng(lat + PRICE_LABEL_LAT_OFFSET, lng));
@@ -322,7 +310,7 @@ export function MapSearchPage() {
             ? pillTop - MAP_CARD_GAP_ABOVE_PRICE_PX
             : pillBottom.y + MAP_CARD_GAP_BELOW_PRICE_PX;
         setMapPopupPos({
-          x: clampCardCenterXInMap(mapW, pillBottom.x),
+          x: pillBottom.x,
           y,
           placement: pl,
         });
@@ -334,7 +322,7 @@ export function MapSearchPage() {
             ? dot.y - MAP_CARD_GAP_ABOVE_DOT_PX
             : dot.y + MAP_CARD_GAP_BELOW_DOT_PX;
         setMapPopupPos({
-          x: clampCardCenterXInMap(mapW, dot.x),
+          x: dot.x,
           y,
           placement: pl,
         });
@@ -688,7 +676,7 @@ export function MapSearchPage() {
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <Link
-                  to="/propiedades"
+                  to="/renta"
                   className="hidden text-[13px] font-semibold text-primary underline-offset-2 hover:underline sm:inline"
                 >
                   Ver lista

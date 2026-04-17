@@ -6,4 +6,5 @@ export const VITERRA_NAV_ITEMS = [
   ["/desarrollos", "DESARROLLOS"],
   ["/servicios", "SERVICIOS"],
   ["/nosotros", "ACERCA DE"],
+  ["/contacto", "CONTACTO"],
 ] as const;

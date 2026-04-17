@@ -32,6 +32,14 @@ export function Header() {
   const [scrollP, setScrollP] = useState(0);
   const location = useLocation();
   const isHome = location.pathname === "/";
+  const isRentPage = location.pathname === "/renta";
+  const isSalePage = location.pathname === "/venta";
+  const isDevelopmentsPage = location.pathname === "/desarrollos";
+  const isServicesPage = location.pathname === "/servicios";
+  const isContactPage = location.pathname === "/contacto";
+  const isAboutPage = location.pathname === "/nosotros";
+  const useOverlayHeader =
+    isHome || isRentPage || isSalePage || isDevelopmentsPage || isServicesPage || isContactPage || isAboutPage;
   const rafRef = useRef<number | null>(null);
 
   const readScroll = useCallback(() => {
@@ -104,7 +112,7 @@ export function Header() {
   return (
     <header
       className={`left-0 right-0 z-50 w-full text-white pt-[env(safe-area-inset-top,0px)] ${
-        isHome ? "fixed top-0" : "sticky top-0"
+        useOverlayHeader ? "fixed top-0" : "sticky top-0"
       }`}
       style={{
         fontFamily: "Poppins, sans-serif",

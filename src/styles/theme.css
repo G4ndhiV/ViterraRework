@@ -40,6 +40,8 @@
   --sidebar-accent-foreground: #1e293b;
   --sidebar-border: #e2e8f0;
   --sidebar-ring: #C8102E;
+  /* Único uso: título principal del hero en Inicio (resto del sitio: Poppins / Perpetua) */
+  --font-hero-display: "Cormorant Garamond", ui-serif, Georgia, "Times New Roman", serif;
 }
 
 .dark {
@@ -80,11 +82,10 @@
 }
 
 @theme inline {
-  --font-serif: "Cormorant Garamond", ui-serif, Georgia, "Times New Roman", serif;
-  /* Titulares / alta jerarquía: Montserrat (sustituye Cera Pro en guía) */
-  --font-heading: "Montserrat", "DM Sans", ui-sans-serif, system-ui, sans-serif;
-  /* Cuerpo UI: Poppins vía --font-family en :root */
-  /* Leyendas discretas: Perpetua + fallback */
+  /* Viterra: titulares y UI = Poppins. Cormorant solo vía --font-hero-display en portada. */
+  --font-serif: Perpetua, "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
+  --font-heading: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* Leyendas y acentos serif: Perpetua + fallback */
   --font-tertiary: Perpetua, "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
   --color-brand-canvas: #f4f2ef;
   --color-brand-navy: #141c2e;
