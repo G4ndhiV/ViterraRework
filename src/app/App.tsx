@@ -1,4 +1,5 @@
 import { RouterProvider } from "react-router";
+import { Toaster } from "sonner";
 import { router } from "./router";
 import { AuthProvider } from "./contexts/AuthContext";
 import { SiteContentProvider } from "../contexts/SiteContentContext";
@@ -9,6 +10,7 @@ export default function App() {
     <SiteContentProvider>
       <AuthProvider>
         <RouterProvider router={router} />
+        <Toaster position="top-center" richColors closeButton />
       </AuthProvider>
     </SiteContentProvider>
   );

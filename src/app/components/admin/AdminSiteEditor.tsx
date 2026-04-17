@@ -201,18 +201,18 @@ export function AdminSiteEditor() {
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="grid w-full gap-3 lg:grid-cols-3">
             <button
               type="button"
               onClick={handleSave}
-              className="rounded-lg bg-brand-navy px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1e2a45]"
+              className="inline-flex h-11 items-center justify-center rounded-lg bg-brand-navy px-6 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1e2a45]"
             >
               Guardar cambios
             </button>
             <button
               type="button"
               onClick={handleResetSection}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
               <RotateCcw className="h-4 w-4" strokeWidth={1.5} />
               Restaurar esta sección
@@ -220,7 +220,7 @@ export function AdminSiteEditor() {
             <button
               type="button"
               onClick={handleResetAll}
-              className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-800 hover:bg-red-100"
+              className="inline-flex h-11 items-center justify-center rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-medium text-red-800 hover:bg-red-100"
             >
               Restaurar todo el sitio
             </button>

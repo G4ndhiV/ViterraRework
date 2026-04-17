@@ -15,6 +15,14 @@ export interface LeadClientNote {
   body: string;
 }
 
+export interface LeadActivityEntry {
+  id: string;
+  type: "created" | "status_change" | "updated" | "comment";
+  createdAt: string;
+  description: string;
+  status?: string;
+}
+
 /** Nivel de prioridad por estrellas (1 = mínima, 6 = máxima). */
 export type LeadPriorityStars = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -23,6 +31,13 @@ export function newLeadClientNoteId(): string {
     return `lnote_${crypto.randomUUID()}`;
   }
   return `lnote_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function newLeadActivityId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `lact_${crypto.randomUUID()}`;
+  }
+  return `lact_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export function clampLeadPriorityStars(n: number): LeadPriorityStars {
@@ -63,6 +78,8 @@ export interface Lead {
   assignedToUserId: string;
   /** Historial de notas (cada una con fecha y texto libre). */
   clientNotes: LeadClientNote[];
+  /** Historial de movimientos/acciones del lead para pestaña de actividad. */
+  activity?: LeadActivityEntry[];
   createdAt: string;
   lastContact: string;
   updatedAt?: string;
@@ -341,6 +358,41 @@ function migrateClientNotes(raw: Partial<Lead> & Record<string, unknown>): LeadC
   return [];
 }
 
+function migrateLeadActivity(raw: Partial<Lead> & Record<string, unknown>): LeadActivityEntry[] {
+  if (Array.isArray(raw.activity)) {
+    const out: LeadActivityEntry[] = [];
+    for (const item of raw.activity) {
+      if (!item || typeof item !== "object") continue;
+      const o = item as Record<string, unknown>;
+      const type =
+        o.type === "created" || o.type === "status_change" || o.type === "updated" || o.type === "comment"
+          ? o.type
+          : "updated";
+      out.push({
+        id: typeof o.id === "string" && o.id ? o.id : newLeadActivityId(),
+        type,
+        createdAt:
+          typeof o.createdAt === "string" && o.createdAt
+            ? o.createdAt
+            : new Date().toISOString(),
+        description: String(o.description ?? "Actividad registrada"),
+        status: typeof o.status === "string" ? o.status : undefined,
+      });
+    }
+    return out;
+  }
+
+  const createdAt = String(raw.createdAt ?? new Date().toISOString());
+  return [
+    {
+      id: newLeadActivityId(),
+      type: "created",
+      createdAt,
+      description: "Lead creado",
+    },
+  ];
+}
+
 /** Ordena por fecha descendente (más reciente primero). */
 export function sortLeadClientNotesNewestFirst(notes: LeadClientNote[]): LeadClientNote[] {
   return [...notes].sort((a, b) => {
@@ -378,6 +430,7 @@ export function normalizeStoredLead(raw: Partial<Lead> & Record<string, unknown>
     assignedTo: String(raw.assignedTo ?? "Sin asignar"),
     assignedToUserId,
     clientNotes: migrateClientNotes(raw),
+    activity: migrateLeadActivity(raw),
     createdAt: String(raw.createdAt ?? ""),
     lastContact: String(raw.lastContact ?? ""),
     updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : undefined,
