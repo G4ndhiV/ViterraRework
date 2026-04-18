@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RotateCcw, Check, AlertTriangle, MousePointerClick } from "lucide-react";
+import { RotateCcw, Check, AlertTriangle, Layers } from "lucide-react";
 import { useSiteContent } from "../../../contexts/SiteContentContext";
 import { DEFAULT_SITE_CONTENT, type SiteContent } from "../../../data/siteContent";
 import {
@@ -102,19 +102,31 @@ export function AdminSiteEditor() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-4">
-        {ORDER.map((key) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => tryChangeTab(key)}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-              tab === key ? "bg-brand-navy text-white shadow-sm" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            {SITE_LABELS[key]}
-          </button>
-        ))}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Páginas del sitio</p>
+        <div
+          className="inline-flex max-w-full flex-wrap gap-0.5 rounded-2xl bg-slate-100/95 p-1 ring-1 ring-slate-200/80 ring-inset"
+          role="tablist"
+          aria-label="Elegir página a editar"
+        >
+          {ORDER.map((key) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => tryChangeTab(key)}
+              className={cn(
+                "rounded-xl px-3.5 py-2 text-sm font-medium transition-all duration-200 sm:px-4 sm:py-2.5",
+                tab === key
+                  ? "bg-white text-brand-navy shadow-[0_1px_3px_rgba(15,23,42,0.12)] ring-1 ring-slate-200/90"
+                  : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
+              )}
+            >
+              {SITE_LABELS[key]}
+            </button>
+          ))}
+        </div>
       </div>
 
       {dirty && (
@@ -132,28 +144,45 @@ export function AdminSiteEditor() {
       )}
 
       <div className="space-y-4">
-        <div className="flex flex-wrap items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
-          <MousePointerClick className="mt-0.5 h-4 w-4 shrink-0 text-brand-navy" strokeWidth={1.5} />
-          <div className="min-w-0 flex-1 text-xs text-slate-600">
-            <p className="font-medium text-slate-800">Secciones de esta página</p>
-            <p className="mt-1">Clic en un chip para elegir qué bloque editar (solo ese bloque aparece en el formulario de la izquierda).</p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_12px_40px_-18px_rgba(15,23,42,0.12)] ring-1 ring-slate-100">
+          <div className="h-1 w-full bg-gradient-to-r from-brand-gold/80 via-primary to-brand-burgundy/90" aria-hidden />
+          <div className="flex flex-col gap-4 px-4 py-4 sm:px-5 sm:py-5">
+            <div className="flex gap-3 sm:items-center">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-800 to-brand-navy text-white shadow-inner">
+                <Layers className="h-5 w-5" strokeWidth={1.5} aria-hidden />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-heading text-sm font-semibold tracking-tight text-slate-900 sm:text-base">
+                  Bloques editables
+                </p>
+                <p className="mt-0.5 text-xs leading-relaxed text-slate-500 sm:text-[13px]">
+                  Selecciona un bloque para mostrar solo sus campos en el formulario. La vista previa se desplazará al mismo bloque.
+                </p>
+              </div>
+            </div>
+            <nav
+              className="-mx-1 flex gap-0 overflow-x-auto border-b border-slate-200/90 sm:mx-0"
+              role="tablist"
+              aria-label="Bloques de la página actual"
+            >
               {blocks.map((b) => (
                 <button
                   key={b.id}
                   type="button"
+                  role="tab"
+                  aria-selected={activeBlockId === b.id}
                   onClick={() => scrollPreviewToBlock(b.id)}
                   className={cn(
-                    "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                    "relative shrink-0 rounded-t-lg px-3 py-2.5 text-left text-xs font-medium transition-colors sm:px-4 sm:text-sm",
                     activeBlockId === b.id
-                      ? "border-brand-navy bg-brand-navy text-white"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                      ? "border-b-2 border-primary bg-slate-50/90 text-brand-navy"
+                      : "border-b-2 border-transparent text-slate-500 hover:bg-slate-50/60 hover:text-slate-800"
                   )}
                 >
-                  {b.label}
+                  <span className="block max-w-[10rem] truncate sm:max-w-[14rem]">{b.label}</span>
                 </button>
               ))}
-            </div>
+            </nav>
           </div>
         </div>
 

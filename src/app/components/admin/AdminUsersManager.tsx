@@ -38,6 +38,7 @@ import {
   SelectValue,
 } from "../ui/select";
 import { cn } from "../ui/utils";
+import { UserGroupsPanel } from "./UserGroupsPanel";
 
 const userReadonlyFieldClass =
   "w-full rounded-lg border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-sm text-brand-navy";
@@ -427,6 +428,8 @@ export function AdminUsersManager({
           </tbody>
         </table>
       </div>
+
+      <UserGroupsPanel users={users} canManageGroups={canManageUsers} />
 
       <Dialog open={creatingOpen} onOpenChange={setCreatingOpen}>
         <DialogContent className="w-full max-w-2xl border-slate-200 bg-white p-6">

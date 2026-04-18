@@ -18,8 +18,6 @@ import {
   Bath,
   Square,
   Activity,
-  Mail,
-  Phone,
   ChevronRight,
   ChevronDown,
   GripVertical,
@@ -35,6 +33,7 @@ import {
   Download,
   Calendar,
   Settings,
+  Map as MapIcon,
 } from "lucide-react";
 import { AdminSiteEditor } from "../components/admin/AdminSiteEditor";
 import { useAuth } from "../contexts/AuthContext";
@@ -71,6 +70,7 @@ import { Property } from "../components/PropertyCard";
 import { Development, developments as seedDevelopments } from "../data/developments";
 import { AGENDA_STORAGE_KEY } from "../data/agenda";
 import { AdminAgendaModule } from "../components/admin/AdminAgendaModule";
+import { PropertyMap } from "../components/PropertyMap";
 import { AdminDevelopmentsManager } from "../components/admin/AdminDevelopmentsManager";
 import { AdminCompanySettings } from "../components/admin/AdminCompanySettings";
 import { AdminUsersManager } from "../components/admin/AdminUsersManager";
@@ -89,6 +89,14 @@ import {
   AreaChart
 } from "recharts";
 import { cn } from "../components/ui/utils";
+import {
+  DEFAULT_BUILTIN_STAGE_HEX,
+  DEFAULT_CUSTOM_STAGE_HEX,
+  STAGE_COLORS_STORAGE_KEY,
+  LIST_STAGE_HEADER_BUTTON_CLASSES,
+  stageHexToChipStyle,
+  stageHexToListHeaderStyle,
+} from "../lib/stageColors";
 
 type TabType =
   | "dashboard"
@@ -134,13 +142,18 @@ export function AdminPage() {
   const [propertyCurrencyFilter, setPropertyCurrencyFilter] = useState("MXN");
   const [propertyMaxPrice, setPropertyMaxPrice] = useState("");
   const [propertyLocationFilter, setPropertyLocationFilter] = useState("all");
+  const [propertyInventoryView, setPropertyInventoryView] = useState<"cards" | "list" | "map">("cards");
   const [adminHeaderQuery, setAdminHeaderQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [leadsView, setLeadsView] = useState<"kanban" | "table">("kanban");
+  /** Vista lista: secciones por estado; true = colapsada */
+  const [leadsTableSectionCollapsed, setLeadsTableSectionCollapsed] = useState<Record<string, boolean>>({});
   const [customKanbanStages, setCustomKanbanStages] = useState<CustomKanbanStage[]>([]);
   const [pipelineStageOrder, setPipelineStageOrder] = useState<string[]>([]);
+  /** Colores de columna por id de etapa (hex #RRGGBB); se persisten en localStorage */
+  const [stageColumnColors, setStageColumnColors] = useState<Record<string, string>>({});
   const [leadDialog, setLeadDialog] = useState<{ lead: Lead; mode: "view" | "edit" } | null>(null);
   const [usersPanelFocus, setUsersPanelFocus] = useState<{ id: string; nonce: number } | null>(null);
   /** Si se abrió la ficha desde un lead (CRM), al cerrar restauramos tab y diálogo del lead. */
@@ -239,6 +252,18 @@ export function AdminPage() {
         /* ignore */
       }
     }
+
+    const savedStageColors = localStorage.getItem(STAGE_COLORS_STORAGE_KEY);
+    if (savedStageColors) {
+      try {
+        const parsed = JSON.parse(savedStageColors) as unknown;
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          setStageColumnColors(parsed as Record<string, string>);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
   }, [navigate, isAuthenticated]);
 
   useEffect(() => {
@@ -291,6 +316,10 @@ export function AdminPage() {
   useEffect(() => {
     localStorage.setItem("viterra_kanban_stage_order", JSON.stringify(pipelineStageOrder));
   }, [pipelineStageOrder]);
+
+  useEffect(() => {
+    localStorage.setItem(STAGE_COLORS_STORAGE_KEY, JSON.stringify(stageColumnColors));
+  }, [stageColumnColors]);
 
   const handleLogout = () => {
     logout();
@@ -346,6 +375,24 @@ export function AdminPage() {
     [leadColumnStatuses, customKanbanStages]
   );
 
+  const effectiveStageColors = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const id of leadColumnStatuses) {
+      if (stageColumnColors[id]) out[id] = stageColumnColors[id];
+      else if (DEFAULT_BUILTIN_STAGE_HEX[id]) out[id] = DEFAULT_BUILTIN_STAGE_HEX[id];
+      else out[id] = DEFAULT_CUSTOM_STAGE_HEX;
+    }
+    return out;
+  }, [leadColumnStatuses, stageColumnColors]);
+
+  const resolveStageHex = useCallback(
+    (stageId: string) =>
+      effectiveStageColors[stageId] ??
+      DEFAULT_BUILTIN_STAGE_HEX[stageId] ??
+      DEFAULT_CUSTOM_STAGE_HEX,
+    [effectiveStageColors],
+  );
+
   const resolveStatusLabel = useCallback(
     (s: string) => labelForLeadStatus(s, customKanbanStages),
     [customKanbanStages]
@@ -398,6 +445,12 @@ export function AdminPage() {
     const updatedAt = new Date().toISOString();
     setCustomKanbanStages((prev) => prev.filter((item) => item.id !== stageId));
     setPipelineStageOrder((prev) => prev.filter((id) => id !== stageId));
+    setStageColumnColors((prev) => {
+      if (!Object.prototype.hasOwnProperty.call(prev, stageId)) return prev;
+      const next = { ...prev };
+      delete next[stageId];
+      return next;
+    });
     setLeads((prev) =>
       prev.map((lead) =>
         lead.status !== stageId
@@ -578,6 +631,32 @@ export function AdminPage() {
     return matchesSearch && matchesStatus;
   });
 
+  /** Vista tabla: grupos por estado (orden del pipeline), sin columnas fijas que fuercen scroll horizontal */
+  const leadsTableGroupedByStatus = useMemo(() => {
+    const byStatus = new Map<string, Lead[]>();
+    for (const lead of filteredLeads) {
+      const list = byStatus.get(lead.status) ?? [];
+      list.push(lead);
+      byStatus.set(lead.status, list);
+    }
+    const sections: { statusId: string; label: string; leads: Lead[] }[] = [];
+    for (const id of leadColumnStatuses) {
+      const list = byStatus.get(id);
+      if (list?.length) sections.push({ statusId: id, label: resolveStatusLabel(id), leads: list });
+    }
+    const seen = new Set(leadColumnStatuses);
+    const extraIds = [...new Set(filteredLeads.map((l) => l.status))].filter((id) => !seen.has(id)).sort();
+    for (const id of extraIds) {
+      const list = byStatus.get(id);
+      if (list?.length) sections.push({ statusId: id, label: resolveStatusLabel(id), leads: list });
+    }
+    return sections;
+  }, [filteredLeads, leadColumnStatuses, resolveStatusLabel]);
+
+  const toggleLeadsTableSection = useCallback((statusId: string) => {
+    setLeadsTableSectionCollapsed((prev) => ({ ...prev, [statusId]: !prev[statusId] }));
+  }, []);
+
   const filteredProperties = properties.filter((property) => {
     const q = propertySearchQuery.trim().toLowerCase();
     const matchesSearch = !q || (
@@ -638,18 +717,6 @@ export function AdminPage() {
   const totalValue = properties.reduce((sum, p) => sum + p.price, 0);
   const avgPropertyPrice = properties.length > 0 ? (totalValue / properties.length).toFixed(0) : "0";
 
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      nuevo: "bg-slate-100 text-slate-700 border border-slate-200",
-      contactado: "bg-amber-50 text-amber-700 border border-amber-200",
-      calificado: "bg-sky-50 text-sky-800 border border-sky-200",
-      negociacion: "bg-purple-50 text-purple-700 border border-purple-200",
-      cerrado: "bg-green-50 text-green-700 border border-green-200",
-      perdido: "bg-gray-100 text-gray-600 border border-gray-200",
-    };
-    return colors[status] ?? "bg-indigo-50 text-indigo-800 border border-indigo-200";
-  };
-
   if (!user) {
     return null;
   }
@@ -673,7 +740,7 @@ export function AdminPage() {
       {
         id: "agenda",
         title: "Agenda",
-        description: "Calendario semanal y mensual de citas",
+        description: "Calendario semanal de citas",
         keywords: ["agenda", "calendario", "citas", "semana", "horario"],
         action: () => setActiveTab("agenda"),
       },
@@ -1131,57 +1198,45 @@ export function AdminPage() {
         {activeTab === "dashboard" && (
           <div className="space-y-8">
             {/* Stats Cards - Elegantes y minimalistas */}
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-6 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
                 <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-primary to-brand-burgundy opacity-90" aria-hidden />
-                <div className="flex items-start justify-between pl-1 mb-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white shadow-sm">
-                    <Users className="h-5 w-5 text-brand-navy" strokeWidth={1.5} />
-                  </div>
-                  <TrendingUp className="h-4 w-4 text-brand-gold/90" strokeWidth={1.5} />
+                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
+                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Total Leads</p>
+                  <TrendingUp className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
-                <p className="font-heading mb-1 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Total Leads</p>
-                <p className="font-heading text-3xl text-brand-navy mb-1" style={{ fontWeight: 700 }}>{totalLeads}</p>
-                <p className="text-xs text-slate-500" style={{ fontWeight: 500 }}>+{newLeads} este mes</p>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>{totalLeads}</p>
+                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>+{newLeads} este mes</p>
               </div>
 
-              <div className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-6 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
+              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
                 <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-burgundy to-brand-gold opacity-90" aria-hidden />
-                <div className="flex items-start justify-between pl-1 mb-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white shadow-sm">
-                    <Target className="h-5 w-5 text-brand-navy" strokeWidth={1.5} />
-                  </div>
-                  <Activity className="h-4 w-4 text-brand-gold/90" strokeWidth={1.5} />
+                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
+                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Conversión</p>
+                  <Activity className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
-                <p className="font-heading mb-1 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Conversión</p>
-                <p className="font-heading text-3xl text-brand-navy mb-1" style={{ fontWeight: 700 }}>{conversionRate}%</p>
-                <p className="text-xs text-slate-500" style={{ fontWeight: 500 }}>{closedDeals} cerrados</p>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>{conversionRate}%</p>
+                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>{closedDeals} cerrados</p>
               </div>
 
-              <div className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-6 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
+              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
                 <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-navy to-slate-600 opacity-90" aria-hidden />
-                <div className="flex items-start justify-between pl-1 mb-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white shadow-sm">
-                    <Home className="h-5 w-5 text-brand-navy" strokeWidth={1.5} />
-                  </div>
-                  <Briefcase className="h-4 w-4 text-brand-gold/90" strokeWidth={1.5} />
+                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
+                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Propiedades</p>
+                  <Briefcase className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
-                <p className="font-heading mb-1 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Propiedades</p>
-                <p className="font-heading text-3xl text-brand-navy mb-1" style={{ fontWeight: 700 }}>{totalProperties}</p>
-                <p className="text-xs text-slate-500" style={{ fontWeight: 500 }}>{propertiesForSale} venta · {propertiesForRent} alquiler</p>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>{totalProperties}</p>
+                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>{propertiesForSale} venta · {propertiesForRent} alquiler</p>
               </div>
 
-              <div className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-6 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
+              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
                 <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-gold to-primary opacity-90" aria-hidden />
-                <div className="flex items-start justify-between pl-1 mb-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white shadow-sm">
-                    <DollarSign className="h-5 w-5 text-brand-navy" strokeWidth={1.5} />
-                  </div>
-                  <TrendingUp className="h-4 w-4 text-brand-gold/90" strokeWidth={1.5} />
+                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
+                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Valor Promedio</p>
+                  <TrendingUp className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
-                <p className="font-heading mb-1 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Valor Promedio</p>
-                <p className="font-heading text-3xl text-brand-navy mb-1" style={{ fontWeight: 700 }}>${parseInt(avgPropertyPrice).toLocaleString()}</p>
-                <p className="text-xs text-slate-500" style={{ fontWeight: 500 }}>por propiedad</p>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>${parseInt(avgPropertyPrice).toLocaleString()}</p>
+                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>por propiedad</p>
               </div>
             </div>
 
@@ -1276,18 +1331,14 @@ export function AdminPage() {
                       onClick={() => openLeadDetail(lead, "view")}
                       className="flex w-full items-center justify-between rounded-lg p-3 text-left transition-colors hover:bg-slate-50"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center">
-                          <span className="text-xs font-semibold text-slate-700" style={{ fontWeight: 600 }}>
-                            {lead.name.split(" ").map(n => n[0]).join("")}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-slate-900" style={{ fontWeight: 600 }}>{lead.name}</p>
-                          <p className="text-xs text-slate-500 mt-0.5" style={{ fontWeight: 500 }}>{lead.email}</p>
-                        </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900" style={{ fontWeight: 600 }}>{lead.name}</p>
+                        <p className="mt-0.5 text-xs text-slate-500" style={{ fontWeight: 500 }}>{lead.email}</p>
                       </div>
-                      <span className={`px-2.5 py-1 rounded-md text-xs font-medium ${getStatusColor(lead.status)}`} style={{ fontWeight: 600 }}>
+                      <span
+                        className="shrink-0 rounded-md px-2.5 py-1 text-xs font-medium"
+                        style={{ fontWeight: 600, ...stageHexToChipStyle(resolveStageHex(lead.status)) }}
+                      >
                         {resolveStatusLabel(lead.status)}
                       </span>
                     </button>
@@ -1375,35 +1426,33 @@ export function AdminPage() {
 
                   <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
                     <div
-                      className="inline-flex rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 shadow-[inset_0_1px_2px_rgba(20,28,46,0.06)]"
+                      className="inline-flex w-full rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 shadow-[inset_0_1px_2px_rgba(20,28,46,0.06)] sm:w-auto"
                       role="group"
                       aria-label="Vista de leads"
                     >
                       <button
                         type="button"
+                        aria-label="Vista Kanban"
                         onClick={() => setLeadsView("kanban")}
-                        className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] transition-all sm:text-[13px] ${
+                        className={`inline-flex h-11 flex-1 items-center justify-center rounded-xl transition-all sm:h-10 sm:flex-none sm:w-10 ${
                           leadsView === "kanban"
                             ? "bg-brand-navy text-white shadow-md shadow-brand-navy/25"
                             : "text-slate-600 hover:bg-white/80 hover:text-brand-navy"
                         }`}
-                        style={{ fontWeight: 600 }}
                       >
                         <LayoutGrid className="h-4 w-4 shrink-0" strokeWidth={2} />
-                        Kanban
                       </button>
                       <button
                         type="button"
+                        aria-label="Vista tabla"
                         onClick={() => setLeadsView("table")}
-                        className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] transition-all sm:text-[13px] ${
+                        className={`inline-flex h-11 flex-1 items-center justify-center rounded-xl transition-all sm:h-10 sm:flex-none sm:w-10 ${
                           leadsView === "table"
                             ? "bg-brand-navy text-white shadow-md shadow-brand-navy/25"
                             : "text-slate-600 hover:bg-white/80 hover:text-brand-navy"
                         }`}
-                        style={{ fontWeight: 600 }}
                       >
                         <Table2 className="h-4 w-4 shrink-0" strokeWidth={2} />
-                        Tabla
                       </button>
                     </div>
 
@@ -1490,6 +1539,7 @@ export function AdminPage() {
               <LeadsKanbanBoard
                 leads={filteredLeads}
                 columnStatuses={leadColumnStatuses}
+                columnHexByStatus={effectiveStageColors}
                 statusLabel={resolveStatusLabel}
                 onStatusChange={handleUpdateLeadStatus}
                 onLeadOpen={(l) => openLeadDetail(l, "view")}
@@ -1498,127 +1548,207 @@ export function AdminPage() {
               />
             )}
 
-            {/* Leads Table */}
+            {/* Leads: vista tabla — agrupada por estado, tarjetas a ancho completo (sin scroll horizontal) */}
             {leadsView === "table" && (
             <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_8px_32px_-10px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02]">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="border-b border-slate-200/90 bg-gradient-to-r from-slate-50/95 to-white">
-                    <tr>
-                      <th className="font-heading px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75" style={{ fontWeight: 600 }}>
-                        Lead
-                      </th>
-                      <th className="font-heading px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75" style={{ fontWeight: 600 }}>
-                        Contacto
-                      </th>
-                      <th className="font-heading px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75" style={{ fontWeight: 600 }}>
-                        Interés
-                      </th>
-                      <th className="font-heading px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75" style={{ fontWeight: 600 }}>
-                        Presupuesto
-                      </th>
-                      <th className="font-heading px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75" style={{ fontWeight: 600 }}>
-                        Estado
-                      </th>
-                      <th className="font-heading px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75" style={{ fontWeight: 600 }}>
-                        Prioridad
-                      </th>
-                      <th className="font-heading px-6 py-4 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75" style={{ fontWeight: 600 }}>
-                        Acciones
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-slate-200">
-                    {filteredLeads.map((lead) => (
-                      <tr key={lead.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="w-10 h-10 bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                              <span className="text-xs font-semibold text-slate-700" style={{ fontWeight: 600 }}>
-                                {lead.name.split(" ").map(n => n[0]).join("")}
-                              </span>
-                            </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-slate-900" style={{ fontWeight: 600 }}>{lead.name}</div>
-                              <div className="text-xs text-slate-500 mt-0.5" style={{ fontWeight: 500 }}>{lead.source}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-xs text-slate-700 flex items-center gap-1.5" style={{ fontWeight: 500 }}>
-                            <Mail className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.5} />
-                            {lead.email}
-                          </div>
-                          <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-1" style={{ fontWeight: 500 }}>
-                            <Phone className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.5} />
-                            {lead.phone}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-slate-900 capitalize" style={{ fontWeight: 600 }}>{lead.interest}</div>
-                          <div className="text-xs text-slate-500 mt-0.5" style={{ fontWeight: 500 }}>{lead.propertyType}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-semibold text-slate-900" style={{ fontWeight: 600 }}>
-                            ${lead.budget.toLocaleString()}
-                          </div>
-                          <div className="text-xs text-slate-500 mt-0.5" style={{ fontWeight: 500 }}>{lead.location}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <select
-                            value={lead.status}
-                            onChange={(e) => handleUpdateLeadStatus(lead.id, e.target.value)}
-                            className={`max-w-[10.5rem] cursor-pointer rounded-lg border border-slate-200/80 py-1.5 pl-2 pr-6 text-xs font-medium ${getStatusColor(lead.status)}`}
-                            style={{ fontWeight: 600 }}
-                            aria-label={`Cambiar estado de ${lead.name}`}
+              {filteredLeads.length === 0 ? (
+                <div className="py-16 text-center">
+                  <Users className="mx-auto mb-4 h-12 w-12 text-slate-300" strokeWidth={1.5} />
+                  <p className="text-sm text-slate-500" style={{ fontWeight: 500 }}>
+                    No se encontraron leads
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-200/80">
+                  {leadsTableGroupedByStatus.map(({ statusId, label, leads: sectionLeads }) => {
+                    const sectionCollapsed = leadsTableSectionCollapsed[statusId] === true;
+                    return (
+                    <section key={statusId} className="bg-white">
+                      <button
+                        type="button"
+                        onClick={() => toggleLeadsTableSection(statusId)}
+                        className={LIST_STAGE_HEADER_BUTTON_CLASSES}
+                        style={stageHexToListHeaderStyle(resolveStageHex(statusId))}
+                        aria-expanded={!sectionCollapsed}
+                        aria-label={
+                          sectionCollapsed ? `Expandir sección ${label}, ${sectionLeads.length} leads` : `Contraer sección ${label}`
+                        }
+                      >
+                        <ChevronDown
+                          className={cn(
+                            "h-5 w-5 shrink-0 text-slate-500 transition-transform duration-200 ease-out",
+                            sectionCollapsed ? "-rotate-90" : "rotate-0",
+                          )}
+                          strokeWidth={2}
+                          aria-hidden
+                        />
+                        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
+                          <h3
+                            className="font-heading inline-block bg-gradient-to-br from-brand-navy via-[#1a2744] to-brand-navy bg-clip-text text-base tracking-tight text-transparent sm:text-[1.125rem]"
+                            style={{ fontWeight: 700 }}
                           >
-                            {statusSelectOptions.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <LeadPriorityBadge stars={lead.priorityStars} size="md" />
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              type="button"
-                              onClick={() => openLeadDetail(lead, "view")}
-                              className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                              title="Ver"
-                            >
-                              <Eye className="h-4 w-4" strokeWidth={1.5} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openLeadDetail(lead, "edit")}
-                              className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                              title="Editar"
-                            >
-                              <Edit className="h-4 w-4" strokeWidth={1.5} />
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteLead(lead.id)}
-                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" 
-                              title="Eliminar"
-                            >
-                              <Trash2 className="w-4 h-4" strokeWidth={1.5} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              
-              {filteredLeads.length === 0 && (
-                <div className="text-center py-16">
-                  <Users className="w-12 h-12 text-slate-300 mx-auto mb-4" strokeWidth={1.5} />
-                  <p className="text-slate-500 text-sm" style={{ fontWeight: 500 }}>No se encontraron leads</p>
+                            {label}
+                          </h3>
+                          <span
+                            className="inline-flex items-center rounded-full bg-white/90 px-2.5 py-0.5 text-xs font-bold tabular-nums text-slate-800 shadow-sm ring-1 ring-slate-200/90 backdrop-blur-sm"
+                            style={{ fontWeight: 700 }}
+                          >
+                            {sectionLeads.length}
+                          </span>
+                        </div>
+                      </button>
+                      <div
+                        className={cn(
+                          "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+                          sectionCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]",
+                        )}
+                      >
+                        <div className="min-h-0 overflow-hidden">
+                      <ul className="divide-y divide-slate-100 border-t border-slate-100/90 bg-white">
+                        {sectionLeads.map((lead) => (
+                          <li
+                            key={lead.id}
+                            className="py-1.5 pl-5 pr-3 transition-colors hover:bg-slate-50/90 sm:pl-8 sm:pr-4"
+                          >
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-start justify-between gap-1.5 sm:gap-2">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
+                                      <p
+                                        className="text-[13.6px] font-semibold leading-none tracking-tight text-slate-900"
+                                        style={{ fontWeight: 600 }}
+                                      >
+                                        {lead.name}
+                                      </p>
+                                      <span className="text-[10.2px] text-slate-500" style={{ fontWeight: 500 }}>
+                                        {lead.source}
+                                      </span>
+                                    </div>
+                                    <p className="mt-px text-[11.9px] leading-tight text-slate-600">
+                                      <span className="inline break-words">{lead.email}</span>
+                                      <span className="mx-1 text-slate-300">·</span>
+                                      <span>{lead.phone}</span>
+                                    </p>
+                                  </div>
+                                  <div className="flex shrink-0 items-center gap-2 sm:hidden">
+                                    <div className="flex h-8 items-center">
+                                      <LeadPriorityBadge stars={lead.priorityStars} size="sm" />
+                                    </div>
+                                    <div className="flex h-8 items-center gap-0.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => openLeadDetail(lead, "view")}
+                                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                        title="Ver"
+                                      >
+                                        <Eye className="h-6 w-6" strokeWidth={1.5} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => openLeadDetail(lead, "edit")}
+                                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                        title="Editar"
+                                      >
+                                        <Edit className="h-6 w-6" strokeWidth={1.5} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteLead(lead.id)}
+                                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
+                                        title="Eliminar"
+                                      >
+                                        <Trash2 className="h-6 w-6" strokeWidth={1.5} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                                <p className="mt-1 min-w-0 text-[11.9px] leading-tight text-slate-600">
+                                  <span className="font-semibold capitalize text-slate-800">{lead.interest}</span>
+                                  <span className="mx-1 text-slate-300">·</span>
+                                  <span>{lead.propertyType}</span>
+                                  <span className="mx-1 text-slate-300">·</span>
+                                  <span className="font-semibold tabular-nums text-slate-900">${lead.budget.toLocaleString()}</span>
+                                  <span className="mx-1 text-slate-300">·</span>
+                                  <span className="text-slate-600">{lead.location}</span>
+                                </p>
+                                <div className="mt-1.5 sm:hidden">
+                                  <select
+                                    id={`lead-status-${lead.id}`}
+                                    value={lead.status}
+                                    onChange={(e) => handleUpdateLeadStatus(lead.id, e.target.value)}
+                                    className="h-8 w-full min-w-0 max-w-full cursor-pointer rounded-md px-2 py-0 text-[11.9px] font-semibold shadow-sm"
+                                    style={{
+                                      fontWeight: 600,
+                                      ...stageHexToChipStyle(resolveStageHex(lead.status)),
+                                    }}
+                                    aria-label={`Cambiar estado de ${lead.name}`}
+                                  >
+                                    {statusSelectOptions.map((opt) => (
+                                      <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div className="hidden shrink-0 items-center gap-2 sm:flex">
+                                <div className="flex h-8 items-center">
+                                  <LeadPriorityBadge stars={lead.priorityStars} size="sm" />
+                                </div>
+                                <select
+                                  value={lead.status}
+                                  onChange={(e) => handleUpdateLeadStatus(lead.id, e.target.value)}
+                                  className="h-8 min-w-[8.75rem] max-w-full cursor-pointer rounded-md px-2 py-0 text-[11.9px] font-semibold shadow-sm sm:min-w-[9.25rem]"
+                                  style={{
+                                    fontWeight: 600,
+                                    ...stageHexToChipStyle(resolveStageHex(lead.status)),
+                                  }}
+                                  aria-label={`Cambiar estado de ${lead.name}`}
+                                >
+                                  {statusSelectOptions.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <div className="flex h-8 items-center gap-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => openLeadDetail(lead, "view")}
+                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                    title="Ver"
+                                  >
+                                    <Eye className="h-6 w-6" strokeWidth={1.5} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openLeadDetail(lead, "edit")}
+                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                    title="Editar"
+                                  >
+                                    <Edit className="h-6 w-6" strokeWidth={1.5} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteLead(lead.id)}
+                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
+                                    title="Eliminar"
+                                  >
+                                    <Trash2 className="h-6 w-6" strokeWidth={1.5} />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                        </div>
+                      </div>
+                    </section>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1638,22 +1768,66 @@ export function AdminPage() {
                 aria-hidden
               />
               <div className="p-6">
-              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <h2 className="text-xl font-semibold text-slate-900 mb-1" style={{ fontWeight: 600 }}>Gestión de Propiedades</h2>
                   <p className="text-sm text-slate-600" style={{ fontWeight: 500 }}>
                     Filtra, edita y publica propiedades del catálogo.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setPropertyForm({ mode: "create", property: null })}
-                  className="flex items-center gap-2 rounded-lg bg-[#C8102E] px-5 py-2.5 font-medium text-white transition-all hover:bg-[#a00d25]"
-                  style={{ fontWeight: 600 }}
-                >
-                  <Plus className="h-4.5 w-4.5" strokeWidth={2} />
-                  Nueva Propiedad
-                </button>
+                <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
+                  <div
+                    className="inline-flex w-full flex-wrap rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 shadow-[inset_0_1px_2px_rgba(20,28,46,0.06)] sm:w-auto"
+                    role="group"
+                    aria-label="Vista del inventario"
+                  >
+                    <button
+                      type="button"
+                      aria-label="Vista de tarjetas"
+                      onClick={() => setPropertyInventoryView("cards")}
+                      className={`inline-flex h-11 flex-1 items-center justify-center rounded-xl transition-all sm:h-10 sm:flex-none sm:w-10 ${
+                        propertyInventoryView === "cards"
+                          ? "bg-brand-navy text-white shadow-md shadow-brand-navy/25"
+                          : "text-slate-600 hover:bg-white/80 hover:text-brand-navy"
+                      }`}
+                    >
+                      <LayoutGrid className="h-4 w-4 shrink-0" strokeWidth={2} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Vista de lista"
+                      onClick={() => setPropertyInventoryView("list")}
+                      className={`inline-flex h-11 flex-1 items-center justify-center rounded-xl transition-all sm:h-10 sm:flex-none sm:w-10 ${
+                        propertyInventoryView === "list"
+                          ? "bg-brand-navy text-white shadow-md shadow-brand-navy/25"
+                          : "text-slate-600 hover:bg-white/80 hover:text-brand-navy"
+                      }`}
+                    >
+                      <Table2 className="h-4 w-4 shrink-0" strokeWidth={2} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Vista de mapa"
+                      onClick={() => setPropertyInventoryView("map")}
+                      className={`inline-flex h-11 flex-1 items-center justify-center rounded-xl transition-all sm:h-10 sm:flex-none sm:w-10 ${
+                        propertyInventoryView === "map"
+                          ? "bg-brand-navy text-white shadow-md shadow-brand-navy/25"
+                          : "text-slate-600 hover:bg-white/80 hover:text-brand-navy"
+                      }`}
+                    >
+                      <MapIcon className="h-4 w-4 shrink-0" strokeWidth={2} />
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPropertyForm({ mode: "create", property: null })}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#C8102E] px-5 py-2.5 font-medium text-white transition-all hover:bg-[#a00d25] sm:w-auto"
+                    style={{ fontWeight: 600 }}
+                  >
+                    <Plus className="h-4.5 w-4.5" strokeWidth={2} />
+                    Nueva Propiedad
+                  </button>
+                </div>
               </div>
               <div className="mt-4 relative">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
@@ -1721,85 +1895,89 @@ export function AdminPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-6 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
                 <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-primary to-brand-burgundy opacity-90" aria-hidden />
-                <div className="mb-4 flex items-start justify-between pl-1">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white shadow-sm">
-                    <Home className="h-5 w-5 text-brand-navy" strokeWidth={1.5} />
-                  </div>
-                  <TrendingUp className="h-4 w-4 text-brand-gold/90" strokeWidth={1.5} />
+                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
+                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
+                    Total propiedades
+                  </p>
+                  <TrendingUp className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
-                <p className="font-heading mb-1 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
-                  Total propiedades
-                </p>
-                <p className="font-heading mb-1 text-3xl text-brand-navy" style={{ fontWeight: 700 }}>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
                   {totalProperties}
                 </p>
-                <p className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
                   Inventario en el panel
                 </p>
               </div>
 
-              <div className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-6 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
+              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
                 <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-burgundy to-brand-gold opacity-90" aria-hidden />
-                <div className="mb-4 flex items-start justify-between pl-1">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white shadow-sm">
-                    <Target className="h-5 w-5 text-brand-navy" strokeWidth={1.5} />
-                  </div>
-                  <Activity className="h-4 w-4 text-brand-gold/90" strokeWidth={1.5} />
+                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
+                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
+                    En venta
+                  </p>
+                  <Activity className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
-                <p className="font-heading mb-1 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
-                  En venta
-                </p>
-                <p className="font-heading mb-1 text-3xl text-brand-navy" style={{ fontWeight: 700 }}>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
                   {propertiesForSale}
                 </p>
-                <p className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
                   Listadas como venta
                 </p>
               </div>
 
-              <div className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-6 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
+              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
                 <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-navy to-slate-600 opacity-90" aria-hidden />
-                <div className="mb-4 flex items-start justify-between pl-1">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white shadow-sm">
-                    <MapPin className="h-5 w-5 text-brand-navy" strokeWidth={1.5} />
-                  </div>
-                  <Briefcase className="h-4 w-4 text-brand-gold/90" strokeWidth={1.5} />
+                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
+                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
+                    En alquiler
+                  </p>
+                  <Briefcase className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
-                <p className="font-heading mb-1 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
-                  En alquiler
-                </p>
-                <p className="font-heading mb-1 text-3xl text-brand-navy" style={{ fontWeight: 700 }}>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
                   {propertiesForRent}
                 </p>
-                <p className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
                   Listadas como alquiler
                 </p>
               </div>
 
-              <div className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-6 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
+              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
                 <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-gold to-primary opacity-90" aria-hidden />
-                <div className="mb-4 flex items-start justify-between pl-1">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white shadow-sm">
-                    <DollarSign className="h-5 w-5 text-brand-navy" strokeWidth={1.5} />
-                  </div>
-                  <TrendingUp className="h-4 w-4 text-brand-gold/90" strokeWidth={1.5} />
+                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
+                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
+                    Valor promedio
+                  </p>
+                  <TrendingUp className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
-                <p className="font-heading mb-1 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
-                  Valor promedio
-                </p>
-                <p className="font-heading mb-1 text-3xl text-brand-navy" style={{ fontWeight: 700 }}>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
                   ${parseInt(avgPropertyPrice, 10).toLocaleString()}
                 </p>
-                <p className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
                   Por propiedad (precio listado)
                 </p>
               </div>
             </div>
 
-            {/* Properties Grid */}
+            {/* Properties: tarjetas, lista o mapa */}
+            {propertyInventoryView === "map" && filteredProperties.length > 0 && (
+              <div className="space-y-3">
+                {filteredProperties.some((p) => p.coordinates) ? (
+                  <PropertyMap
+                    properties={filteredProperties}
+                    mapHeightClassName="h-[min(60vh,560px)] min-h-[320px]"
+                  />
+                ) : (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-6 py-12 text-center text-sm text-slate-600" style={{ fontWeight: 500 }}>
+                    Ninguna propiedad del listado tiene coordenadas. Edita una ficha y guarda ubicación para verla en el mapa.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {propertyInventoryView === "cards" && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredProperties.map((property) => (
                 <div key={property.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden hover:border-slate-300 transition-all group">
@@ -1901,6 +2079,137 @@ export function AdminPage() {
                 </div>
               ))}
             </div>
+            )}
+
+            {propertyInventoryView === "list" && filteredProperties.length > 0 && (
+              <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_8px_32px_-10px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02]">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[720px]">
+                    <thead className="border-b border-slate-200/90 bg-gradient-to-r from-slate-50/95 to-white">
+                      <tr>
+                        <th
+                          className="font-heading px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                          style={{ fontWeight: 600 }}
+                        >
+                          Propiedad
+                        </th>
+                        <th
+                          className="font-heading px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                          style={{ fontWeight: 600 }}
+                        >
+                          Tipo
+                        </th>
+                        <th
+                          className="font-heading px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                          style={{ fontWeight: 600 }}
+                        >
+                          Ubicación
+                        </th>
+                        <th
+                          className="font-heading px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                          style={{ fontWeight: 600 }}
+                        >
+                          Operación
+                        </th>
+                        <th
+                          className="font-heading px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                          style={{ fontWeight: 600 }}
+                        >
+                          Precio
+                        </th>
+                        <th
+                          className="font-heading px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                          style={{ fontWeight: 600 }}
+                        >
+                          Acciones
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 bg-white">
+                      {filteredProperties.map((property) => (
+                        <tr key={property.id} className="transition-colors hover:bg-slate-50">
+                          <td className="px-4 py-3 sm:px-6 sm:py-4">
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={property.image}
+                                alt=""
+                                className="h-12 w-16 shrink-0 rounded-lg object-cover"
+                              />
+                              <div className="min-w-0">
+                                <p className="line-clamp-2 text-sm font-medium text-slate-900" style={{ fontWeight: 600 }}>
+                                  {property.title}
+                                </p>
+                                <p className="mt-0.5 text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                                  {property.bedrooms} rec · {property.bathrooms} baños · {property.area} m²
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-800 sm:px-6 sm:py-4" style={{ fontWeight: 500 }}>
+                            {property.type}
+                          </td>
+                          <td className="max-w-[12rem] px-4 py-3 text-sm text-slate-600 sm:px-6 sm:py-4" style={{ fontWeight: 500 }}>
+                            <span className="line-clamp-2">{property.location}</span>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 sm:px-6 sm:py-4">
+                            <span
+                              className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${
+                                property.status === "venta"
+                                  ? "bg-red-50 text-red-800 ring-1 ring-red-200/80"
+                                  : "bg-slate-100 text-slate-800 ring-1 ring-slate-200/80"
+                              }`}
+                              style={{ fontWeight: 600 }}
+                            >
+                              {property.status === "venta" ? "Venta" : "Alquiler"}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-slate-900 sm:px-6 sm:py-4" style={{ fontWeight: 700 }}>
+                            ${property.price.toLocaleString()}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right sm:px-6 sm:py-4">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={() => copyPublicPageUrl(`/propiedades/${property.id}`)}
+                                className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                title="Copiar enlace público"
+                                aria-label="Copiar enlace público"
+                              >
+                                <Link2 className="h-4 w-4" strokeWidth={1.5} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/propiedades/${property.id}`)}
+                                className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                title="Ver en el sitio"
+                              >
+                                <Eye className="h-4 w-4" strokeWidth={1.5} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPropertyForm({ mode: "edit", property })}
+                                className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                title="Editar"
+                              >
+                                <Edit className="h-4 w-4" strokeWidth={1.5} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => requestDeleteProperty(property.id)}
+                                className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {filteredProperties.length === 0 && (
               <div className="bg-white border border-slate-200 rounded-lg p-20 text-center">
@@ -2140,16 +2449,11 @@ export function AdminPage() {
                   )}
 
                   <section className="rounded-2xl border border-slate-200/70 bg-slate-50/40 p-5">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <h4 className="text-base text-brand-navy" style={{ fontWeight: 600 }}>Orden de columnas del pipeline</h4>
-                        <p className="mt-1 text-sm text-slate-500">
-                          Arrastra cada fila para ordenar las columnas del Kanban (estados del sistema y personalizados).
-                        </p>
-                      </div>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500 ring-1 ring-slate-200">
-                        {leadColumnStatuses.length} estados
-                      </span>
+                    <div>
+                      <h4 className="text-base text-brand-navy" style={{ fontWeight: 600 }}>Orden de columnas del pipeline</h4>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Arrastra cada fila para ordenar las columnas del Kanban (estados del sistema y personalizados). Usa el selector de color para el acento de cada columna en el tablero y la vista lista.
+                      </p>
                     </div>
 
                     <DndProvider backend={HTML5Backend}>
@@ -2214,6 +2518,24 @@ export function AdminPage() {
                                 )}
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
+                                {user.role === "admin" && !isEditing && (
+                                  <label className="flex items-center gap-2 rounded-lg border border-slate-200/80 bg-white px-2.5 py-1.5 text-[11px] font-medium text-slate-600 shadow-sm">
+                                    Color columna
+                                    <input
+                                      type="color"
+                                      value={resolveStageHex(stageId)}
+                                      onChange={(e) =>
+                                        setStageColumnColors((prev) => ({
+                                          ...prev,
+                                          [stageId]: e.target.value,
+                                        }))
+                                      }
+                                      className="h-8 w-11 cursor-pointer rounded border border-slate-200 bg-white p-0.5"
+                                      title="Acento visual en Kanban, vista lista y chips de estado"
+                                      aria-label={`Color de columna para ${stageLabel}`}
+                                    />
+                                  </label>
+                                )}
                                 {isEditing ? (
                                   <>
                                     <button
