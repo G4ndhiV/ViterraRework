@@ -1,14 +1,26 @@
+import { motion, useReducedMotion } from "motion/react";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
-import { ArrowRight, MapPin, CheckCircle, Sparkles, ChevronsDown } from "lucide-react";
+import { ArrowRight, MapPin, CheckCircle, Sparkles } from "lucide-react";
 import { Link } from "react-router";
 import { developments } from "../data/developments";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
 import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
+import { Reveal } from "../components/Reveal";
+import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
 import { cn } from "../components/ui/utils";
+import {
+  viterraHeroSectionClass,
+  viterraHeroCenteredStackClass,
+  viterraHeroCenteredInnerClass,
+  viterraHeroMainClass,
+  viterraHeroTitleClass,
+  viterraHeroSubtitleClass,
+} from "../config/heroLayout";
 
 export function DevelopmentsPage() {
+  const reduceMotion = useReducedMotion();
   const pl = usePreviewLayout();
   const { content } = useSiteContent();
   const page = content.developments;
@@ -25,37 +37,71 @@ export function DevelopmentsPage() {
     return colors[status as keyof typeof colors] || "bg-brand-canvas text-brand-navy/80 border border-brand-navy/15";
   };
 
+  const heroContainerVariants = {
+    hidden: {},
+    visible: {
+      transition: {
+        staggerChildren: reduceMotion ? 0 : 0.1,
+        delayChildren: reduceMotion ? 0 : 0.06,
+      },
+    },
+  } as const;
+
+  const heroItemVariants = {
+    hidden: { opacity: reduceMotion ? 1 : 0, y: reduceMotion ? 0 : 22 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: reduceMotion ? 0 : 0.52, ease: [0.22, 1, 0.36, 1] as const },
+    },
+  } as const;
+
   return (
     <div className="viterra-page min-h-screen flex flex-col bg-white" >
       <Header />
 
       {/* Hero Section */}
       <PreviewSectionChrome blockId="dev-hero" label="Cabecera">
-      <section className="relative flex min-h-[100svh] flex-col justify-end overflow-hidden bg-brand-navy pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] pt-[calc(env(safe-area-inset-top,0px)+5.25rem)] sm:pb-16 sm:pt-[calc(env(safe-area-inset-top,0px)+6.5rem)] md:pb-24 md:pt-52">
-        <div className="absolute inset-0 z-0">
-          <img
+      <section className={viterraHeroSectionClass}>
+        <div className="absolute inset-0 z-0 overflow-hidden">
+          <motion.img
             src="https://images.adsttc.com/media/images/5ef2/f7ce/b357/6589/8c00/019a/large_jpg/847A0737.jpg?1592981436"
             alt=""
             className="h-full w-full object-cover"
+            initial={false}
+            animate={
+              reduceMotion
+                ? { scale: 1.05 }
+                : { scale: [1.05, 1.07, 1.05] }
+            }
+            transition={
+              reduceMotion
+                ? { duration: 0 }
+                : { duration: 22, repeat: Infinity, ease: "easeInOut" }
+            }
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60"></div>
+          <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60" />
         </div>
 
-        <div className="relative z-10 mx-auto max-w-7xl px-4 py-6 text-center sm:px-6 lg:px-8">
-          <p className="font-heading text-[11px] font-normal uppercase tracking-[0.28em] text-white/75 md:text-xs not-italic">
-            Viterra · Desarrollos
-          </p>
-          <span className="mx-auto mt-3 block h-px w-12 bg-primary" aria-hidden />
-          <div className="mt-5 flex justify-center text-primary" aria-hidden>
-            <ChevronsDown className="h-7 w-7 sm:h-8 sm:w-8" strokeWidth={1.5} />
-          </div>
-          <h1 className="font-heading mt-5 text-3xl font-light tracking-[-0.02em] text-white sm:mt-6 sm:text-5xl md:text-6xl">
-            {page.heroTitle}
-          </h1>
-
-          <p className="font-heading mx-auto mt-4 max-w-2xl text-base font-light leading-relaxed text-white/90 not-italic sm:text-lg md:text-xl">
-            {page.heroSubtitle}
-          </p>
+        <div className={viterraHeroCenteredStackClass}>
+          <motion.div
+            className={viterraHeroCenteredInnerClass}
+            variants={heroContainerVariants}
+            initial="hidden"
+            animate="visible"
+          >
+            <ViterraHeroTopClusterAnimated
+              kicker="Viterra · Desarrollos"
+              itemVariants={heroItemVariants}
+              reduceMotion={!!reduceMotion}
+            />
+            <motion.div variants={heroItemVariants} className={viterraHeroMainClass}>
+              <h1 className={viterraHeroTitleClass}>{page.heroTitle}</h1>
+            </motion.div>
+            <motion.p variants={heroItemVariants} className={viterraHeroSubtitleClass}>
+              {page.heroSubtitle}
+            </motion.p>
+          </motion.div>
         </div>
       </section>
       </PreviewSectionChrome>
@@ -65,19 +111,23 @@ export function DevelopmentsPage() {
         <PreviewSectionChrome blockId="dev-featured" label="Proyectos destacados (títulos)">
         <section className="bg-white py-12 sm:py-16 md:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="mb-8 sm:mb-12">
-              <p className="font-heading mb-2 text-xs uppercase tracking-[0.1em] text-brand-navy/65 sm:mb-3 sm:text-sm">
-                {page.featuredKicker}
-              </p>
-              <h2 className="font-heading text-2xl font-semibold tracking-tight text-brand-navy sm:text-3xl md:text-4xl">
-                {page.featuredTitle}
-              </h2>
-            </div>
+            <Reveal className="mb-8 sm:mb-12" y={20}>
+              <div>
+                <p className="font-heading mb-2 text-xs uppercase tracking-[0.1em] text-brand-navy/65 sm:mb-3 sm:text-sm">
+                  {page.featuredKicker}
+                </p>
+                <h2 className="font-heading text-2xl font-semibold tracking-tight text-brand-navy sm:text-3xl md:text-4xl">
+                  {page.featuredTitle}
+                </h2>
+              </div>
+            </Reveal>
 
             <div className="space-y-10 md:space-y-12">
               {featuredDevelopments.map((dev, index) => (
-                <div
+                <Reveal
                   key={dev.id}
+                  delay={Math.min(index * 0.08, 0.35)}
+                  y={28}
                   className={cn("grid items-center gap-8 md:gap-12", pl.gridCols("grid-cols-1 lg:grid-cols-2"))}
                 >
                   <div className={cn(index % 2 === 1 && !pl.preview && "lg:order-2")}>
@@ -140,15 +190,21 @@ export function DevelopmentsPage() {
                       </div>
                     </div>
 
-                    <Link
-                      to={`/desarrollos/${dev.id}`}
-                      className="font-heading inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 font-medium text-white transition-all duration-300 hover:-translate-y-0.5 hover:bg-brand-red-hover hover:shadow-lg sm:w-auto"
+                    <motion.div
+                      className="sm:inline-block sm:w-auto w-full"
+                      whileHover={reduceMotion ? undefined : { y: -2 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 26 }}
                     >
-                      Ver Detalles Completos
-                      <ArrowRight className="w-4 h-4" strokeWidth={2} />
-                    </Link>
+                      <Link
+                        to={`/desarrollos/${dev.id}`}
+                        className="font-heading inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 font-medium text-white transition-all duration-300 hover:bg-brand-red-hover hover:shadow-lg sm:w-auto"
+                      >
+                        Ver Detalles Completos
+                        <ArrowRight className="w-4 h-4" strokeWidth={2} />
+                      </Link>
+                    </motion.div>
                   </div>
-                </div>
+                </Reveal>
               ))}
             </div>
           </div>
@@ -160,34 +216,39 @@ export function DevelopmentsPage() {
       {otherDevelopments.length > 0 && (
         <section className="bg-brand-canvas py-12 sm:py-16 md:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="mb-8 sm:mb-12">
-              <p className="font-heading mb-2 text-xs uppercase tracking-[0.1em] text-brand-navy/60 sm:mb-3 sm:text-sm">Más Proyectos</p>
-              <h2 className="font-heading text-2xl font-semibold tracking-tight text-brand-navy sm:text-3xl md:text-4xl">
-                Otros Desarrollos
-              </h2>
-            </div>
+            <Reveal className="mb-8 sm:mb-12" y={20}>
+              <div>
+                <p className="font-heading mb-2 text-xs uppercase tracking-[0.1em] text-brand-navy/60 sm:mb-3 sm:text-sm">Más Proyectos</p>
+                <h2 className="font-heading text-2xl font-semibold tracking-tight text-brand-navy sm:text-3xl md:text-4xl">
+                  Otros Desarrollos
+                </h2>
+              </div>
+            </Reveal>
 
             <div className={cn("grid gap-8", pl.gridCols("grid-cols-1 md:grid-cols-2"))}>
-              {otherDevelopments.map((dev) => (
-                <div key={dev.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden hover:border-slate-300 transition-all group">
-                  <Link
-                    to={`/desarrollos/${dev.id}`}
-                    className="relative block h-72 overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                    aria-label={`Ver desarrollo: ${dev.name}`}
-                  >
-                    <img
-                      src={dev.image}
-                      alt=""
-                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                    />
-                    <div className="absolute top-6 left-6">
-                      <span className={`font-heading px-3 py-1.5 rounded-lg text-xs font-semibold backdrop-blur-sm ${getStatusColor(dev.status)}`}>
-                        {dev.status}
-                      </span>
-                    </div>
-                  </Link>
+              {otherDevelopments.map((dev, index) => (
+                <Reveal key={dev.id} delay={Math.min(index * 0.07, 0.35)} y={24}>
+                  <div className="group overflow-hidden rounded-lg border border-brand-navy/10 bg-white transition-all hover:border-brand-navy/25">
+                    <Link
+                      to={`/desarrollos/${dev.id}`}
+                      className="relative block h-52 overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:h-64 md:h-72"
+                      aria-label={`Ver desarrollo: ${dev.name}`}
+                    >
+                      <img
+                        src={dev.image}
+                        alt=""
+                        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      />
+                      <div className="absolute left-6 top-6">
+                        <span
+                          className={`font-heading rounded-lg px-3 py-1.5 text-xs font-semibold backdrop-blur-sm ${getStatusColor(dev.status)}`}
+                        >
+                          {dev.status}
+                        </span>
+                      </div>
+                    </Link>
 
-                  <div className="p-5 sm:p-6 md:p-8">
+                    <div className="p-5 sm:p-6 md:p-8">
                     <div className="mb-2 flex items-center gap-2 text-brand-navy/70 sm:mb-3">
                       <MapPin className="w-4 h-4 text-primary" strokeWidth={1.5} />
                       <span className="font-heading text-sm font-medium">{dev.location}</span>
@@ -229,6 +290,7 @@ export function DevelopmentsPage() {
                     </div>
                   </div>
                 </div>
+                </Reveal>
               ))}
             </div>
           </div>
@@ -237,36 +299,42 @@ export function DevelopmentsPage() {
 
       {/* CTA Section */}
       <section className="bg-brand-navy py-12 sm:py-16 md:py-24">
-        <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
-          <div className="mb-6 inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 backdrop-blur-sm sm:mb-8 sm:px-4">
-            <Sparkles className="w-4 h-4 text-white" strokeWidth={1.5} />
-            <span className="font-heading text-sm text-white font-medium tracking-wide">Invierte en Tu Futuro</span>
-          </div>
+        <Reveal className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8" y={26}>
+          <div>
+            <div className="mb-6 inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 backdrop-blur-sm sm:mb-8 sm:px-4">
+              <Sparkles className="w-4 h-4 text-white" strokeWidth={1.5} />
+              <span className="font-heading text-sm text-white font-medium tracking-wide">Invierte en Tu Futuro</span>
+            </div>
 
-          <h2 className="font-heading mb-4 text-2xl font-semibold tracking-tight text-white sm:mb-6 sm:text-4xl md:text-5xl">
-            ¿Listo para invertir?
-          </h2>
-          <p className="font-heading mx-auto mb-8 max-w-2xl text-base font-normal leading-relaxed text-white/80 not-italic sm:mb-10 sm:text-lg">
-            Agenda una cita con nuestros expertos y descubre las oportunidades de inversión 
-            en nuestros desarrollos exclusivos.
-          </p>
-          
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              to="/contacto"
-              className="font-heading inline-flex items-center justify-center gap-2 bg-white text-brand-navy px-8 py-4 rounded-lg hover:bg-brand-canvas transition-all font-medium"
-            >
-              Agendar Cita
-              <ArrowRight className="w-5 h-5" strokeWidth={2} />
-            </Link>
-            <a
-              href="tel:+1234567890"
-              className="font-heading inline-flex items-center justify-center gap-2 bg-transparent text-white px-8 py-4 rounded-lg border border-white/30 hover:bg-white/10 transition-all font-medium"
-            >
-              Llamar Ahora
-            </a>
+            <h2 className="font-heading mb-4 text-2xl font-semibold tracking-tight text-white sm:mb-6 sm:text-4xl md:text-5xl">
+              ¿Listo para invertir?
+            </h2>
+            <p className="font-heading mx-auto mb-8 max-w-2xl text-base font-normal leading-relaxed text-white/80 not-italic sm:mb-10 sm:text-lg">
+              Agenda una cita con nuestros expertos y descubre las oportunidades de inversión
+              en nuestros desarrollos exclusivos.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <motion.div whileHover={reduceMotion ? undefined : { y: -3 }} transition={{ type: "spring", stiffness: 380, damping: 24 }}>
+                <Link
+                  to="/contacto"
+                  className="font-heading inline-flex items-center justify-center gap-2 bg-white text-brand-navy px-8 py-4 rounded-lg hover:bg-brand-canvas transition-all font-medium"
+                >
+                  Agendar Cita
+                  <ArrowRight className="w-5 h-5" strokeWidth={2} />
+                </Link>
+              </motion.div>
+              <motion.div whileHover={reduceMotion ? undefined : { y: -3 }} transition={{ type: "spring", stiffness: 380, damping: 24 }}>
+                <a
+                  href="tel:+1234567890"
+                  className="font-heading inline-flex items-center justify-center gap-2 bg-transparent text-white px-8 py-4 rounded-lg border border-white/30 hover:bg-white/10 transition-all font-medium"
+                >
+                  Llamar Ahora
+                </a>
+              </motion.div>
+            </div>
           </div>
-        </div>
+        </Reveal>
       </section>
 
       <Footer />

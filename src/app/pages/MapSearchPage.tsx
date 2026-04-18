@@ -15,6 +15,7 @@ import {
 } from "../../lib/geoSearch";
 import { Bath, Bed, ChevronDown, MapPin, Maximize2, Minimize2, Square, X } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
+import { SocialFollowStrip } from "../components/SocialFollowStrip";
 
 type MapFilters = {
   type: string;
@@ -759,6 +760,8 @@ export function MapSearchPage() {
               </div>
             )}
           </div>
+
+          <SocialFollowStrip theme="light" flush className="shrink-0 border-t border-brand-navy/10 bg-[#eceae6]/80 py-4" />
         </aside>
 
         <div

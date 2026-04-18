@@ -1,7 +1,8 @@
 import { Link, useLocation } from "react-router";
-import { Menu, X, Search, User } from "lucide-react";
+import { Menu, X, User } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { usePreviewCanvas } from "../../contexts/PreviewCanvasContext";
+import { SocialHeaderDropdown } from "./SocialHeaderDropdown";
 import { cn } from "./ui/utils";
 import { VITERRA_NAV_ITEMS } from "../config/siteNav";
 
@@ -24,6 +25,95 @@ function smoothstep01(t: number, e0: number, e1: number) {
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
+}
+
+/** Íconos oficiales solo-marca (~1024×265); variantes `-alpha` = negro→transparente (script en repo). */
+const MARK_ICON_MONO = "/images/branding/viterra-mark-mono-alpha.png";
+const MARK_ICON_RED = "/images/branding/viterra-mark-red-alpha.png";
+
+/** Marca blanca (hero) un poco más pequeña que la roja al hacer scroll */
+const MARK_MONO_SCALE_FACTOR = 0.88;
+
+/**
+ * Caja fija + scale. La imagen ocupa el 100% del ancho de la caja para que `transform-origin: bottom center`
+ * coincida con el centro del layout (si el PNG es más estrecho que la caja, object-fit no desplaza el origen).
+ */
+function ViterraMarkLeftHero({
+  boxW,
+  boxH,
+  scale,
+  className,
+}: {
+  boxW: number;
+  boxH: number;
+  scale: number;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn("inline-flex shrink-0 items-end justify-center overflow-visible", className)}
+      style={{ width: boxW, height: boxH }}
+      aria-hidden
+    >
+      <img
+        src={MARK_ICON_MONO}
+        alt=""
+        width={1024}
+        height={264}
+        decoding="async"
+        className="block max-h-full object-contain"
+        style={{
+          width: "100%",
+          height: boxH,
+          maxHeight: boxH,
+          objectPosition: "bottom center",
+          transform: `scale(${scale})`,
+          transformOrigin: "bottom center",
+          transition: "transform 0.2s ease",
+          opacity: 0.96,
+        }}
+      />
+    </span>
+  );
+}
+
+function ViterraMarkLeftScrolled({
+  boxW,
+  boxH,
+  scale,
+  className,
+}: {
+  boxW: number;
+  boxH: number;
+  scale: number;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn("inline-flex shrink-0 items-end justify-center overflow-visible", className)}
+      style={{ width: boxW, height: boxH }}
+      aria-hidden
+    >
+      <img
+        src={MARK_ICON_RED}
+        alt=""
+        width={1024}
+        height={267}
+        decoding="async"
+        className="block max-h-full object-contain"
+        style={{
+          width: "100%",
+          height: boxH,
+          maxHeight: boxH,
+          objectPosition: "bottom center",
+          transform: `scale(${scale})`,
+          transformOrigin: "bottom center",
+          transition: "transform 0.2s ease",
+          opacity: 0.96,
+        }}
+      />
+    </span>
+  );
 }
 
 export function Header() {
@@ -105,13 +195,24 @@ export function Header() {
   const showCenterNav = navCenterOpacity > 0.04;
   const showSplitNav = navSplitOpacity > 0.04;
 
+  /** Transición marca izquierda: blanco grande → rojo compacto (cruza con el scroll) */
+  const compactLeftMark = smoothstep01(p, 0.2, 0.48);
+  /** 0 = arriba del todo (marca grande); 1 = header compacto (marca pequeña) */
+  const markShrink = smoothstep01(p, 0.05, 0.48);
+  /** Escala 1 → ~0.52: mismo ancho de caja, el dibujo se reduce desde abajo al centro */
+  const markScale = lerp(1, 0.52, markShrink);
+  const markBoxW = 200;
+  const markBoxH = 50;
+  const markBoxWMobile = 168;
+  const markBoxHMobile = 42;
+
   const navLinkClass =
     "font-normal uppercase text-white/85 hover:text-white transition-colors shrink-0";
   const iconBtnClass = "p-2 text-white/80 hover:text-white rounded-sm";
 
   return (
     <header
-      className={`left-0 right-0 z-50 w-full text-white pt-[env(safe-area-inset-top,0px)] ${
+      className={`left-0 right-0 z-50 w-full overflow-visible text-white pt-[env(safe-area-inset-top,0px)] ${
         useOverlayHeader ? "fixed top-0" : "sticky top-0"
       }`}
       style={{
@@ -126,38 +227,70 @@ export function Header() {
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div
-          className={cn("justify-center transition-none", inPreviewCanvas ? "hidden" : "hidden lg:flex")}
+          className={cn("relative overflow-x-visible transition-none", inPreviewCanvas ? "hidden" : "hidden lg:flex lg:justify-center")}
           style={{ paddingTop: `${logoPadTop}px`, paddingBottom: `${logoPadBottom}px` }}
         >
-          <Link to="/" className="group inline-flex min-w-[11rem] max-w-[16rem] flex-col items-stretch text-center">
-            <span
-              className="text-center font-light leading-tight text-white"
-              style={{ fontSize: `${titleSize}px`, letterSpacing: `${lerp(0.18, 0.2, p)}em` }}
-            >
-              VITERRA
+          <Link
+            to="/"
+            aria-label="Viterra Grupo Inmobiliario — Inicio"
+            className="group relative flex w-full max-w-none justify-center overflow-visible"
+          >
+            <span className="absolute left-8 top-[calc(50%+12px)] z-10 -translate-y-1/2 overflow-visible sm:left-10">
+              <span className="relative overflow-visible" style={{ width: markBoxW, height: markBoxH }}>
+                <span
+                  className="absolute inset-0 flex items-end justify-center overflow-visible transition-opacity duration-300 ease-out"
+                  style={{ opacity: 1 - compactLeftMark, pointerEvents: compactLeftMark > 0.92 ? "none" : "auto" }}
+                >
+                  <ViterraMarkLeftHero
+                    boxW={markBoxW}
+                    boxH={markBoxH}
+                    scale={markScale * MARK_MONO_SCALE_FACTOR}
+                  />
+                </span>
+                <span
+                  className="absolute inset-0 flex items-end justify-center overflow-visible transition-opacity duration-300 ease-out"
+                  style={{ opacity: compactLeftMark, pointerEvents: compactLeftMark < 0.08 ? "none" : "auto" }}
+                >
+                  <ViterraMarkLeftScrolled boxW={markBoxW} boxH={markBoxH} scale={markScale} />
+                </span>
+              </span>
             </span>
-            <span className="relative my-2 h-px w-full shrink-0 overflow-hidden rounded-full" aria-hidden>
+            <span className="inline-flex min-w-[11rem] max-w-[16rem] flex-col items-stretch text-center">
               <span
-                className="absolute inset-0 origin-left bg-white"
-                style={{ opacity: guionWhite, transform: `scaleX(${lerp(1, 0.35, smoothstep01(p, 0.2, 0.55))})` }}
-              />
-              <span
-                className="absolute inset-0 origin-left bg-[#C8102E]"
-                style={{ opacity: guionRed, transform: `scaleX(${lerp(0.2, 1, smoothstep01(p, 0.15, 0.5))})` }}
-              />
+                className="text-center font-light leading-tight text-white"
+                style={{ fontSize: `${titleSize}px`, letterSpacing: `${lerp(0.18, 0.2, p)}em` }}
+              >
+                VITERRA
+              </span>
+              <span className="relative my-2 h-px w-full shrink-0 overflow-hidden rounded-full" aria-hidden>
+                <span
+                  className="absolute inset-0 origin-left bg-white"
+                  style={{ opacity: guionWhite, transform: `scaleX(${lerp(1, 0.35, smoothstep01(p, 0.2, 0.55))})` }}
+                />
+                <span
+                  className="absolute inset-0 origin-left bg-[#C8102E]"
+                  style={{ opacity: guionRed, transform: `scaleX(${lerp(0.2, 1, smoothstep01(p, 0.15, 0.5))})` }}
+                />
+              </span>
+              <div className="overflow-hidden text-center" style={{ maxHeight: `${subtitleMaxH}px`, opacity: subtitleOpacity }}>
+                <p className="pt-0.5 text-[10px] font-normal uppercase tracking-[0.22em] text-white/70">Grupo Inmobiliario</p>
+              </div>
             </span>
-            <div className="overflow-hidden text-center" style={{ maxHeight: `${subtitleMaxH}px`, opacity: subtitleOpacity }}>
-              <p className="pt-0.5 text-[10px] font-normal uppercase tracking-[0.22em] text-white/70">Grupo Inmobiliario</p>
-            </div>
           </Link>
         </div>
 
         <div
-          className={cn("relative border-t border-white/10", inPreviewCanvas ? "hidden" : "hidden lg:block")}
+          className={cn("relative overflow-visible border-t border-white/10", inPreviewCanvas ? "hidden" : "hidden lg:block")}
           style={{ minHeight: `${navRowH}px` }}
         >
+          {/* Un solo bloque de redes: no depende del crossfade nav centrado ↔ partido */}
+          <div className="pointer-events-none absolute inset-0 z-[55] flex items-stretch">
+            <div className="pointer-events-auto flex w-20 shrink-0 items-center justify-start self-stretch pl-1">
+              <SocialHeaderDropdown triggerClassName={iconBtnClass} menuAlign="start" />
+            </div>
+          </div>
           <nav
-            className="absolute inset-0 flex items-center px-1"
+            className="absolute inset-0 flex items-stretch px-1 pl-20"
             style={{
               opacity: navCenterOpacity,
               pointerEvents: showCenterNav ? "auto" : "none",
@@ -165,7 +298,6 @@ export function Header() {
             }}
             aria-hidden={!showCenterNav}
           >
-            <div className="w-20 shrink-0" aria-hidden />
             <div className="flex min-w-0 flex-1 items-center justify-center" style={{ gap: `${navGap}px` }}>
               {VITERRA_NAV_ITEMS.map(([to, label]) => (
                 <Link key={`c-${to}`} to={to} className={navLinkClass} style={{ fontSize: `${navFontPx}px`, letterSpacing: `${navTrackEm}em` }}>
@@ -173,10 +305,7 @@ export function Header() {
                 </Link>
               ))}
             </div>
-            <div className="flex w-20 shrink-0 items-center justify-end gap-0.5">
-              <button type="button" className={iconBtnClass} aria-label="Buscar">
-                <Search className="h-5 w-5" strokeWidth={1.5} />
-              </button>
+            <div className="flex w-20 shrink-0 items-center justify-end gap-0.5 self-stretch">
               <button type="button" className={iconBtnClass} aria-label="Cuenta">
                 <User className="h-5 w-5" strokeWidth={1.5} />
               </button>
@@ -184,7 +313,7 @@ export function Header() {
           </nav>
 
           <nav
-            className="absolute inset-0 flex items-center justify-between px-1"
+            className="absolute inset-0 flex items-stretch justify-between px-1 pl-20"
             style={{
               opacity: navSplitOpacity,
               pointerEvents: showSplitNav ? "auto" : "none",
@@ -192,10 +321,7 @@ export function Header() {
             }}
             aria-hidden={!showSplitNav}
           >
-            <div className="flex min-w-0 items-center gap-4 xl:gap-5">
-              <button type="button" className="-ml-1 shrink-0 p-2 text-white/85 hover:text-white" aria-label="Buscar">
-                <Search className="h-[18px] w-[18px]" strokeWidth={1.5} />
-              </button>
+            <div className="flex min-w-0 items-center gap-4 self-stretch xl:gap-5">
               {VITERRA_NAV_ITEMS.slice(0, 3).map(([to, label]) => (
                 <Link key={`l-${to}`} to={to} className={`${navLinkClass} text-white/90`} style={{ fontSize: `${navFontPx}px`, letterSpacing: `${navTrackEm}em` }}>
                   {label}
@@ -203,7 +329,7 @@ export function Header() {
               ))}
             </div>
             <div className="w-28 shrink-0" aria-hidden />
-            <div className="flex min-w-0 items-center justify-end gap-4 xl:gap-5">
+            <div className="flex min-w-0 items-center justify-end gap-4 self-stretch xl:gap-5">
               {VITERRA_NAV_ITEMS.slice(3).map(([to, label]) => (
                 <Link key={`r-${to}`} to={to} className={`${navLinkClass} text-white/90`} style={{ fontSize: `${navFontPx}px`, letterSpacing: `${navTrackEm}em` }}>
                   {label}
@@ -217,23 +343,51 @@ export function Header() {
         </div>
 
         <div
-          className={cn("flex items-center justify-between gap-3 border-t-0", inPreviewCanvas ? "flex" : "flex lg:hidden")}
+          className={cn("flex items-stretch justify-between gap-2 border-t-0 sm:gap-3", inPreviewCanvas ? "flex" : "flex lg:hidden")}
           style={{
             minHeight: `${lerp(52, 48, p)}px`,
             paddingTop: `${lerp(6, 4, p)}px`,
             paddingBottom: `${lerp(6, 4, p)}px`,
           }}
         >
-          <Link to="/" className="inline-flex min-w-0 flex-col items-start gap-1" onClick={() => setIsMenuOpen(false)}>
-            <span className="font-heading truncate font-medium tracking-[0.18em] text-white" style={{ fontSize: `${lerp(15, 13, p)}px` }}>
-              VITERRA
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-visible sm:gap-2">
+            <SocialHeaderDropdown
+              triggerClassName="p-2 text-white/85 hover:text-white"
+              menuAlign="start"
+            />
+            <Link
+              to="/"
+              className="inline-flex min-w-0 items-center gap-2.5 overflow-visible"
+              onClick={() => setIsMenuOpen(false)}
+              aria-label="Viterra Grupo Inmobiliario — Inicio"
+            >
+            <span className="relative ml-0 shrink-0 overflow-visible sm:ml-1" style={{ width: markBoxWMobile, height: markBoxHMobile }}>
+              <span
+                className="absolute inset-0 flex items-end justify-center overflow-visible transition-opacity duration-300 ease-out"
+                style={{ opacity: 1 - compactLeftMark, pointerEvents: compactLeftMark > 0.92 ? "none" : "auto" }}
+              >
+                <ViterraMarkLeftHero
+                  boxW={markBoxWMobile}
+                  boxH={markBoxHMobile}
+                  scale={markScale * MARK_MONO_SCALE_FACTOR}
+                />
+              </span>
+              <span
+                className="absolute inset-0 flex items-end justify-center overflow-visible transition-opacity duration-300 ease-out"
+                style={{ opacity: compactLeftMark, pointerEvents: compactLeftMark < 0.08 ? "none" : "auto" }}
+              >
+                <ViterraMarkLeftScrolled boxW={markBoxWMobile} boxH={markBoxHMobile} scale={markScale} />
+              </span>
             </span>
-            <span className="h-px w-8 bg-[#C8102E]" style={{ opacity: lerp(0.85, 1, p) }} aria-hidden />
-          </Link>
-          <div className="flex shrink-0 items-center gap-0.5">
-            <button type="button" className="p-2 text-white/85 hover:text-white" aria-label="Buscar">
-              <Search className="h-5 w-5" strokeWidth={1.5} />
-            </button>
+            <span className="inline-flex min-w-0 flex-col items-start gap-1">
+              <span className="font-heading truncate font-medium tracking-[0.18em] text-white" style={{ fontSize: `${lerp(15, 13, p)}px` }}>
+                VITERRA
+              </span>
+              <span className="h-px w-8 bg-[#C8102E]" style={{ opacity: lerp(0.85, 1, p) }} aria-hidden />
+            </span>
+            </Link>
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5 self-stretch">
             <button type="button" onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 text-white" aria-expanded={isMenuOpen}>
               {isMenuOpen ? <X className="h-6 w-6" strokeWidth={1.5} /> : <Menu className="h-6 w-6" strokeWidth={1.5} />}
             </button>

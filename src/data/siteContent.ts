@@ -110,7 +110,7 @@ export interface SiteContent {
     teamKicker: string;
     teamTitle: string;
     teamIntro: string;
-    team: { name: string; role: string; initials: string }[];
+    team: { name: string; role: string; initials: string; image?: string }[];
   };
   developments: {
     heroImage: string;
@@ -291,9 +291,27 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     teamTitle: "Nuestro Equipo",
     teamIntro: "Profesionales dedicados con años de experiencia en el mercado inmobiliario",
     team: [
-      { name: "María González", role: "CEO & Fundadora", initials: "MG" },
-      { name: "Carlos Rodríguez", role: "Director de Ventas", initials: "CR" },
-      { name: "Ana Martínez", role: "Gerente de Operaciones", initials: "AM" },
+      {
+        name: "María González",
+        role: "CEO & Fundadora",
+        initials: "MG",
+        image:
+          "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=600&h=600&q=80",
+      },
+      {
+        name: "Carlos Rodríguez",
+        role: "Director de Ventas",
+        initials: "CR",
+        image:
+          "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=600&h=600&q=80",
+      },
+      {
+        name: "Ana Martínez",
+        role: "Gerente de Operaciones",
+        initials: "AM",
+        image:
+          "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=600&h=600&q=80",
+      },
     ],
   },
   developments: {
