@@ -34,6 +34,7 @@ import {
   Calendar,
   Settings,
   Map as MapIcon,
+  UserCircle2,
 } from "lucide-react";
 import { AdminSiteEditor } from "../components/admin/AdminSiteEditor";
 import { useAuth } from "../contexts/AuthContext";
@@ -48,10 +49,16 @@ import {
   newCustomStageId,
   type CustomKanbanStage,
 } from "../data/leads";
+import {
+  CLIENTS_STORAGE_KEY,
+  normalizeStoredClient,
+  type CrmClient,
+} from "../data/clients";
 import { LeadsKanbanBoard } from "../components/admin/LeadsKanbanBoard";
 import { LeadPriorityBadge } from "../components/admin/LeadPriorityBadge";
 import { AddLeadDialog } from "../components/admin/AddLeadDialog";
 import { LeadDetailDialog } from "../components/admin/LeadDetailDialog";
+import { AdminClientsManager } from "../components/admin/AdminClientsManager";
 import { PropertyFormDialog } from "../components/admin/PropertyFormDialog";
 import {
   AlertDialog,
@@ -92,15 +99,27 @@ import { cn } from "../components/ui/utils";
 import {
   DEFAULT_BUILTIN_STAGE_HEX,
   DEFAULT_CUSTOM_STAGE_HEX,
-  STAGE_COLORS_STORAGE_KEY,
   LIST_STAGE_HEADER_BUTTON_CLASSES,
   stageHexToChipStyle,
   stageHexToListHeaderStyle,
 } from "../lib/stageColors";
+import {
+  DEFAULT_PIPELINE_GROUP_ID,
+  canConfigurePipelineForGroup,
+  createEmptyGroupPipelineSnapshot,
+  getAllowedPipelineGroupIds,
+  loadPipelineByGroup,
+  normalizeStageOrder,
+  pipelineContextStorageKey,
+  savePipelineByGroup,
+  type GroupPipelineSnapshot,
+} from "../lib/pipelineByGroup";
+import { loadUserGroupsFromStorage, type UserGroup } from "../lib/userGroups";
 
 type TabType =
   | "dashboard"
   | "leads"
+  | "clients"
   | "pipeline"
   | "agenda"
   | "properties"
@@ -136,6 +155,11 @@ export function AdminPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [developments, setDevelopments] = useState<Development[]>([]);
+  const [clients, setClients] = useState<CrmClient[]>([]);
+  const [focusClient, setFocusClient] = useState<{ id: string; nonce: number } | null>(null);
+  const [seedClientFromLead, setSeedClientFromLead] = useState<{ lead: Lead; nonce: number } | null>(
+    null
+  );
   const [propertySearchQuery, setPropertySearchQuery] = useState("");
   const [propertyOperationFilter, setPropertyOperationFilter] = useState("all");
   const [propertyTypeFilter, setPropertyTypeFilter] = useState("all");
@@ -150,10 +174,11 @@ export function AdminPage() {
   const [leadsView, setLeadsView] = useState<"kanban" | "table">("kanban");
   /** Vista lista: secciones por estado; true = colapsada */
   const [leadsTableSectionCollapsed, setLeadsTableSectionCollapsed] = useState<Record<string, boolean>>({});
-  const [customKanbanStages, setCustomKanbanStages] = useState<CustomKanbanStage[]>([]);
-  const [pipelineStageOrder, setPipelineStageOrder] = useState<string[]>([]);
-  /** Colores de columna por id de etapa (hex #RRGGBB); se persisten en localStorage */
-  const [stageColumnColors, setStageColumnColors] = useState<Record<string, string>>({});
+  const [pipelineByGroup, setPipelineByGroup] = useState<Record<string, GroupPipelineSnapshot>>(() =>
+    loadPipelineByGroup()
+  );
+  const [userGroups, setUserGroups] = useState<UserGroup[]>(() => loadUserGroupsFromStorage());
+  const [activePipelineGroupId, setActivePipelineGroupId] = useState<string>(DEFAULT_PIPELINE_GROUP_ID);
   const [leadDialog, setLeadDialog] = useState<{ lead: Lead; mode: "view" | "edit" } | null>(null);
   const [usersPanelFocus, setUsersPanelFocus] = useState<{ id: string; nonce: number } | null>(null);
   /** Si se abrió la ficha desde un lead (CRM), al cerrar restauramos tab y diálogo del lead. */
@@ -221,47 +246,15 @@ export function AdminPage() {
     const savedDevelopments = localStorage.getItem("viterra_admin_developments");
     setDevelopments(savedDevelopments ? JSON.parse(savedDevelopments) : seedDevelopments);
 
-    const savedStages = localStorage.getItem("viterra_kanban_custom_stages");
-    if (savedStages) {
+    const savedClients = localStorage.getItem(CLIENTS_STORAGE_KEY);
+    if (savedClients) {
       try {
-        const parsed = JSON.parse(savedStages) as unknown;
+        const parsed = JSON.parse(savedClients) as unknown[];
         if (Array.isArray(parsed)) {
-          setCustomKanbanStages(
-            parsed.filter(
-              (x): x is CustomKanbanStage =>
-                typeof x === "object" &&
-                x !== null &&
-                typeof (x as CustomKanbanStage).id === "string" &&
-                typeof (x as CustomKanbanStage).label === "string"
-            )
-          );
+          setClients(parsed.map((row) => normalizeStoredClient(row as Record<string, unknown>)));
         }
       } catch {
-        /* ignore */
-      }
-    }
-
-    const savedStageOrder = localStorage.getItem("viterra_kanban_stage_order");
-    if (savedStageOrder) {
-      try {
-        const parsed = JSON.parse(savedStageOrder) as unknown;
-        if (Array.isArray(parsed)) {
-          setPipelineStageOrder(parsed.filter((x): x is string => typeof x === "string"));
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-
-    const savedStageColors = localStorage.getItem(STAGE_COLORS_STORAGE_KEY);
-    if (savedStageColors) {
-      try {
-        const parsed = JSON.parse(savedStageColors) as unknown;
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          setStageColumnColors(parsed as Record<string, string>);
-        }
-      } catch {
-        /* ignore */
+        setClients([]);
       }
     }
   }, [navigate, isAuthenticated]);
@@ -292,8 +285,58 @@ export function AdminPage() {
   }, [developments]);
 
   useEffect(() => {
-    localStorage.setItem("viterra_kanban_custom_stages", JSON.stringify(customKanbanStages));
-  }, [customKanbanStages]);
+    localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(clients));
+  }, [clients]);
+
+  useEffect(() => {
+    setUserGroups(loadUserGroupsFromStorage());
+  }, [companySubtab]);
+
+  const allowedPipelineGroupIds = useMemo(
+    () => (user ? getAllowedPipelineGroupIds(user, userGroups) : [DEFAULT_PIPELINE_GROUP_ID]),
+    [user, userGroups]
+  );
+
+  useEffect(() => {
+    if (!user) return;
+    setActivePipelineGroupId((prev) => {
+      if (allowedPipelineGroupIds.includes(prev)) return prev;
+      const key = pipelineContextStorageKey(user.id);
+      const saved = localStorage.getItem(key);
+      if (saved && allowedPipelineGroupIds.includes(saved)) return saved;
+      return allowedPipelineGroupIds[0] ?? DEFAULT_PIPELINE_GROUP_ID;
+    });
+  }, [user, allowedPipelineGroupIds]);
+
+  useEffect(() => {
+    if (!user) return;
+    localStorage.setItem(pipelineContextStorageKey(user.id), activePipelineGroupId);
+  }, [user, activePipelineGroupId]);
+
+  useEffect(() => {
+    setPipelineByGroup((prev) => {
+      if (prev[activePipelineGroupId]) return prev;
+      return {
+        ...prev,
+        [activePipelineGroupId]: createEmptyGroupPipelineSnapshot(),
+      };
+    });
+  }, [activePipelineGroupId]);
+
+  useEffect(() => {
+    savePipelineByGroup(pipelineByGroup);
+  }, [pipelineByGroup]);
+
+  const activePipeline =
+    pipelineByGroup[activePipelineGroupId] ?? createEmptyGroupPipelineSnapshot();
+  const customKanbanStages = activePipeline.customStages;
+  const pipelineStageOrder = activePipeline.stageOrder;
+  const stageColumnColors = activePipeline.stageColors;
+
+  const canConfigureActivePipeline = useMemo(
+    () => (user ? canConfigurePipelineForGroup(user, activePipelineGroupId, userGroups) : false),
+    [user, activePipelineGroupId, userGroups]
+  );
 
   const allStageIds = useMemo(
     () => [...BUILTIN_STATUS_ORDER, ...customKanbanStages.map((s) => s.id)],
@@ -301,25 +344,28 @@ export function AdminPage() {
   );
 
   useEffect(() => {
-    setPipelineStageOrder((prev) => {
-      const normalized = [
-        ...prev.filter((id) => allStageIds.includes(id)),
-        ...allStageIds.filter((id) => !prev.includes(id)),
-      ];
-      if (normalized.length === prev.length && normalized.every((id, idx) => id === prev[idx])) {
-        return prev;
+    setPipelineByGroup((map) => {
+      const id = activePipelineGroupId;
+      const cur = map[id] ?? createEmptyGroupPipelineSnapshot();
+      const normalized = normalizeStageOrder(cur.stageOrder, allStageIds);
+      if (
+        normalized.length === cur.stageOrder.length &&
+        normalized.every((x, i) => x === cur.stageOrder[i])
+      ) {
+        return map;
       }
-      return normalized;
+      return { ...map, [id]: { ...cur, stageOrder: normalized } };
     });
-  }, [allStageIds]);
+  }, [allStageIds, activePipelineGroupId]);
 
-  useEffect(() => {
-    localStorage.setItem("viterra_kanban_stage_order", JSON.stringify(pipelineStageOrder));
-  }, [pipelineStageOrder]);
-
-  useEffect(() => {
-    localStorage.setItem(STAGE_COLORS_STORAGE_KEY, JSON.stringify(stageColumnColors));
-  }, [stageColumnColors]);
+  const pipelineGroupLabel = useCallback(
+    (groupId: string) => {
+      if (groupId === DEFAULT_PIPELINE_GROUP_ID) return "General (todos los equipos)";
+      const g = userGroups.find((x) => x.id === groupId);
+      return g?.name ?? groupId;
+    },
+    [userGroups]
+  );
 
   const handleLogout = () => {
     logout();
@@ -429,61 +475,97 @@ export function AdminPage() {
     );
   }, [resolveStatusLabel]);
 
-  const handleAddKanbanStage = useCallback((label: string) => {
-    const id = newCustomStageId();
-    setCustomKanbanStages((prev) => [...prev, { id, label }]);
-    setPipelineStageOrder((prev) => [...prev, id]);
-  }, []);
+  const handleAddKanbanStage = useCallback(
+    (label: string) => {
+      const id = newCustomStageId();
+      setPipelineByGroup((map) => {
+        const cur = map[activePipelineGroupId] ?? createEmptyGroupPipelineSnapshot();
+        return {
+          ...map,
+          [activePipelineGroupId]: {
+            ...cur,
+            customStages: [...cur.customStages, { id, label }],
+            stageOrder: [...cur.stageOrder, id],
+          },
+        };
+      });
+    },
+    [activePipelineGroupId]
+  );
 
-  const handleUpdateKanbanStage = useCallback((stageId: string, label: string) => {
-    setCustomKanbanStages((prev) =>
-      prev.map((stage) => (stage.id === stageId ? { ...stage, label } : stage))
-    );
-  }, []);
+  const handleUpdateKanbanStage = useCallback(
+    (stageId: string, label: string) => {
+      setPipelineByGroup((map) => {
+        const cur = map[activePipelineGroupId] ?? createEmptyGroupPipelineSnapshot();
+        return {
+          ...map,
+          [activePipelineGroupId]: {
+            ...cur,
+            customStages: cur.customStages.map((stage) =>
+              stage.id === stageId ? { ...stage, label } : stage
+            ),
+          },
+        };
+      });
+    },
+    [activePipelineGroupId]
+  );
 
-  const executeDeleteKanbanStage = useCallback((stageId: string, stageLabel: string) => {
-    const updatedAt = new Date().toISOString();
-    setCustomKanbanStages((prev) => prev.filter((item) => item.id !== stageId));
-    setPipelineStageOrder((prev) => prev.filter((id) => id !== stageId));
-    setStageColumnColors((prev) => {
-      if (!Object.prototype.hasOwnProperty.call(prev, stageId)) return prev;
-      const next = { ...prev };
-      delete next[stageId];
-      return next;
-    });
-    setLeads((prev) =>
-      prev.map((lead) =>
-        lead.status !== stageId
-          ? lead
-          : {
-              ...lead,
-              status: "nuevo",
-              updatedAt,
-              activity: [
-                {
-                  id: newLeadActivityId(),
-                  type: "status_change",
-                  createdAt: updatedAt,
-                  description: `La columna ${stageLabel} se eliminó y el lead volvió a Nuevo`,
-                },
-                ...(lead.activity ?? []),
-              ],
+  const executeDeleteKanbanStage = useCallback(
+    (stageId: string, stageLabel: string) => {
+      const updatedAt = new Date().toISOString();
+      const gid = activePipelineGroupId;
+      setPipelineByGroup((map) => {
+        const cur = map[gid] ?? createEmptyGroupPipelineSnapshot();
+        const nextColors = { ...cur.stageColors };
+        if (Object.prototype.hasOwnProperty.call(nextColors, stageId)) delete nextColors[stageId];
+        return {
+          ...map,
+          [gid]: {
+            ...cur,
+            customStages: cur.customStages.filter((item) => item.id !== stageId),
+            stageOrder: cur.stageOrder.filter((id) => id !== stageId),
+            stageColors: nextColors,
+          },
+        };
+      });
+      setLeads((prev) =>
+        prev.map((lead) =>
+          lead.status !== stageId || lead.pipelineGroupId !== gid
+            ? lead
+            : {
+                ...lead,
+                status: "nuevo",
+                updatedAt,
+                activity: [
+                  {
+                    id: newLeadActivityId(),
+                    type: "status_change",
+                    createdAt: updatedAt,
+                    description: `La columna ${stageLabel} se eliminó y el lead volvió a Nuevo`,
+                  },
+                  ...(lead.activity ?? []),
+                ],
+              }
+        )
+      );
+      setLeadDialog((current) =>
+        current &&
+        current.lead.status === stageId &&
+        current.lead.pipelineGroupId === gid
+          ? {
+              ...current,
+              lead: {
+                ...current.lead,
+                status: "nuevo",
+                updatedAt,
+              },
             }
-      )
-    );
-    setLeadDialog((current) =>
-      current && current.lead.status === stageId
-        ? {
-            ...current,
-            lead: {
-              ...current.lead,
-              status: "nuevo",
-              updatedAt,
-            },
-          }
-        : current
-    );
-  }, []);
+          : current
+      );
+    },
+    [activePipelineGroupId]
+  );
 
   const requestDeletePipelineStage = useCallback((stageId: string, label: string) => {
     setDeletePipelineStage({ id: stageId, label });
@@ -491,7 +573,9 @@ export function AdminPage() {
 
   const handleReorderPipelineRows = useCallback(
     (dragIndex: number, hoverIndex: number) => {
-      setPipelineStageOrder((prev) => {
+      setPipelineByGroup((map) => {
+        const cur = map[activePipelineGroupId] ?? createEmptyGroupPipelineSnapshot();
+        const prev = cur.stageOrder;
         const base = prev.length > 0 ? prev : allStageIds;
         if (
           dragIndex === hoverIndex ||
@@ -500,15 +584,21 @@ export function AdminPage() {
           dragIndex >= base.length ||
           hoverIndex >= base.length
         ) {
-          return prev;
+          return map;
         }
-        const next = [...base];
-        const [removed] = next.splice(dragIndex, 1);
-        next.splice(hoverIndex, 0, removed);
-        return next;
+        const nextOrder = [...base];
+        const [removed] = nextOrder.splice(dragIndex, 1);
+        nextOrder.splice(hoverIndex, 0, removed);
+        if (nextOrder.length === prev.length && nextOrder.every((id, i) => id === prev[i])) {
+          return map;
+        }
+        return {
+          ...map,
+          [activePipelineGroupId]: { ...cur, stageOrder: nextOrder },
+        };
       });
     },
-    [allStageIds]
+    [activePipelineGroupId, allStageIds]
   );
 
   const handleAddLead = useCallback((lead: Lead) => {
@@ -574,6 +664,11 @@ export function AdminPage() {
 
   const leadsForUser = useMemo(() => filterLeadsForUser(leads, user), [leads, user]);
 
+  const leadsInActivePipeline = useMemo(
+    () => leadsForUser.filter((l) => l.pipelineGroupId === activePipelineGroupId),
+    [leadsForUser, activePipelineGroupId]
+  );
+
   const openLeadDetail = useCallback(
     (lead: Lead, mode: "view" | "edit") => {
       const full = leads.find((l) => l.id === lead.id) ?? lead;
@@ -614,6 +709,20 @@ export function AdminPage() {
     setUsersPanelFocus(null);
   }, []);
 
+  const canAccessClients = useMemo(
+    () => Boolean(user?.permissions?.includes("manage_clients")),
+    [user]
+  );
+
+  const handleRegisterClientFromLead = useCallback((lead: Lead) => {
+    setLeadDialog(null);
+    setActiveTab("clients");
+    setSeedClientFromLead({ lead, nonce: Date.now() });
+  }, []);
+
+  const handleFocusClientConsumed = useCallback(() => setFocusClient(null), []);
+  const handleSeedClientFromLeadConsumed = useCallback(() => setSeedClientFromLead(null), []);
+
   // Stats calculations (respetan rol: el asesor solo cuenta sus leads)
   const totalLeads = leadsForUser.length;
   const newLeads = leadsForUser.filter((l) => l.status === "nuevo").length;
@@ -622,7 +731,7 @@ export function AdminPage() {
   const propertiesForSale = properties.filter(p => p.status === "venta").length;
   const propertiesForRent = properties.filter(p => p.status === "alquiler").length;
 
-  const filteredLeads = leadsForUser.filter((lead) => {
+  const filteredLeads = leadsInActivePipeline.filter((lead) => {
     const matchesSearch =
       lead.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       lead.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -737,6 +846,17 @@ export function AdminPage() {
         keywords: ["lead", "clientes", "pipeline", "kanban", "prospectos"],
         action: () => setActiveTab("leads"),
       },
+      ...(canAccessClients
+        ? [
+            {
+              id: "clients",
+              title: "Clientes",
+              description: "Fichas de clientes e historial",
+              keywords: ["clientes", "crm", "compradores", "contactos"],
+              action: () => setActiveTab("clients"),
+            },
+          ]
+        : []),
       {
         id: "agenda",
         title: "Agenda",
@@ -834,7 +954,7 @@ export function AdminPage() {
         action: () => navigate("/contacto"),
       },
     ],
-    [navigate]
+    [navigate, canAccessClients]
   );
 
   const headerSearchValue = adminHeaderQuery;
@@ -936,6 +1056,20 @@ export function AdminPage() {
                   <Users className="h-4 w-4" strokeWidth={activeTab === "leads" ? 2 : 1.75} />
                   Leads
                 </button>
+                {canAccessClients && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("clients")}
+                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                      activeTab === "clients"
+                        ? "bg-white text-brand-navy"
+                        : "text-white/80 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    <UserCircle2 className="h-4 w-4" strokeWidth={activeTab === "clients" ? 2 : 1.75} />
+                    Clientes
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setActiveTab("agenda")}
@@ -1456,7 +1590,7 @@ export function AdminPage() {
                       </button>
                     </div>
 
-                    {user.role === "lider_grupo" && (
+                    {canConfigureActivePipeline && (
                       <button
                         type="button"
                         onClick={() => {
@@ -1465,7 +1599,7 @@ export function AdminPage() {
                         }}
                         className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200/90 bg-white px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-brand-navy shadow-sm transition-all hover:border-brand-navy/25 hover:bg-slate-50 sm:flex-initial sm:text-[13px]"
                         style={{ fontWeight: 600 }}
-                        title="Solo líderes de grupo pueden añadir columnas al tablero"
+                        title="Solo el administrador o el líder del grupo pueden añadir columnas"
                       >
                         <Plus className="h-4 w-4 shrink-0" strokeWidth={2} />
                         Nueva etapa
@@ -1484,7 +1618,31 @@ export function AdminPage() {
                   </div>
                 </div>
 
-                <div className="mt-8 flex flex-col gap-3 border-t border-slate-200/80 pt-6 sm:flex-row sm:items-stretch">
+                <div className="mt-8 flex flex-col gap-3 border-t border-slate-200/80 pt-6">
+                  {allowedPipelineGroupIds.length > 1 && (
+                    <div className="flex flex-col gap-1.5 sm:max-w-md">
+                      <label
+                        htmlFor="crm-pipeline-group"
+                        className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"
+                      >
+                        Pipeline por grupo
+                      </label>
+                      <select
+                        id="crm-pipeline-group"
+                        value={activePipelineGroupId}
+                        onChange={(e) => setActivePipelineGroupId(e.target.value)}
+                        className="h-11 w-full rounded-2xl border border-slate-200/90 bg-white px-4 text-sm text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                        style={{ fontWeight: 500 }}
+                      >
+                        {allowedPipelineGroupIds.map((id) => (
+                          <option key={id} value={id}>
+                            {pipelineGroupLabel(id)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
                   <div className="relative min-h-[2.75rem] flex-1">
                     <Search
                       className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
@@ -1522,6 +1680,7 @@ export function AdminPage() {
                       <ChevronDown className="h-4 w-4" strokeWidth={2} />
                     </span>
                   </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1533,6 +1692,7 @@ export function AdminPage() {
               onAddLead={handleAddLead}
               user={user}
               customKanbanStages={customKanbanStages}
+              pipelineGroupId={activePipelineGroupId}
             />
 
             {leadsView === "kanban" && (
@@ -1543,7 +1703,7 @@ export function AdminPage() {
                 statusLabel={resolveStatusLabel}
                 onStatusChange={handleUpdateLeadStatus}
                 onLeadOpen={(l) => openLeadDetail(l, "view")}
-                canAddStage={user.role === "lider_grupo"}
+                canAddStage={canConfigureActivePipeline}
                 onAddStage={handleAddKanbanStage}
               />
             )}
@@ -1753,6 +1913,24 @@ export function AdminPage() {
               )}
             </div>
             )}
+          </div>
+        )}
+
+        {activeTab === "clients" && canAccessClients && (
+          <div className="space-y-6">
+            <AdminClientsManager
+              currentUser={user}
+              users={users}
+              clients={clients}
+              onSetClients={(updater) => setClients(updater)}
+              properties={properties}
+              developments={developments}
+              leads={leads}
+              focusClient={focusClient}
+              onFocusClientConsumed={handleFocusClientConsumed}
+              seedFromLead={seedClientFromLead}
+              onSeedFromLeadConsumed={handleSeedClientFromLeadConsumed}
+            />
           </div>
         )}
 
@@ -2295,7 +2473,7 @@ export function AdminPage() {
                   {
                     id: "leadStages" as const,
                     title: "Pipeline de ventas",
-                    desc: "Columnas del Kanban y etapas personalizadas.",
+                    desc: "Columnas del Kanban por grupo (admin y líder de grupo).",
                     icon: LayoutGrid,
                   },
                   {
@@ -2403,6 +2581,37 @@ export function AdminPage() {
               )}
               {companySubtab === "leadStages" && (
                 <div className="flex flex-col gap-6 p-5 md:p-8">
+                  <div className="flex flex-col gap-4 rounded-xl border border-slate-200/80 bg-slate-50/50 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        Grupo de trabajo
+                      </p>
+                      <p className="mt-0.5 text-sm text-brand-navy" style={{ fontWeight: 600 }}>
+                        {pipelineGroupLabel(activePipelineGroupId)}
+                      </p>
+                    </div>
+                    {allowedPipelineGroupIds.length > 1 ? (
+                      <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:min-w-[240px]">
+                        <label htmlFor="pipeline-config-group" className="text-[11px] font-medium text-slate-500">
+                          Configurar pipeline para
+                        </label>
+                        <select
+                          id="pipeline-config-group"
+                          value={activePipelineGroupId}
+                          onChange={(e) => setActivePipelineGroupId(e.target.value)}
+                          className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-navy focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                          style={{ fontWeight: 500 }}
+                        >
+                          {allowedPipelineGroupIds.map((id) => (
+                            <option key={id} value={id}>
+                              {pipelineGroupLabel(id)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
+                  </div>
+
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                     <div className="max-w-2xl">
                       <p className="text-[11px] uppercase tracking-[0.14em] text-primary" style={{ fontWeight: 600 }}>
@@ -2412,7 +2621,7 @@ export function AdminPage() {
                         Pipeline de leads
                       </h3>
                       <p className="mt-2 text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                        Reordena, crea, edita o elimina estados del pipeline. El orden impacta directamente las columnas del Kanban.
+                        Cada grupo tiene sus propias columnas. Solo el administrador o el líder del grupo pueden crearlas, ordenarlas y colorearlas. Los cambios aplican al tablero cuando ese grupo está seleccionado en el CRM.
                       </p>
                     </div>
                     <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:max-w-xl">
@@ -2422,7 +2631,7 @@ export function AdminPage() {
                         onChange={(e) => setStageDraftLabel(e.target.value)}
                         placeholder="Nueva columna del pipeline"
                         className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm text-brand-navy placeholder:text-slate-400 focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                        disabled={user.role !== "admin"}
+                        disabled={!canConfigureActivePipeline}
                       />
                       <button
                         type="button"
@@ -2432,7 +2641,7 @@ export function AdminPage() {
                           handleAddKanbanStage(label);
                           setStageDraftLabel("");
                         }}
-                        disabled={user.role !== "admin" || !stageDraftLabel.trim()}
+                        disabled={!canConfigureActivePipeline || !stageDraftLabel.trim()}
                         className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm text-white transition hover:bg-brand-red-hover disabled:cursor-not-allowed disabled:opacity-50"
                         style={{ fontWeight: 600 }}
                       >
@@ -2442,9 +2651,9 @@ export function AdminPage() {
                     </div>
                   </div>
 
-                  {user.role !== "admin" && (
+                  {!canConfigureActivePipeline && (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                      Solo los administradores pueden modificar las columnas del pipeline.
+                      Solo el administrador o el líder de este grupo pueden modificar las columnas del pipeline.
                     </div>
                   )}
 
@@ -2465,22 +2674,25 @@ export function AdminPage() {
                           ? LEAD_STATUS_LABEL[stageId as keyof typeof LEAD_STATUS_LABEL]
                           : customStage?.label ?? stageId;
                         const isEditing = editingStageId === stageId;
-                        const leadsInStage = leads.filter((lead) => lead.status === stageId).length;
+                        const leadsInStage = leads.filter(
+                          (lead) =>
+                            lead.status === stageId && lead.pipelineGroupId === activePipelineGroupId
+                        ).length;
 
                         return (
                           <PipelineStageReorderRow
                             key={stageId}
                             index={index}
                             moveRow={handleReorderPipelineRows}
-                            canDrag={user.role === "admin"}
+                            canDrag={canConfigureActivePipeline}
                           >
                           <div
                             className={`rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 ${
-                              user.role === "admin" ? "cursor-grab active:cursor-grabbing" : ""
+                              canConfigureActivePipeline ? "cursor-grab active:cursor-grabbing" : ""
                             }`}
                           >
                             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                              {user.role === "admin" && (
+                              {canConfigureActivePipeline && (
                                 <div
                                   className="flex shrink-0 items-center justify-center text-slate-400 lg:pt-0.5"
                                   aria-hidden
@@ -2495,7 +2707,7 @@ export function AdminPage() {
                                     value={stageDraftLabel}
                                     onChange={(e) => setStageDraftLabel(e.target.value)}
                                     className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-navy focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                                    disabled={user.role !== "admin"}
+                                    disabled={!canConfigureActivePipeline}
                                   />
                                 ) : (
                                   <>
@@ -2518,18 +2730,27 @@ export function AdminPage() {
                                 )}
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
-                                {user.role === "admin" && !isEditing && (
+                                {canConfigureActivePipeline && !isEditing && (
                                   <label className="flex items-center gap-2 rounded-lg border border-slate-200/80 bg-white px-2.5 py-1.5 text-[11px] font-medium text-slate-600 shadow-sm">
                                     Color columna
                                     <input
                                       type="color"
                                       value={resolveStageHex(stageId)}
-                                      onChange={(e) =>
-                                        setStageColumnColors((prev) => ({
-                                          ...prev,
-                                          [stageId]: e.target.value,
-                                        }))
-                                      }
+                                      onChange={(e) => {
+                                        const hex = e.target.value;
+                                        setPipelineByGroup((map) => {
+                                          const cur =
+                                            map[activePipelineGroupId] ??
+                                            createEmptyGroupPipelineSnapshot();
+                                          return {
+                                            ...map,
+                                            [activePipelineGroupId]: {
+                                              ...cur,
+                                              stageColors: { ...cur.stageColors, [stageId]: hex },
+                                            },
+                                          };
+                                        });
+                                      }}
                                       className="h-8 w-11 cursor-pointer rounded border border-slate-200 bg-white p-0.5"
                                       title="Acento visual en Kanban, vista lista y chips de estado"
                                       aria-label={`Color de columna para ${stageLabel}`}
@@ -2547,7 +2768,7 @@ export function AdminPage() {
                                         setEditingStageId(null);
                                         setStageDraftLabel("");
                                       }}
-                                      disabled={user.role !== "admin" || !stageDraftLabel.trim()}
+                                      disabled={!canConfigureActivePipeline || !stageDraftLabel.trim()}
                                       className="inline-flex items-center rounded-lg bg-brand-navy px-3 py-2 text-xs text-white transition hover:bg-[#1e2a45] disabled:cursor-not-allowed disabled:opacity-50"
                                       style={{ fontWeight: 600 }}
                                     >
@@ -2575,7 +2796,7 @@ export function AdminPage() {
                                             setEditingStageId(stageId);
                                             setStageDraftLabel(stageLabel);
                                           }}
-                                          disabled={user.role !== "admin"}
+                                          disabled={!canConfigureActivePipeline}
                                           className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                                           style={{ fontWeight: 600 }}
                                         >
@@ -2585,7 +2806,7 @@ export function AdminPage() {
                                         <button
                                           type="button"
                                           onClick={() => requestDeletePipelineStage(stageId, stageLabel)}
-                                          disabled={user.role !== "admin"}
+                                          disabled={!canConfigureActivePipeline}
                                           className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                                           style={{ fontWeight: 600 }}
                                         >
@@ -2659,6 +2880,8 @@ export function AdminPage() {
           teamUsers={users}
           currentUserId={user?.id ?? ""}
           onViewTeamMember={handleViewTeamMember}
+          canManageClients={canAccessClients}
+          onRegisterClientFromLead={handleRegisterClientFromLead}
         />
 
         <AlertDialog

@@ -6,6 +6,7 @@ export type UserPermission =
   | "manage_properties"
   | "manage_developments"
   | "manage_users"
+  | "manage_clients"
   | "edit_site";
 
 export interface UserHistoryEntry {
@@ -74,9 +75,16 @@ const USERS_STORAGE_KEY = "viterra_admin_users";
 const PASSWORDS_STORAGE_KEY = "viterra_admin_passwords";
 
 const defaultPermissionsByRole: Record<UserRole, UserPermission[]> = {
-  admin: ["manage_leads", "manage_properties", "manage_developments", "manage_users", "edit_site"],
-  lider_grupo: ["manage_leads", "manage_properties", "manage_developments"],
-  asesor: ["manage_leads"],
+  admin: [
+    "manage_leads",
+    "manage_properties",
+    "manage_developments",
+    "manage_users",
+    "manage_clients",
+    "edit_site",
+  ],
+  lider_grupo: ["manage_leads", "manage_properties", "manage_developments", "manage_clients"],
+  asesor: ["manage_leads", "manage_clients"],
 };
 
 const baseSeedUsers: Array<{ email: string; password: string; user: Omit<User, "permissions" | "profile" | "isActive" | "createdAt" | "updatedAt" | "history"> & Partial<User> }> = [
@@ -99,16 +107,32 @@ const newHistoryEntry = (
 
 const normalizeRole = (role: string | undefined): UserRole => (role === "agente" ? "asesor" : (role as UserRole)) || "asesor";
 
+const ALL_PERMISSIONS: UserPermission[] = [
+  "manage_leads",
+  "manage_properties",
+  "manage_developments",
+  "manage_users",
+  "manage_clients",
+  "edit_site",
+];
+
 const normalizeUser = (raw: Partial<User>): User => {
   const now = new Date().toISOString();
   const role = normalizeRole(raw.role);
   const profile = raw.profile ?? { phone: "", address: "", birthDate: "", workHistory: [] };
+  let permissions: UserPermission[] =
+    raw.permissions && raw.permissions.length > 0
+      ? raw.permissions.filter((p): p is UserPermission => ALL_PERMISSIONS.includes(p as UserPermission))
+      : [...defaultPermissionsByRole[role]];
+  if (!permissions.includes("manage_clients") && defaultPermissionsByRole[role].includes("manage_clients")) {
+    permissions = [...permissions, "manage_clients"];
+  }
   return {
     id: raw.id ?? `${Date.now()}`,
     email: raw.email ?? "",
     name: raw.name ?? "",
     role,
-    permissions: raw.permissions && raw.permissions.length > 0 ? raw.permissions : defaultPermissionsByRole[role],
+    permissions,
     profile: {
       phone: profile.phone ?? "",
       address: profile.address ?? "",

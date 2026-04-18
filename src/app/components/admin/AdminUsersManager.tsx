@@ -16,6 +16,7 @@ import {
   Search,
   Shield,
   UserPlus,
+  UserCircle2,
   Users,
 } from "lucide-react";
 import { User, UserHistoryEntry, UserPermission, UserRole } from "../../contexts/AuthContext";
@@ -72,6 +73,12 @@ const permissionCards: Array<{
     label: "Usuarios",
     description: "Alta, permisos y equipo",
     Icon: Shield,
+  },
+  {
+    value: "manage_clients",
+    label: "Clientes",
+    description: "Fichas de clientes y relación con inventario",
+    Icon: UserCircle2,
   },
   {
     value: "edit_site",
@@ -209,7 +216,7 @@ export function AdminUsersManager({
     workHistory: "",
     password: "",
     role: "asesor" as UserRole,
-    permissions: ["manage_leads"] as UserPermission[],
+    permissions: ["manage_leads", "manage_clients"] as UserPermission[],
   });
 
   const filteredUsers = useMemo(() => {
@@ -285,7 +292,7 @@ export function AdminUsersManager({
       workHistory: "",
       password: "",
       role: "asesor",
-      permissions: ["manage_leads"],
+      permissions: ["manage_leads", "manage_clients"],
     });
   };
 

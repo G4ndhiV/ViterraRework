@@ -40,11 +40,13 @@ export function saveWorkspaceAdminSettings(next: WorkspaceAdminSettings): void {
 /** Claves locales que componen la “base” del CRM en este navegador */
 export const CRM_LOCAL_STORAGE_KEYS: Array<{ key: string; label: string }> = [
   { key: "viterra_leads", label: "Leads y pipeline" },
+  { key: "viterra_crm_clients", label: "Clientes del CRM" },
   { key: "viterra_properties", label: "Propiedades (catálogo admin)" },
   { key: "viterra_admin_developments", label: "Desarrollos" },
-  { key: "viterra_kanban_custom_stages", label: "Etapas personalizadas del Kanban" },
-  { key: "viterra_kanban_stage_order", label: "Orden de columnas del pipeline" },
-  { key: "viterra_kanban_stage_colors", label: "Colores de columnas del pipeline" },
+  { key: "viterra_kanban_pipeline_by_group", label: "Pipeline Kanban por grupo de trabajo" },
+  { key: "viterra_kanban_custom_stages", label: "Etapas Kanban (legado; migrado al guardar por grupo)" },
+  { key: "viterra_kanban_stage_order", label: "Orden de columnas (legado)" },
+  { key: "viterra_kanban_stage_colors", label: "Colores de columnas (legado)" },
   { key: "viterra_agenda_appointments", label: "Citas de la agenda" },
   { key: "viterra_site_content", label: "Contenido del sitio web" },
   { key: "viterra_admin_users", label: "Usuarios del CRM" },

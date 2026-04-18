@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, History, Mail, MessageCircle, Phone, Plus, Tag, Trash2 } from "lucide-react";
+import { Calendar, History, Mail, MessageCircle, Phone, Plus, Tag, Trash2, UserCircle2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -49,6 +49,10 @@ type Props = {
   currentUserId?: string;
   /** Navega a Mi empresa → Usuarios y abre el detalle (solo lectura si no es admin). */
   onViewTeamMember?: (userId: string) => void;
+  /** Permiso para ficha de cliente CRM */
+  canManageClients?: boolean;
+  /** Abre el módulo Clientes y crea o vincula ficha desde este lead */
+  onRegisterClientFromLead?: (lead: Lead) => void;
 };
 
 export function LeadDetailDialog({
@@ -63,6 +67,8 @@ export function LeadDetailDialog({
   teamUsers = [],
   currentUserId = "",
   onViewTeamMember,
+  canManageClients = false,
+  onRegisterClientFromLead,
 }: Props) {
   const [editing, setEditing] = useState(defaultMode === "edit");
   const [draft, setDraft] = useState<Lead | null>(null);
@@ -950,6 +956,17 @@ export function LeadDetailDialog({
 
         <DialogFooter className="shrink-0 flex-col gap-2 border-t border-stone-200/90 bg-stone-50/90 px-4 py-3 sm:flex-row sm:justify-between sm:px-6">
           <div className="flex flex-wrap gap-2">
+            {canManageClients && onRegisterClientFromLead && (
+              <Button
+                type="button"
+                variant="outline"
+                className="border-stone-300 bg-white text-brand-navy hover:bg-stone-50"
+                onClick={() => onRegisterClientFromLead(d)}
+              >
+                <UserCircle2 className="mr-2 h-4 w-4" strokeWidth={1.75} />
+                Cliente CRM
+              </Button>
+            )}
             <Button type="button" variant="destructive" onClick={handleDelete}>
               Eliminar
             </Button>

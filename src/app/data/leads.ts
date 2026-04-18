@@ -76,6 +76,8 @@ export interface Lead {
   assignedTo: string;
   /** ID de usuario CRM; el asesor solo ve leads con su id */
   assignedToUserId: string;
+  /** Pipeline de ventas (grupo de trabajo) al que pertenece el lead; columnas Kanban dependen de este id */
+  pipelineGroupId: string;
   /** Historial de notas (cada una con fecha y texto libre). */
   clientNotes: LeadClientNote[];
   /** Historial de movimientos/acciones del lead para pestaña de actividad. */
@@ -135,6 +137,7 @@ export const mockLeads: Lead[] = [
     source: "Website",
     assignedTo: "María González",
     assignedToUserId: "4",
+    pipelineGroupId: "__default__",
     clientNotes: [
       {
         id: "lnote_1a",
@@ -159,6 +162,7 @@ export const mockLeads: Lead[] = [
     source: "Facebook",
     assignedTo: "Carlos Rodríguez",
     assignedToUserId: "5",
+    pipelineGroupId: "__default__",
     clientNotes: [
       {
         id: "lnote_2a",
@@ -183,6 +187,7 @@ export const mockLeads: Lead[] = [
     source: "Referido",
     assignedTo: "Laura Méndez",
     assignedToUserId: "3",
+    pipelineGroupId: "__default__",
     clientNotes: [
       {
         id: "lnote_3a",
@@ -207,6 +212,7 @@ export const mockLeads: Lead[] = [
     source: "Instagram",
     assignedTo: "María González",
     assignedToUserId: "4",
+    pipelineGroupId: "__default__",
     clientNotes: [
       {
         id: "lnote_4a",
@@ -236,6 +242,7 @@ export const mockLeads: Lead[] = [
     source: "Website",
     assignedTo: "Laura Méndez",
     assignedToUserId: "3",
+    pipelineGroupId: "__default__",
     clientNotes: [
       {
         id: "lnote_5a",
@@ -260,6 +267,7 @@ export const mockLeads: Lead[] = [
     source: "Google",
     assignedTo: "Laura Méndez",
     assignedToUserId: "3",
+    pipelineGroupId: "__default__",
     clientNotes: [
       {
         id: "lnote_6a",
@@ -284,6 +292,7 @@ export const mockLeads: Lead[] = [
     source: "Referido",
     assignedTo: "Carlos Rodríguez",
     assignedToUserId: "5",
+    pipelineGroupId: "__default__",
     clientNotes: [
       {
         id: "lnote_7a",
@@ -308,6 +317,7 @@ export const mockLeads: Lead[] = [
     source: "Website",
     assignedTo: "María González",
     assignedToUserId: "4",
+    pipelineGroupId: "__default__",
     clientNotes: [
       {
         id: "lnote_8a",
@@ -412,6 +422,11 @@ export function normalizeStoredLead(raw: Partial<Lead> & Record<string, unknown>
   }
   if (!assignedToUserId) assignedToUserId = "1";
 
+  const pipelineGroupId =
+    typeof raw.pipelineGroupId === "string" && raw.pipelineGroupId.length > 0
+      ? raw.pipelineGroupId
+      : "__default__";
+
   return {
     id: String(raw.id ?? fallback.id),
     name: String(raw.name ?? ""),
@@ -429,6 +444,7 @@ export function normalizeStoredLead(raw: Partial<Lead> & Record<string, unknown>
     source: String(raw.source ?? ""),
     assignedTo: String(raw.assignedTo ?? "Sin asignar"),
     assignedToUserId,
+    pipelineGroupId,
     clientNotes: migrateClientNotes(raw),
     activity: migrateLeadActivity(raw),
     createdAt: String(raw.createdAt ?? ""),

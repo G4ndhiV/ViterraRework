@@ -21,6 +21,7 @@ import {
 import { LeadPriorityStarsInput } from "./LeadPriorityStarsInput";
 import { CRM_ASSIGNEES, getAssigneeNameById } from "../../data/crmAssignees";
 import { findDuplicateLeads, nextLeadId } from "../../lib/leadDuplicates";
+import { DEFAULT_PIPELINE_GROUP_ID } from "../../lib/pipelineByGroup";
 
 type Props = {
   open: boolean;
@@ -29,6 +30,8 @@ type Props = {
   onAddLead: (lead: Lead) => void;
   user: User;
   customKanbanStages?: CustomKanbanStage[];
+  /** Grupo de trabajo cuyo pipeline Kanban aplica a este lead */
+  pipelineGroupId?: string;
 };
 
 const emptyForm = {
@@ -51,6 +54,7 @@ export function AddLeadDialog({
   onAddLead,
   user,
   customKanbanStages = [],
+  pipelineGroupId = DEFAULT_PIPELINE_GROUP_ID,
 }: Props) {
   const [form, setForm] = useState(emptyForm);
   const [assigneeId, setAssigneeId] = useState(user.id);
@@ -107,6 +111,7 @@ export function AddLeadDialog({
       source: form.source.trim() || "CRM",
       assignedTo: getAssigneeNameById(assigneeId),
       assignedToUserId: assigneeId,
+      pipelineGroupId,
       clientNotes: noteText
         ? [{ id: newLeadClientNoteId(), date: today, body: noteText }]
         : [],
