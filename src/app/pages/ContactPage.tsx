@@ -1,13 +1,25 @@
 import { useState, useEffect, useRef } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
-import { MapPin, Phone, Mail, Clock, Send, ChevronsDown } from "lucide-react";
+import { MapPin, Phone, Mail, Clock, Send } from "lucide-react";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
 import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
+import { Reveal } from "../components/Reveal";
+import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
 import { cn } from "../components/ui/utils";
+import {
+  viterraHeroSectionClass,
+  viterraHeroCenteredStackClass,
+  viterraHeroCenteredInnerClass,
+  viterraHeroMainClass,
+  viterraHeroTitleClass,
+  viterraHeroSubtitleClass,
+} from "../config/heroLayout";
 
 export function ContactPage() {
+  const reduceMotion = useReducedMotion();
   const pl = usePreviewLayout();
   const { content } = useSiteContent();
   const c = content.contact;
@@ -162,35 +174,70 @@ export function ContactPage() {
     };
   }, [c.mapLat, c.mapLng, c.mapPopupTitle, c.mapPopupAddress]);
 
+  const heroContainerVariants = {
+    hidden: {},
+    visible: {
+      transition: {
+        staggerChildren: reduceMotion ? 0 : 0.1,
+        delayChildren: reduceMotion ? 0 : 0.06,
+      },
+    },
+  } as const;
+
+  const heroItemVariants = {
+    hidden: { opacity: reduceMotion ? 1 : 0, y: reduceMotion ? 0 : 22 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: reduceMotion ? 0 : 0.52, ease: [0.22, 1, 0.36, 1] as const },
+    },
+  } as const;
+
   return (
     <div className="viterra-page min-h-screen flex flex-col bg-white" >
       <Header />
 
       {/* Hero Section */}
       <PreviewSectionChrome blockId="contact-hero" label="Cabecera">
-      <section className="relative flex min-h-[100svh] flex-col justify-end overflow-hidden bg-brand-navy pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] pt-[calc(env(safe-area-inset-top,0px)+5.25rem)] sm:pb-16 sm:pt-[calc(env(safe-area-inset-top,0px)+6.5rem)] md:pb-24 md:pt-52">
-        <div className="absolute inset-0 z-0">
-          <img
+      <section className={viterraHeroSectionClass}>
+        <div className="absolute inset-0 z-0 overflow-hidden">
+          <motion.img
             src="https://blog.grupoguia.mx/hubfs/DJI_20241206140245_0034_D.jpg"
             alt=""
             className="h-full w-full object-cover"
+            initial={false}
+            animate={
+              reduceMotion
+                ? { scale: 1.05 }
+                : { scale: [1.05, 1.07, 1.05] }
+            }
+            transition={
+              reduceMotion
+                ? { duration: 0 }
+                : { duration: 22, repeat: Infinity, ease: "easeInOut" }
+            }
           />
           <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60" />
         </div>
-        <div className="relative z-10 mx-auto max-w-7xl px-4 py-6 text-center sm:px-6 lg:px-8">
-          <p className="font-heading text-[11px] font-normal uppercase tracking-[0.28em] text-white/75 md:text-xs not-italic">
-            Viterra · Contacto
-          </p>
-          <span className="mx-auto mt-3 block h-px w-12 bg-primary" aria-hidden />
-          <div className="mt-5 flex justify-center text-primary" aria-hidden>
-            <ChevronsDown className="h-7 w-7 sm:h-8 sm:w-8" strokeWidth={1.5} />
-          </div>
-          <h1 className="font-heading mt-5 text-3xl font-light tracking-[-0.02em] text-white sm:mt-6 sm:text-4xl md:text-6xl mb-3 sm:mb-4">
-            {c.heroTitle}
-          </h1>
-          <p className="font-heading mx-auto max-w-2xl text-base font-light leading-relaxed text-white/90 not-italic sm:text-lg md:text-xl">
-            {c.heroSubtitle}
-          </p>
+        <div className={viterraHeroCenteredStackClass}>
+          <motion.div
+            className={viterraHeroCenteredInnerClass}
+            variants={heroContainerVariants}
+            initial="hidden"
+            animate="visible"
+          >
+            <ViterraHeroTopClusterAnimated
+              kicker="Viterra · Contacto"
+              itemVariants={heroItemVariants}
+              reduceMotion={!!reduceMotion}
+            />
+            <motion.div variants={heroItemVariants} className={viterraHeroMainClass}>
+              <h1 className={viterraHeroTitleClass}>{c.heroTitle}</h1>
+            </motion.div>
+            <motion.p variants={heroItemVariants} className={viterraHeroSubtitleClass}>
+              {c.heroSubtitle}
+            </motion.p>
+          </motion.div>
         </div>
       </section>
       </PreviewSectionChrome>
@@ -200,7 +247,7 @@ export function ContactPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className={cn("grid gap-8 md:gap-12", pl.gridCols("grid-cols-1 lg:grid-cols-3"))}>
             {/* Contact Information */}
-            <div className={cn("space-y-6", pl.colSpan("lg:col-span-1"))}>
+            <Reveal className={cn("space-y-6", pl.colSpan("lg:col-span-1"))} y={26}>
               <PreviewSectionChrome blockId="contact-info" label="Datos de contacto">
               <div className="rounded-lg border border-slate-200 bg-white p-5 sm:p-6 md:p-8">
                 <h3 className="mb-6 text-lg font-semibold tracking-tight text-slate-900 sm:mb-8 sm:text-xl" style={{ fontWeight: 600 }}>
@@ -269,7 +316,11 @@ export function ContactPage() {
 
               {/* Quick Info */}
               <PreviewSectionChrome blockId="contact-whatsapp" label="WhatsApp">
-              <div className="rounded-lg border border-brand-navy/80 bg-brand-navy p-5 text-white sm:p-6 md:p-8">
+              <motion.div
+                className="rounded-lg border border-brand-navy/80 bg-brand-navy p-5 text-white sm:p-6 md:p-8"
+                whileHover={reduceMotion ? undefined : { y: -2 }}
+                transition={{ type: "spring", stiffness: 380, damping: 28 }}
+              >
                 <h3 className="mb-3 text-lg font-semibold tracking-tight sm:mb-4 sm:text-xl" style={{ fontWeight: 600 }}>
                   {c.quickTitle}
                 </h3>
@@ -280,32 +331,38 @@ export function ContactPage() {
                   href={c.quickWhatsappHref}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block w-full bg-white text-brand-navy px-6 py-3.5 rounded-lg hover:bg-brand-canvas hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 text-center font-medium"
+                  className="block w-full bg-white text-brand-navy px-6 py-3.5 rounded-lg hover:bg-brand-canvas hover:shadow-lg transition-all duration-300 text-center font-medium"
                   style={{ fontWeight: 600 }}
                 >
                   {c.quickWhatsappLabel}
                 </a>
-              </div>
+              </motion.div>
               </PreviewSectionChrome>
-            </div>
+            </Reveal>
 
             {/* Contact Form */}
             <PreviewSectionChrome blockId="contact-form" label="Formulario">
-            <div className={pl.colSpan("lg:col-span-2")}>
+            <Reveal className={pl.colSpan("lg:col-span-2")} y={26} delay={0.1}>
+            <div>
               <div className="rounded-lg border border-slate-200 bg-white p-5 sm:p-6 md:p-10">
                 <h3 className="mb-6 text-xl font-semibold tracking-tight text-slate-900 sm:mb-8 sm:text-2xl" style={{ fontWeight: 600 }}>
                   {c.formTitle}
                 </h3>
 
                 {submitted && (
-                  <div className="mb-8 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                  <motion.div
+                    className="mb-8 p-4 bg-slate-50 border border-slate-200 rounded-lg"
+                    initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                  >
                     <p className="text-slate-900 font-semibold mb-1" style={{ fontWeight: 600 }}>
                       {c.successTitle}
                     </p>
                     <p className="text-sm text-slate-600" style={{ fontWeight: 400 }}>
                       {c.successSubtitle}
                     </p>
-                  </div>
+                  </motion.div>
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-6">
@@ -423,14 +480,17 @@ export function ContactPage() {
                     ></textarea>
                   </div>
 
-                  <button
+                  <motion.button
                     type="submit"
-                    className="group w-full bg-[#C8102E] text-white px-6 py-3.5 rounded-lg hover:bg-[#a00d25] hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2 font-medium"
+                    whileHover={reduceMotion ? undefined : { y: -2 }}
+                    whileTap={reduceMotion ? undefined : { scale: 0.98 }}
+                    transition={{ type: "spring", stiffness: 420, damping: 24 }}
+                    className="group w-full bg-[#C8102E] text-white px-6 py-3.5 rounded-lg hover:bg-[#a00d25] hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2 font-medium"
                     style={{ fontWeight: 600 }}
                   >
                     <Send className="w-5 h-5 group-hover:translate-x-1 transition-transform" strokeWidth={1.5} />
                     <span>Enviar Mensaje</span>
-                  </button>
+                  </motion.button>
 
                   <p className="text-sm text-slate-500 text-center font-medium" style={{ fontWeight: 400 }}>
                     * Campos obligatorios
@@ -438,6 +498,7 @@ export function ContactPage() {
                 </form>
               </div>
             </div>
+            </Reveal>
             </PreviewSectionChrome>
           </div>
         </div>
@@ -447,18 +508,24 @@ export function ContactPage() {
       <PreviewSectionChrome blockId="contact-map" label="Mapa">
       <section className="bg-slate-50 py-12 sm:py-16 md:py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-8 text-center sm:mb-12">
-            <p className="mb-2 text-xs uppercase tracking-wide text-slate-500 sm:mb-3 sm:text-sm" style={{ letterSpacing: "0.1em", fontWeight: 500 }}>
-              {c.mapSectionKicker}
-            </p>
-            <h2 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl md:text-4xl" style={{ fontWeight: 600 }}>
-              {c.mapSectionTitle}
-            </h2>
-          </div>
+          <Reveal className="mb-8 text-center sm:mb-12" y={22}>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-slate-500 sm:mb-3 sm:text-sm" style={{ letterSpacing: "0.1em", fontWeight: 500 }}>
+                {c.mapSectionKicker}
+              </p>
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl md:text-4xl" style={{ fontWeight: 600 }}>
+                {c.mapSectionTitle}
+              </h2>
+            </div>
+          </Reveal>
           <style>{`\n            .custom-office-marker {\n              background: none;\n              border: none;\n            }\n            \n            .custom-popup .leaflet-popup-content-wrapper {\n              border-radius: 12px;\n              padding: 16px;\n              box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);\n              border: 1px solid #E2E8F0;\n            }\n            \n            .custom-popup .leaflet-popup-content {\n              margin: 0;\n            }\n            \n            .custom-popup .leaflet-popup-tip {\n              background: white;\n              border: 1px solid #E2E8F0;\n              border-top: none;\n              border-left: none;\n            }\n            \n            .custom-popup .leaflet-popup-close-button {\n              color: #64748B;\n              font-size: 20px;\n              padding: 4px 8px;\n            }\n            \n            .custom-popup .leaflet-popup-close-button:hover {\n              color: #0F172A;\n            }\n          `}</style>
-          <div
+          <motion.div
             ref={mapRef}
             className="h-[min(420px,52svh)] min-h-[240px] w-full overflow-hidden rounded-lg border border-slate-200 shadow-lg sm:h-[400px] md:h-[450px]"
+            initial={reduceMotion ? false : { opacity: 0 }}
+            whileInView={reduceMotion ? undefined : { opacity: 1 }}
+            viewport={{ once: true, amount: 0.25 }}
+            transition={{ duration: 0.45 }}
           />
         </div>
       </section>

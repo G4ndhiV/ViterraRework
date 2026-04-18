@@ -166,7 +166,7 @@ export function ContactEditorForm({
         <LabeledField label="Título">
           <TextInput value={draft.heroTitle} onChange={(v) => p({ heroTitle: v })} />
         </LabeledField>
-        <LabeledField label="Subtítulo">
+        <LabeledField label="Subtítulo" hint="Se muestra bajo el título; no afecta la posición de las flechas.">
           <TextArea value={draft.heroSubtitle} onChange={(v) => p({ heroSubtitle: v })} rows={2} />
         </LabeledField>
       </EditorSection>
@@ -293,7 +293,7 @@ export function ServicesEditorForm({
         <LabeledField label="Título">
           <TextInput value={safe.heroTitle} onChange={(v) => p({ heroTitle: v })} />
         </LabeledField>
-        <LabeledField label="Subtítulo">
+        <LabeledField label="Subtítulo" hint="Se muestra bajo el título; no afecta la posición de las flechas.">
           <TextArea value={safe.heroSubtitle} onChange={(v) => p({ heroSubtitle: v })} rows={2} />
         </LabeledField>
       </EditorSection>
@@ -390,7 +390,7 @@ export function AboutEditorForm({
         <LabeledField label="Título">
           <TextInput value={draft.heroTitle} onChange={(v) => p({ heroTitle: v })} />
         </LabeledField>
-        <LabeledField label="Subtítulo">
+        <LabeledField label="Subtítulo" hint="Se muestra bajo el título; no afecta la posición de las flechas.">
           <TextArea value={draft.heroSubtitle} onChange={(v) => p({ heroSubtitle: v })} rows={2} />
         </LabeledField>
       </EditorSection>
@@ -587,6 +587,17 @@ export function AboutEditorForm({
                 }}
               />
             </LabeledField>
+            <ImageUrlField
+              label="Foto (cuadrada)"
+              value={member.image ?? ""}
+              onChange={(v) => {
+                const team = draft.team.map((x, j) =>
+                  j === i ? { ...x, image: v.trim() || undefined } : x
+                );
+                p({ team });
+              }}
+              hint="URL de imagen; se muestra en recorte cuadrado. Si está vacío, se usan las iniciales."
+            />
           </div>
         ))}
       </EditorSection>
@@ -620,7 +631,7 @@ export function DevelopmentsEditorForm({
         <LabeledField label="Título">
           <TextInput value={draft.heroTitle} onChange={(v) => p({ heroTitle: v })} />
         </LabeledField>
-        <LabeledField label="Subtítulo">
+        <LabeledField label="Subtítulo" hint="Se muestra bajo el título; no afecta la posición de las flechas.">
           <TextArea value={draft.heroSubtitle} onChange={(v) => p({ heroSubtitle: v })} rows={3} />
         </LabeledField>
       </EditorSection>

@@ -1,7 +1,8 @@
 import { Link } from "react-router";
-import { Facebook, Instagram, Twitter, Mail, Phone, MapPin } from "lucide-react";
+import { Mail, Phone, MapPin } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { usePreviewCanvas, usePreviewLayout } from "../../contexts/PreviewCanvasContext";
+import { SocialFollowStrip } from "./SocialFollowStrip";
 import { cn } from "./ui/utils";
 
 export function Footer() {
@@ -18,6 +19,8 @@ export function Footer() {
       className="bg-brand-navy pb-[env(safe-area-inset-bottom,0px)] text-slate-300"
     >
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+        <SocialFollowStrip theme="dark" flush />
+
         <div className={cn("grid gap-12", pl.gridCols("grid-cols-1 md:grid-cols-2 lg:grid-cols-4"))}>
           {/* Company Info */}
           <div>
@@ -33,29 +36,9 @@ export function Footer() {
                 Grupo Inmobiliario
               </p>
             </div>
-            <p className="text-sm mb-6 leading-relaxed not-italic" style={{ fontWeight: 400 }}>
+            <p className="text-sm leading-relaxed not-italic" style={{ fontWeight: 400 }}>
               Tu socio de confianza en bienes raíces. Más de 15 años ayudando a personas a encontrar su hogar ideal.
             </p>
-            <div className="flex gap-3">
-              <a
-                href="#"
-                className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center hover:scale-110 hover:bg-primary transition-all duration-300 group"
-              >
-                <Facebook className="w-5 h-5 text-slate-300 group-hover:text-white transition-colors" strokeWidth={1.5} />
-              </a>
-              <a
-                href="#"
-                className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center hover:scale-110 hover:bg-primary transition-all duration-300 group"
-              >
-                <Instagram className="w-5 h-5 text-slate-300 group-hover:text-white transition-colors" strokeWidth={1.5} />
-              </a>
-              <a
-                href="#"
-                className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center hover:scale-110 hover:bg-primary transition-all duration-300 group"
-              >
-                <Twitter className="w-5 h-5 text-slate-300 group-hover:text-white transition-colors" strokeWidth={1.5} />
-              </a>
-            </div>
           </div>
 
           {/* Quick Links */}
