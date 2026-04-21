@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { Building2, Lock, User, Eye, EyeOff, ArrowRight } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -6,32 +6,37 @@ import { Reveal } from "../components/Reveal";
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, authReady, isAuthenticated } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    if (authReady && isAuthenticated) {
+      navigate("/admin", { replace: true });
+    }
+  }, [authReady, isAuthenticated, navigate]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
 
-    setTimeout(() => {
-      const success = login(email, password);
-      if (success) {
-        navigate("/admin");
-      } else {
-        setError("Credenciales incorrectas. Verifica email y contraseña.");
-      }
-      setIsLoading(false);
-    }, 800);
+    const result = await login(email, password);
+    setIsLoading(false);
+    if (result.ok) {
+      navigate("/admin");
+    } else {
+      setError(result.message ?? "No se pudo iniciar sesión.");
+    }
   };
 
   return (
-    <div className="viterra-page min-h-screen bg-white flex items-center justify-center p-6">
-      <Reveal className="w-full max-w-md" y={24}>
+    <div className="viterra-page flex min-h-screen flex-col bg-white">
+      <div className="flex flex-1 items-center justify-center p-6">
+        <Reveal className="w-full max-w-md" y={24}>
         {/* Logo y Título */}
         <div className="text-center mb-12">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-lg mb-6 bg-primary">
@@ -129,31 +134,15 @@ export function LoginPage() {
             </button>
           </form>
 
-          {/* Credenciales de Demo */}
           <div className="mt-6 p-4 bg-slate-50 border border-slate-200 rounded-lg">
-            <p className="text-xs font-semibold text-slate-700 mb-3 uppercase tracking-wide" style={{ letterSpacing: '0.05em', fontWeight: 600 }}>
-              Credenciales de Demo:
+            <p className="text-xs text-slate-600 leading-relaxed" style={{ fontWeight: 500 }}>
+              El acceso es con usuarios creados en{" "}
+              <span className="font-semibold text-brand-navy">Supabase Auth</span>. El rol y permisos del CRM se leen de
+              metadatos del usuario (<code className="rounded bg-white px-1 py-0.5 text-[11px]">role</code>,{" "}
+              <code className="rounded bg-white px-1 py-0.5 text-[11px]">permissions</code>). Tras iniciar sesión, las
+              peticiones a leads y propiedades usan tu sesión y aplican las políticas RLS (p. ej.{" "}
+              <code className="text-[11px]">authenticated</code>).
             </p>
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs text-slate-500 mb-1" style={{ fontWeight: 500 }}>Administrador (todos los leads):</p>
-                <code className="text-xs font-mono bg-white px-2 py-1 rounded border border-slate-200 text-slate-900">
-                  admin@viterra.com / admin123
-                </code>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1" style={{ fontWeight: 500 }}>Líder de grupo (todos los leads):</p>
-                <code className="text-xs font-mono bg-white px-2 py-1 rounded border border-slate-200 text-slate-900">
-                  lider@viterra.com / lider123
-                </code>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1" style={{ fontWeight: 500 }}>Asesor (solo leads asignados):</p>
-                <code className="text-xs font-mono bg-white px-2 py-1 rounded border border-slate-200 text-slate-900">
-                  asesor@viterra.com / asesor123
-                </code>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -168,7 +157,8 @@ export function LoginPage() {
             Volver al sitio web
           </button>
         </div>
-      </Reveal>
+        </Reveal>
+      </div>
     </div>
   );
 }

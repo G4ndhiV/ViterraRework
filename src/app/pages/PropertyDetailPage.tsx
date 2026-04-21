@@ -1,15 +1,30 @@
 import { useParams, Link } from "react-router";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
-import { mockProperties } from "../data/properties";
+import { useCatalogProperties } from "../hooks/useCatalogProperties";
 import { Bed, Bath, Square, MapPin, Calendar, Share2, Heart, ArrowLeft, CheckCircle } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 
 export function PropertyDetailPage() {
   const { id } = useParams();
-  const property = mockProperties.find((p) => p.id === id);
+  const { properties, loading } = useCatalogProperties();
+  const property = useMemo(() => properties.find((p) => p.id === id), [properties, id]);
   const [isFavorite, setIsFavorite] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="viterra-page flex min-h-screen flex-col">
+        <Header />
+        <div data-reveal className="flex flex-1 items-center justify-center">
+          <p className="text-slate-600" style={{ fontWeight: 500 }}>
+            Cargando…
+          </p>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!property) {
     return (
@@ -20,7 +35,7 @@ export function PropertyDetailPage() {
             <h2 className="text-2xl font-semibold text-slate-900 mb-4 tracking-tight" style={{ fontWeight: 600 }}>
               Propiedad no encontrada
             </h2>
-            <Link to="/propiedades" className="text-slate-900 hover:text-slate-700 font-medium" style={{ fontWeight: 500 }}>
+            <Link to="/renta" className="text-slate-900 hover:text-slate-700 font-medium" style={{ fontWeight: 500 }}>
               Volver a propiedades
             </Link>
           </div>
@@ -38,7 +53,7 @@ export function PropertyDetailPage() {
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 py-5">
           <Link
-            to="/propiedades"
+            to={property.status === "venta" ? "/venta" : "/renta"}
             className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors font-medium"
             style={{ fontWeight: 500 }}
           >

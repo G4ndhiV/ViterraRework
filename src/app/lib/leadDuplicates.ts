@@ -32,10 +32,10 @@ export function findDuplicateLeads(
   });
 }
 
-export function nextLeadId(leads: Lead[]): string {
-  const max = leads.reduce((m, l) => {
-    const n = parseInt(l.id, 10);
-    return Number.isFinite(n) ? Math.max(m, n) : m;
-  }, 0);
-  return String(max + 1);
+/** Identificador único para nuevos leads (compatible con UUID en Supabase). */
+export function newLeadId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `lead_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
 }

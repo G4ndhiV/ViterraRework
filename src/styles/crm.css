@@ -1,6 +1,6 @@
 /**
  * CRM Viterra — guía de marca
- * Títulos: Montserrat (--font-heading)
+ * Títulos: Poppins (--font-heading)
  * Cuerpo / UI: Poppins (:root --font-family)
  * Leyendas discretas: Perpetua (--font-tertiary)
  */
@@ -8,6 +8,11 @@
 .viterra-crm {
   font-family: var(--font-family);
   -webkit-font-smoothing: antialiased;
+}
+
+body.admin-crm-montserrat,
+body.admin-crm-montserrat * {
+  font-family: var(--font-heading), system-ui, sans-serif;
 }
 
 .viterra-crm .crm-hero-title {

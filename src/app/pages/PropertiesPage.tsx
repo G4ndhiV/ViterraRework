@@ -1,39 +1,26 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link, useSearchParams } from "react-router";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { SearchBar, SearchFilters } from "../components/SearchBar";
-import { PropertyCard } from "../components/PropertyCard";
+import { PropertyCard, type Property } from "../components/PropertyCard";
 import { PropertyMap } from "../components/PropertyMap";
-import { mockProperties } from "../data/properties";
+import { useCatalogProperties } from "../hooks/useCatalogProperties";
 import { SlidersHorizontal, Building2, Map, LayoutGrid, MapPinned } from "lucide-react";
 
 export function PropertiesPage() {
   const [searchParams] = useSearchParams();
-  const [filteredProperties, setFilteredProperties] = useState(mockProperties);
+  const { properties } = useCatalogProperties();
+  const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
   const [sortBy, setSortBy] = useState("newest");
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
 
-  // Aplicar filtros desde URL cuando la página carga
   useEffect(() => {
-    const filters: SearchFilters = {
-      query: searchParams.get('query') || '',
-      type: searchParams.get('type') || '',
-      status: searchParams.get('status') || '',
-      minPrice: searchParams.get('minPrice') || '',
-      maxPrice: searchParams.get('maxPrice') || '',
-    };
+    setFilteredProperties(properties);
+  }, [properties]);
 
-    // Solo aplicar filtros si hay algún parámetro en la URL
-    const hasFilters = filters.query || filters.type || filters.status || filters.minPrice || filters.maxPrice;
-    
-    if (hasFilters) {
-      handleSearch(filters);
-    }
-  }, [searchParams]);
-
-  const handleSearch = (filters: SearchFilters) => {
-    let filtered = [...mockProperties];
+  const handleSearch = useCallback((filters: SearchFilters) => {
+    let filtered = [...properties];
 
     // Filter by query
     if (filters.query) {
@@ -65,7 +52,25 @@ export function PropertiesPage() {
     }
 
     setFilteredProperties(filtered);
-  };
+  }, [properties]);
+
+  // Aplicar filtros desde URL cuando la página carga
+  useEffect(() => {
+    const filters: SearchFilters = {
+      query: searchParams.get("query") || "",
+      type: searchParams.get("type") || "",
+      status: searchParams.get("status") || "",
+      minPrice: searchParams.get("minPrice") || "",
+      maxPrice: searchParams.get("maxPrice") || "",
+    };
+
+    const hasFilters =
+      filters.query || filters.type || filters.status || filters.minPrice || filters.maxPrice;
+
+    if (hasFilters) {
+      handleSearch(filters);
+    }
+  }, [searchParams, handleSearch]);
 
   const handleSort = (value: string) => {
     setSortBy(value);

@@ -1,4 +1,4 @@
-import { Search, MapPinned } from "lucide-react";
+import { Search } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { Link, useSearchParams } from "react-router";
 import { cn } from "./ui/utils";
@@ -22,8 +22,14 @@ export interface SearchFilters {
   maxPrice: string;
 }
 
-const fieldBase =
-  "w-full px-4 py-3 border text-sm transition-colors outline-none focus-visible:ring-1 focus-visible:ring-offset-0";
+/** Altura unificada para inputs, selects y botón principal (evita desalineación). */
+const CONTROL_H = "h-12 min-h-[3rem]";
+
+const fieldBase = cn(
+  "box-border w-full border px-4 text-sm transition-colors outline-none focus-visible:ring-1 focus-visible:ring-offset-0",
+  CONTROL_H,
+  "py-0 leading-[3rem]"
+);
 
 export function SearchBar({
   onSearch,
@@ -69,34 +75,40 @@ export function SearchBar({
 
   const labelClass = cn(
     "block mb-2 uppercase tracking-[0.16em]",
-    isPremium ? "text-[10px] text-neutral-600 font-medium" : "text-sm font-medium text-slate-700"
+    isPremium ? "text-[10px] text-brand-navy/60 font-medium" : "text-sm font-medium text-slate-700"
   );
 
   const fieldClass = cn(
     fieldBase,
     isPremium
-      ? "rounded-none border-neutral-300 bg-[#faf9f7] text-neutral-900 placeholder:text-neutral-400 focus-visible:border-neutral-900 focus-visible:ring-neutral-900/25"
+      ? "rounded-none border-brand-navy/20 bg-brand-canvas text-brand-navy placeholder:text-brand-navy/45 focus-visible:border-brand-navy focus-visible:ring-brand-navy/20"
       : "rounded-lg border-slate-300 focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
   );
 
   const btnClass = cn(
-    "w-full flex items-center justify-center gap-2 text-sm font-medium transition-colors",
+    CONTROL_H,
+    "inline-flex w-full shrink-0 items-center justify-center gap-2 text-sm font-medium transition-colors",
     isPremium
-      ? "rounded-none bg-[#C8102E] text-white px-6 py-3 tracking-[0.12em] uppercase text-xs hover:bg-[#a00d25] focus-visible:ring-1 focus-visible:ring-[#7f1d1d] focus-visible:ring-offset-2"
-      : "bg-[#C8102E] text-white px-6 py-2.5 rounded-lg hover:bg-[#a00d25]"
+      ? "rounded-none bg-primary px-5 text-white tracking-[0.12em] text-[11px] uppercase hover:bg-brand-red-hover focus-visible:ring-1 focus-visible:ring-brand-burgundy focus-visible:ring-offset-2"
+      : "rounded-lg bg-primary px-5 text-white hover:bg-brand-red-hover"
   );
 
   return (
     <form
       onSubmit={handleSubmit}
       className={cn(
-        "min-w-0 w-full border border-slate-200 bg-white p-4 sm:p-6",
-        isPremium ? "rounded-none shadow-[0_1px_0_rgba(0,0,0,0.06)]" : "rounded-lg",
+        "min-w-0 w-full border bg-white px-5 py-6 sm:px-6 sm:py-7 md:px-8 md:py-8",
+        isPremium ? "border-white/25 md:rounded-sm" : "rounded-lg border-slate-200",
         className
       )}
     >
-      <div className={cn("grid grid-cols-1 gap-4", "md:grid-cols-2 lg:grid-cols-5")}>
-        <div className="lg:col-span-2">
+      <div
+        className={cn(
+          "grid grid-cols-1 gap-4 sm:gap-4",
+          "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-4"
+        )}
+      >
+        <div className="min-w-0 lg:min-w-[12rem]">
           <label className={labelClass}>Ubicación o palabra clave</label>
           <input
             type="text"
@@ -107,12 +119,15 @@ export function SearchBar({
           />
         </div>
 
-        <div>
+        <div className="min-w-0">
           <label className={labelClass}>Tipo</label>
           <select
             value={filters.type}
             onChange={(e) => setFilters({ ...filters, type: e.target.value })}
-            className={cn(fieldClass, "cursor-pointer appearance-none bg-[length:12px] bg-[right_1rem_center] bg-no-repeat pr-10")}
+            className={cn(
+              fieldClass,
+              "cursor-pointer appearance-none bg-[length:12px] bg-[right_1rem_center] bg-no-repeat pr-10"
+            )}
             style={
               isPremium
                 ? {
@@ -130,12 +145,15 @@ export function SearchBar({
           </select>
         </div>
 
-        <div>
+        <div className="min-w-0">
           <label className={labelClass}>Estado</label>
           <select
             value={filters.status}
             onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-            className={cn(fieldClass, "cursor-pointer appearance-none bg-[length:12px] bg-[right_1rem_center] bg-no-repeat pr-10")}
+            className={cn(
+              fieldClass,
+              "cursor-pointer appearance-none bg-[length:12px] bg-[right_1rem_center] bg-no-repeat pr-10"
+            )}
             style={
               isPremium
                 ? {
@@ -150,9 +168,12 @@ export function SearchBar({
           </select>
         </div>
 
-        <div className="flex items-end">
-          <button type="submit" className={btnClass}>
-            <Search className="w-5 h-5 shrink-0 opacity-95" strokeWidth={1.5} />
+        <div className="flex min-w-0 flex-col gap-2">
+          <label className={cn(labelClass, "text-transparent")} aria-hidden="true">
+            Buscar
+          </label>
+          <button type="submit" className={cn(btnClass, "lg:w-full")}>
+            <Search className="h-5 w-5 shrink-0 opacity-95" strokeWidth={1.5} aria-hidden />
             <span>Buscar</span>
           </button>
         </div>
@@ -161,32 +182,39 @@ export function SearchBar({
       {showMapZoneLink && (
         <div
           className={cn(
-            "mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-5",
-            isPremium ? "border-neutral-200" : "border-slate-200"
+            "mt-6 flex justify-center border-t pt-6",
+            isPremium ? "border-brand-navy/10" : "border-slate-200"
           )}
         >
-          <p className={cn("text-sm leading-snug", isPremium ? "text-neutral-600" : "text-slate-600")}>
-            <span className={cn("font-medium", isPremium ? "text-neutral-900" : "text-slate-900")}>
-              Buscar solo en un área del mapa:
-            </span>{" "}
-            trace la zona a mano alzada sobre el mapa; el listado se filtra a lo que quede dentro.
-          </p>
           <Link
             to={mapZoneHref}
+            aria-label="Ir a la búsqueda en mapa"
             className={cn(
-              "inline-flex shrink-0 items-center justify-center gap-2 text-sm font-medium transition-colors",
-              isPremium
-                ? "border border-neutral-900/20 bg-white px-4 py-2.5 uppercase tracking-[0.14em] text-[11px] text-neutral-900 hover:border-primary hover:text-primary"
-                : "rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-slate-800 hover:border-primary hover:text-primary"
+              "group font-heading text-[15px] tracking-tight transition-colors duration-200 sm:text-base",
+              "text-brand-navy"
             )}
+            style={{ fontWeight: 600 }}
           >
-            <MapPinned className="h-4 w-4 text-primary" strokeWidth={1.75} aria-hidden />
-            Abrir mapa y dibujar zona
+            <span
+              className={cn(
+                "border-b border-current pb-0.5 transition-[border-color,color] duration-200",
+                isPremium
+                  ? "border-brand-navy/30 group-hover:border-primary group-hover:text-primary"
+                  : "border-slate-400 group-hover:border-primary group-hover:text-primary"
+              )}
+            >
+              Explorar en mapa
+            </span>
           </Link>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+      <div
+        className={cn(
+          "mt-6 grid grid-cols-1 gap-4 border-t pt-6 md:grid-cols-2 md:gap-6",
+          isPremium ? "border-brand-navy/10" : "border-slate-200"
+        )}
+      >
         <div>
           <label className={labelClass}>Precio mínimo</label>
           <input

@@ -1,29 +1,82 @@
+import { motion, useReducedMotion } from "motion/react";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
-import { ArrowRight, MapPin, Calendar, Building2, Users, CheckCircle, Sparkles } from "lucide-react";
+import { ArrowRight, MapPin, CheckCircle } from "lucide-react";
 import { Link } from "react-router";
-import { developments } from "../data/developments";
+import { useDevelopmentsCatalog } from "../hooks/useDevelopmentsCatalog";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
 import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
+import { Reveal } from "../components/Reveal";
+import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
 import { cn } from "../components/ui/utils";
+import {
+  viterraHeroSectionClass,
+  viterraHeroCenteredStackClass,
+  viterraHeroCenteredInnerClass,
+  viterraHeroMainClass,
+  viterraHeroTitleClass,
+  viterraHeroSubtitleClass,
+} from "../config/heroLayout";
 
 export function DevelopmentsPage() {
+  const reduceMotion = useReducedMotion();
   const pl = usePreviewLayout();
   const { content } = useSiteContent();
   const page = content.developments;
+  const { developments, loading, error } = useDevelopmentsCatalog(true);
   const featuredDevelopments = developments.filter((x) => x.featured);
   const otherDevelopments = developments.filter((x) => !x.featured);
 
-  const getStatusColor = (status: string) => {
-    const colors = {
-      "En Construcción": "bg-amber-50 text-amber-700 border border-amber-200",
-      "Pre-venta": "bg-blue-50 text-blue-700 border border-blue-200",
-      "Disponible": "bg-green-50 text-green-700 border border-green-200",
-      "Próximamente": "bg-slate-100 text-slate-700 border border-slate-200"
-    };
-    return colors[status as keyof typeof colors] || "bg-slate-100 text-slate-700";
-  };
+  /** Etiqueta sobre imagen: blanco sólido + texto negro (legible en cualquier foto). */
+  const statusBadgeClass =
+    "border border-black/15 bg-white text-neutral-950 shadow-[0_1px_3px_rgba(0,0,0,0.12)]";
+
+  const heroContainerVariants = {
+    hidden: {},
+    visible: {
+      transition: {
+        staggerChildren: reduceMotion ? 0 : 0.1,
+        delayChildren: reduceMotion ? 0 : 0.06,
+      },
+    },
+  } as const;
+
+  const heroItemVariants = {
+    hidden: { opacity: reduceMotion ? 1 : 0, y: reduceMotion ? 0 : 22 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: reduceMotion ? 0 : 0.52, ease: [0.22, 1, 0.36, 1] as const },
+    },
+  } as const;
+
+  if (loading) {
+    return (
+      <div className="viterra-page min-h-screen flex flex-col bg-white">
+        <Header />
+        <div className="flex flex-1 items-center justify-center px-4 py-24 text-slate-600" style={{ fontWeight: 500 }}>
+          Cargando desarrollos…
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="viterra-page min-h-screen flex flex-col bg-white">
+        <Header />
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-24 text-center">
+          <p className="text-slate-800" style={{ fontWeight: 600 }}>
+            No se pudieron cargar los desarrollos
+          </p>
+          <p className="text-sm text-slate-600">{error}</p>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="viterra-page min-h-screen flex flex-col bg-white" >
@@ -31,20 +84,46 @@ export function DevelopmentsPage() {
 
       {/* Hero Section */}
       <PreviewSectionChrome blockId="dev-hero" label="Cabecera">
-      <section className="relative min-h-[68vh] md:min-h-[76vh] flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 z-0">
-          <img src={page.heroImage} alt="" className="h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/75 to-slate-900/60"></div>
+      <section className={viterraHeroSectionClass}>
+        <div className="absolute inset-0 z-0 overflow-hidden">
+          <motion.img
+            src="https://images.adsttc.com/media/images/5ef2/f7ce/b357/6589/8c00/019a/large_jpg/847A0737.jpg?1592981436"
+            alt=""
+            className="h-full w-full object-cover"
+            initial={false}
+            animate={
+              reduceMotion
+                ? { scale: 1.05 }
+                : { scale: [1.05, 1.07, 1.05] }
+            }
+            transition={
+              reduceMotion
+                ? { duration: 0 }
+                : { duration: 22, repeat: Infinity, ease: "easeInOut" }
+            }
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60" />
         </div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 text-center">
-          <h1 className="font-semibold text-white mb-6 tracking-tight text-5xl md:text-6xl" style={{ fontWeight: 700 }}>
-            {page.heroTitle}
-          </h1>
-
-          <p className="mx-auto max-w-2xl text-lg leading-relaxed text-white/80 md:text-xl" style={{ fontWeight: 400 }}>
-            {page.heroSubtitle}
-          </p>
+        <div className={viterraHeroCenteredStackClass}>
+          <motion.div
+            className={viterraHeroCenteredInnerClass}
+            variants={heroContainerVariants}
+            initial="hidden"
+            animate="visible"
+          >
+            <ViterraHeroTopClusterAnimated
+              kicker="Viterra · Desarrollos"
+              itemVariants={heroItemVariants}
+              reduceMotion={!!reduceMotion}
+            />
+            <motion.div variants={heroItemVariants} className={viterraHeroMainClass}>
+              <h1 className={viterraHeroTitleClass}>{page.heroTitle}</h1>
+            </motion.div>
+            <motion.p variants={heroItemVariants} className={viterraHeroSubtitleClass}>
+              {page.heroSubtitle}
+            </motion.p>
+          </motion.div>
         </div>
       </section>
       </PreviewSectionChrome>
@@ -52,89 +131,102 @@ export function DevelopmentsPage() {
       {/* Featured Developments */}
       {featuredDevelopments.length > 0 && (
         <PreviewSectionChrome blockId="dev-featured" label="Proyectos destacados (títulos)">
-        <section className="py-24 bg-white">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8">
-            <div className="mb-12">
-              <p className="mb-3 text-sm uppercase tracking-wide text-slate-500" style={{ letterSpacing: "0.1em", fontWeight: 500 }}>
-                {page.featuredKicker}
-              </p>
-              <h2 className="text-4xl font-semibold tracking-tight text-slate-900" style={{ fontWeight: 600 }}>
-                {page.featuredTitle}
-              </h2>
-            </div>
+        <section className="bg-white py-12 sm:py-16 md:py-24">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <Reveal className="mb-8 sm:mb-12" y={20}>
+              <div>
+                <p className="font-heading mb-2 text-xs uppercase tracking-[0.1em] text-brand-navy/65 sm:mb-3 sm:text-sm">
+                  {page.featuredKicker}
+                </p>
+                <h2 className="font-heading text-2xl font-semibold tracking-tight text-brand-navy sm:text-3xl md:text-4xl">
+                  {page.featuredTitle}
+                </h2>
+              </div>
+            </Reveal>
 
-            <div className="space-y-12">
+            <div className="space-y-10 md:space-y-12">
               {featuredDevelopments.map((dev, index) => (
-                <div
+                <Reveal
                   key={dev.id}
-                  className={cn("grid gap-12 items-center", pl.gridCols("grid-cols-1 lg:grid-cols-2"))}
+                  delay={Math.min(index * 0.08, 0.35)}
+                  y={28}
+                  className={cn("grid items-center gap-8 md:gap-12", pl.gridCols("grid-cols-1 lg:grid-cols-2"))}
                 >
                   <div className={cn(index % 2 === 1 && !pl.preview && "lg:order-2")}>
-                    <div className="relative h-[500px] rounded-lg overflow-hidden group">
+                    <Link
+                      to={`/desarrollos/${dev.id}`}
+                      className="relative block h-[500px] overflow-hidden rounded-lg group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                      aria-label={`Ver desarrollo: ${dev.name}`}
+                    >
                       <img
                         src={dev.image}
-                        alt={dev.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                        alt=""
+                        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                       />
-                      <div className="absolute top-6 left-6">
-                        <span className={`px-3 py-1.5 rounded-lg text-xs font-semibold backdrop-blur-sm ${getStatusColor(dev.status)}`} style={{ fontWeight: 600 }}>
+                      <div className="absolute left-4 top-4 sm:left-6 sm:top-6">
+                        <span className={`font-heading rounded-lg px-3 py-1.5 text-xs font-semibold ${statusBadgeClass}`}>
                           {dev.status}
                         </span>
                       </div>
-                    </div>
+                    </Link>
                   </div>
 
                   <div className={cn(index % 2 === 1 && !pl.preview && "lg:order-1")}>
-                    <div className="flex items-center gap-2 text-slate-600 mb-4">
-                      <MapPin className="w-4 h-4" strokeWidth={1.5} />
-                      <span className="text-sm font-medium" style={{ fontWeight: 500 }}>{dev.location}</span>
+                    <div className="mb-3 flex items-center gap-2 text-brand-navy/70 sm:mb-4">
+                      <MapPin className="w-4 h-4 text-primary" strokeWidth={1.5} />
+                      <span className="font-heading text-sm font-medium">{dev.location}</span>
                     </div>
 
-                    <h3 className="text-3xl font-semibold text-slate-900 mb-4 tracking-tight" style={{ fontWeight: 600 }}>
+                    <h3 className="font-heading mb-3 text-2xl font-semibold tracking-tight text-brand-navy sm:mb-4 sm:text-3xl">
                       {dev.name}
                     </h3>
 
-                    <p className="text-lg text-slate-600 mb-6 leading-relaxed" style={{ fontWeight: 400 }}>
+                    <p className="font-heading mb-5 text-base font-normal leading-relaxed text-brand-navy/70 not-italic sm:mb-6 sm:text-lg">
                       {dev.description}
                     </p>
 
-                    <div className={cn("grid gap-4 mb-6 p-6 bg-slate-50 rounded-lg border border-slate-200", pl.gridCols("grid-cols-2"))}>
+                    <div className={cn("mb-6 grid gap-4 rounded-lg border border-brand-navy/10 bg-brand-canvas p-4 sm:p-6", pl.gridCols("grid-cols-1 sm:grid-cols-2"))}>
                       <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>Unidades</p>
-                        <p className="text-lg font-semibold text-slate-900" style={{ fontWeight: 600 }}>{dev.units}</p>
+                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Unidades</p>
+                        <p className="font-heading text-lg font-semibold text-brand-navy">{dev.units}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>Entrega</p>
-                        <p className="text-lg font-semibold text-slate-900" style={{ fontWeight: 600 }}>{dev.deliveryDate}</p>
+                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Entrega</p>
+                        <p className="font-heading text-lg font-semibold text-brand-navy">{dev.deliveryDate}</p>
                       </div>
                       <div className={pl.colSpan("col-span-2")}>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>Rango de Precios</p>
-                        <p className="text-lg font-semibold text-slate-900" style={{ fontWeight: 600 }}>{dev.priceRange}</p>
+                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Rango de Precios</p>
+                        <p className="font-heading text-lg font-semibold text-brand-navy">{dev.priceRange}</p>
                       </div>
                     </div>
 
-                    <div className="mb-8">
-                      <p className="text-xs text-slate-500 uppercase tracking-wide mb-4" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>Amenidades</p>
-                      <div className={cn("grid gap-3", pl.gridCols("grid-cols-2"))}>
+                    <div className="mb-6 sm:mb-8">
+                      <p className="font-heading mb-3 text-xs uppercase tracking-[0.05em] text-brand-navy/60 sm:mb-4">Amenidades</p>
+                      <div className={cn("grid gap-3", pl.gridCols("grid-cols-1 sm:grid-cols-2"))}>
                         {dev.amenities.map((amenity, idx) => (
                           <div key={idx} className="flex items-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-slate-700 flex-shrink-0" strokeWidth={1.5} />
-                            <span className="text-sm text-slate-700" style={{ fontWeight: 500 }}>{amenity}</span>
+                            <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" strokeWidth={1.5} />
+                            <span className="font-heading text-sm text-brand-navy/85 font-medium">{amenity}</span>
                           </div>
                         ))}
                       </div>
                     </div>
 
-                    <Link
-                      to={`/desarrollos/${dev.id}`}
-                      className="inline-flex items-center gap-2 bg-[#C8102E] text-white px-6 py-3 rounded-lg hover:bg-[#a00d25] hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 font-medium"
-                      style={{ fontWeight: 600 }}
+                    <motion.div
+                      className="sm:inline-block sm:w-auto w-full"
+                      whileHover={reduceMotion ? undefined : { y: -2 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 26 }}
                     >
-                      Ver Detalles Completos
-                      <ArrowRight className="w-4 h-4" strokeWidth={2} />
-                    </Link>
+                      <Link
+                        to={`/desarrollos/${dev.id}`}
+                        className="font-heading inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 font-medium text-white transition-all duration-300 hover:bg-brand-red-hover hover:shadow-lg sm:w-auto"
+                      >
+                        Ver Detalles Completos
+                        <ArrowRight className="w-4 h-4" strokeWidth={2} />
+                      </Link>
+                    </motion.div>
                   </div>
-                </div>
+                </Reveal>
               ))}
             </div>
           </div>
@@ -144,74 +236,81 @@ export function DevelopmentsPage() {
 
       {/* Other Developments Grid */}
       {otherDevelopments.length > 0 && (
-        <section className="py-24 bg-slate-50">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8">
-            <div className="mb-12">
-              <p className="text-sm text-slate-500 uppercase tracking-wide mb-3" style={{ letterSpacing: '0.1em', fontWeight: 500 }}>Más Proyectos</p>
-              <h2 className="text-4xl font-semibold text-slate-900 tracking-tight" style={{ fontWeight: 600 }}>
-                Otros Desarrollos
-              </h2>
-            </div>
+        <section className="bg-brand-canvas py-12 sm:py-16 md:py-24">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <Reveal className="mb-8 sm:mb-12" y={20}>
+              <div>
+                <p className="font-heading mb-2 text-xs uppercase tracking-[0.1em] text-brand-navy/60 sm:mb-3 sm:text-sm">Más Proyectos</p>
+                <h2 className="font-heading text-2xl font-semibold tracking-tight text-brand-navy sm:text-3xl md:text-4xl">
+                  Otros Desarrollos
+                </h2>
+              </div>
+            </Reveal>
 
             <div className={cn("grid gap-8", pl.gridCols("grid-cols-1 md:grid-cols-2"))}>
-              {otherDevelopments.map((dev) => (
-                <div key={dev.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden hover:border-slate-300 transition-all group">
-                  <div className="relative h-72 overflow-hidden">
-                    <img
-                      src={dev.image}
-                      alt={dev.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                    />
-                    <div className="absolute top-6 left-6">
-                      <span className={`px-3 py-1.5 rounded-lg text-xs font-semibold backdrop-blur-sm ${getStatusColor(dev.status)}`} style={{ fontWeight: 600 }}>
-                        {dev.status}
-                      </span>
-                    </div>
-                  </div>
+              {otherDevelopments.map((dev, index) => (
+                <Reveal key={dev.id} delay={Math.min(index * 0.07, 0.35)} y={24}>
+                  <div className="group overflow-hidden rounded-lg border border-brand-navy/10 bg-white transition-all hover:border-brand-navy/25">
+                    <Link
+                      to={`/desarrollos/${dev.id}`}
+                      className="relative block h-52 overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:h-64 md:h-72"
+                      aria-label={`Ver desarrollo: ${dev.name}`}
+                    >
+                      <img
+                        src={dev.image}
+                        alt=""
+                        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      />
+                      <div className="absolute left-6 top-6">
+                        <span className={`font-heading rounded-lg px-3 py-1.5 text-xs font-semibold ${statusBadgeClass}`}>
+                          {dev.status}
+                        </span>
+                      </div>
+                    </Link>
 
-                  <div className="p-8">
-                    <div className="flex items-center gap-2 text-slate-600 mb-3">
-                      <MapPin className="w-4 h-4" strokeWidth={1.5} />
-                      <span className="text-sm font-medium" style={{ fontWeight: 500 }}>{dev.location}</span>
+                    <div className="p-5 sm:p-6 md:p-8">
+                    <div className="mb-2 flex items-center gap-2 text-brand-navy/70 sm:mb-3">
+                      <MapPin className="w-4 h-4 text-primary" strokeWidth={1.5} />
+                      <span className="font-heading text-sm font-medium">{dev.location}</span>
                     </div>
 
-                    <h3 className="text-2xl font-semibold text-slate-900 mb-3 tracking-tight" style={{ fontWeight: 600 }}>
+                    <h3 className="font-heading mb-2 text-xl font-semibold tracking-tight text-brand-navy sm:mb-3 sm:text-2xl">
                       {dev.name}
                     </h3>
 
-                    <p className="text-sm text-slate-600 mb-6 leading-relaxed" style={{ fontWeight: 400 }}>
+                    <p className="font-heading mb-5 text-sm font-normal leading-relaxed text-brand-navy/70 not-italic sm:mb-6">
                       {dev.description}
                     </p>
 
-                    <div className="grid grid-cols-2 gap-4 mb-6 pb-6 border-b border-slate-200">
+                    <div className="mb-5 grid grid-cols-2 gap-3 border-b border-brand-navy/10 pb-5 sm:mb-6 sm:gap-4 sm:pb-6">
                       <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>Unidades</p>
-                        <p className="text-base font-semibold text-slate-900" style={{ fontWeight: 600 }}>{dev.units}</p>
+                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Unidades</p>
+                        <p className="font-heading text-base font-semibold text-brand-navy">{dev.units}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>Entrega</p>
-                        <p className="text-base font-semibold text-slate-900" style={{ fontWeight: 600 }}>{dev.deliveryDate}</p>
+                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Entrega</p>
+                        <p className="font-heading text-base font-semibold text-brand-navy">{dev.deliveryDate}</p>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>Desde</p>
-                        <p className="text-lg font-semibold text-slate-900" style={{ fontWeight: 600 }}>
+                        <p className="font-heading mb-1 text-xs uppercase tracking-[0.05em] text-brand-navy/60">Desde</p>
+                        <p className="font-heading text-lg font-semibold text-brand-navy">
                           {dev.priceRange.split(' - ')[0]}
                         </p>
                       </div>
                       <Link
                         to={`/desarrollos/${dev.id}`}
-                        className="inline-flex items-center gap-2 text-sm text-slate-900 hover:text-slate-700 transition-colors font-medium"
-                        style={{ fontWeight: 600 }}
+                        className="font-heading inline-flex items-center justify-center gap-2 text-sm font-medium text-brand-navy transition-colors hover:text-brand-burgundy sm:justify-end"
                       >
                         Ver Detalles
-                        <ArrowRight className="w-4 h-4" strokeWidth={2} />
+                        <ArrowRight className="h-4 w-4" strokeWidth={2} />
                       </Link>
                     </div>
                   </div>
                 </div>
+                </Reveal>
               ))}
             </div>
           </div>
@@ -219,39 +318,38 @@ export function DevelopmentsPage() {
       )}
 
       {/* CTA Section */}
-      <section className="py-24 bg-brand-navy">
-        <div className="max-w-4xl mx-auto px-6 lg:px-8 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full mb-8">
-            <Sparkles className="w-4 h-4 text-white" strokeWidth={1.5} />
-            <span className="text-sm text-white font-medium tracking-wide" style={{ fontWeight: 500 }}>Invierte en Tu Futuro</span>
-          </div>
+      <section className="border-t border-brand-navy/10 bg-gradient-to-b from-[#f5f3ef] via-white to-brand-canvas py-12 sm:py-16 md:py-24">
+        <Reveal className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8" y={26}>
+          <div>
+            <h2 className="font-heading mb-4 text-2xl font-semibold tracking-tight text-brand-navy sm:mb-6 sm:text-4xl md:text-5xl">
+              Contáctanos
+            </h2>
+            <p className="font-heading mx-auto mb-8 max-w-2xl text-base font-normal leading-relaxed text-brand-navy/70 not-italic sm:mb-10 sm:text-lg">
+              Agenda una visita o escríbenos: con gusto te orientamos sobre disponibilidad, precios y opciones en
+              nuestros desarrollos exclusivos.
+            </p>
 
-          <h2 className="font-heading text-4xl md:text-5xl font-semibold text-white mb-6 tracking-tight">
-            ¿Listo para invertir?
-          </h2>
-          <p className="text-lg text-slate-300 mb-10 max-w-2xl mx-auto leading-relaxed" style={{ fontWeight: 400 }}>
-            Agenda una cita con nuestros expertos y descubre las oportunidades de inversión 
-            en nuestros desarrollos exclusivos.
-          </p>
-          
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              to="/contacto"
-              className="inline-flex items-center justify-center gap-2 bg-white text-brand-navy px-8 py-4 rounded-lg hover:bg-brand-canvas transition-all font-medium"
-              style={{ fontWeight: 600 }}
-            >
-              Agendar Cita
-              <ArrowRight className="w-5 h-5" strokeWidth={2} />
-            </Link>
-            <a
-              href="tel:+1234567890"
-              className="inline-flex items-center justify-center gap-2 bg-transparent text-white px-8 py-4 rounded-lg border border-white/30 hover:bg-white/10 transition-all font-medium"
-              style={{ fontWeight: 600 }}
-            >
-              Llamar Ahora
-            </a>
+            <div className="flex flex-col justify-center gap-4 sm:flex-row">
+              <motion.div whileHover={reduceMotion ? undefined : { y: -3 }} transition={{ type: "spring", stiffness: 380, damping: 24 }}>
+                <Link
+                  to="/contacto"
+                  className="font-heading inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-8 py-4 font-medium text-white transition-all hover:bg-brand-red-hover"
+                >
+                  Agendar cita
+                  <ArrowRight className="h-5 w-5" strokeWidth={2} />
+                </Link>
+              </motion.div>
+              <motion.div whileHover={reduceMotion ? undefined : { y: -3 }} transition={{ type: "spring", stiffness: 380, damping: 24 }}>
+                <a
+                  href="tel:+1234567890"
+                  className="font-heading inline-flex items-center justify-center gap-2 rounded-lg border border-brand-navy/25 bg-white px-8 py-4 font-medium text-brand-navy transition-all hover:border-brand-navy/40 hover:bg-brand-navy/[0.04]"
+                >
+                  Llamar ahora
+                </a>
+              </motion.div>
+            </div>
           </div>
-        </div>
+        </Reveal>
       </section>
 
       <Footer />

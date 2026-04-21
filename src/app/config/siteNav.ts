@@ -6,4 +6,14 @@ export const VITERRA_NAV_ITEMS = [
   ["/desarrollos", "DESARROLLOS"],
   ["/servicios", "SERVICIOS"],
   ["/nosotros", "ACERCA DE"],
+  ["/contacto", "CONTACTO"],
 ] as const;
+
+/** Resalta el ítem de nav que corresponde a la ruta actual (incl. `/desarrollos/:id`). */
+export function isActiveNavPath(pathname: string, to: string): boolean {
+  if (to === "/") return pathname === "/";
+  if (to === "/desarrollos") {
+    return pathname === "/desarrollos" || pathname.startsWith("/desarrollos/");
+  }
+  return pathname === to || pathname.startsWith(`${to}/`);
+}

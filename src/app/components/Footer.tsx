@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { Facebook, Instagram, Twitter, Mail, Phone, MapPin } from "lucide-react";
+import { Mail, Phone, MapPin } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { usePreviewCanvas, usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { cn } from "./ui/utils";
@@ -25,37 +25,17 @@ export function Footer() {
               <h3 className="font-semibold text-lg text-white tracking-tight" style={{ fontWeight: 600 }}>
                 VITERRA
               </h3>
-              <span className="h-px w-full bg-[#C8102E] shrink-0 my-2.5" aria-hidden />
+              <span className="h-px w-full bg-primary shrink-0 my-2.5" aria-hidden />
               <p
-                className="text-xs text-[#C8102E] uppercase tracking-widest font-medium"
+                className="text-xs text-primary uppercase tracking-widest font-medium"
                 style={{ letterSpacing: "0.12em" }}
               >
                 Grupo Inmobiliario
               </p>
             </div>
-            <p className="text-sm mb-6 leading-relaxed" style={{ fontWeight: 400 }}>
+            <p className="text-sm leading-relaxed not-italic" style={{ fontWeight: 400 }}>
               Tu socio de confianza en bienes raíces. Más de 15 años ayudando a personas a encontrar su hogar ideal.
             </p>
-            <div className="flex gap-3">
-              <a
-                href="#"
-                className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center hover:scale-110 hover:bg-primary transition-all duration-300 group"
-              >
-                <Facebook className="w-5 h-5 text-slate-300 group-hover:text-white transition-colors" strokeWidth={1.5} />
-              </a>
-              <a
-                href="#"
-                className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center hover:scale-110 hover:bg-primary transition-all duration-300 group"
-              >
-                <Instagram className="w-5 h-5 text-slate-300 group-hover:text-white transition-colors" strokeWidth={1.5} />
-              </a>
-              <a
-                href="#"
-                className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center hover:scale-110 hover:bg-primary transition-all duration-300 group"
-              >
-                <Twitter className="w-5 h-5 text-slate-300 group-hover:text-white transition-colors" strokeWidth={1.5} />
-              </a>
-            </div>
           </div>
 
           {/* Quick Links */}
@@ -70,7 +50,7 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link to="/propiedades" className="hover:text-white hover:translate-x-1 transition-all duration-200 inline-block" style={{ fontWeight: 400 }}>
+                <Link to="/renta" className="hover:text-white hover:translate-x-1 transition-all duration-200 inline-block" style={{ fontWeight: 400 }}>
                   Propiedades
                 </Link>
               </li>
@@ -154,7 +134,7 @@ export function Footer() {
         </div>
 
         <div className="border-t border-white/10 mt-12 pt-8 text-sm text-center">
-          <p className="text-slate-400" style={{ fontWeight: 400 }}>&copy; {new Date().getFullYear()} Viterra Inmobiliaria. Todos los derechos reservados.</p>
+          <p className="text-slate-400 not-italic" style={{ fontWeight: 400 }}>&copy; {new Date().getFullYear()} Viterra Inmobiliaria. Todos los derechos reservados.</p>
         </div>
       </div>
     </motion.footer>

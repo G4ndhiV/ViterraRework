@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Calendar, Mail, Phone, Plus, Tag, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Calendar, ExternalLink, History, Mail, MessageCircle, Phone, Plus, Search, Tag, Trash2, UserCircle2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,12 +10,17 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
+import type { User } from "../../contexts/AuthContext";
 import type { Lead, LeadPriorityStars } from "../../data/leads";
-import { labelForLeadStatus, newLeadClientNoteId, sortLeadClientNotesNewestFirst } from "../../data/leads";
-import { CRM_ASSIGNEES, getAssigneeNameById } from "../../data/crmAssignees";
+import type { Property } from "../PropertyCard";
+import type { Development } from "../../data/developments";
+import { isClickableTeamMemberProfile, resolveLeadTeamUser } from "../../lib/crmTeamUser";
+import { labelForLeadStatus, newLeadActivityId, newLeadClientNoteId, sortLeadClientNotesNewestFirst } from "../../data/leads";
+import { CRM_ASSIGNEES, resolveAssigneeName } from "../../data/crmAssignees";
 import { LeadPriorityBadge } from "./LeadPriorityBadge";
 import { LeadPriorityStarsInput } from "./LeadPriorityStarsInput";
 import { cn } from "../ui/utils";
+import { foldSearchText } from "../../lib/searchText";
 
 function formatLeadDate(value: string | undefined) {
   if (!value) return "—";
@@ -42,6 +47,17 @@ type Props = {
   onStatusChange?: (leadId: string, newStatus: string) => void;
   onSave: (lead: Lead) => void;
   onDelete: (id: string) => void;
+  /** Usuarios del equipo (para abrir ficha desde el asignado). */
+  teamUsers?: User[];
+  currentUserId?: string;
+  /** Navega a Mi empresa → Usuarios y abre el detalle (solo lectura si no es admin). */
+  onViewTeamMember?: (userId: string) => void;
+  /** Permiso para ficha de cliente CRM */
+  canManageClients?: boolean;
+  /** Abre el módulo Clientes y crea o vincula ficha desde este lead */
+  onRegisterClientFromLead?: (lead: Lead) => void;
+  properties?: Property[];
+  developments?: Development[];
 };
 
 export function LeadDetailDialog({
@@ -53,22 +69,70 @@ export function LeadDetailDialog({
   onStatusChange,
   onSave,
   onDelete,
+  teamUsers = [],
+  currentUserId = "",
+  onViewTeamMember,
+  canManageClients = false,
+  onRegisterClientFromLead,
+  properties = [],
+  developments = [],
 }: Props) {
+  const assigneeSelectOptions = useMemo(() => {
+    const fromTeam = teamUsers.filter((u) => u.isActive).map((u) => ({ id: u.id, name: u.name }));
+    return fromTeam.length > 0 ? fromTeam : CRM_ASSIGNEES;
+  }, [teamUsers]);
   const [editing, setEditing] = useState(defaultMode === "edit");
   const [draft, setDraft] = useState<Lead | null>(null);
+  const [activeTab, setActiveTab] = useState<"info" | "activity" | "contact">("info");
+  const [activityComment, setActivityComment] = useState("");
+  const [propertySearchQuery, setPropertySearchQuery] = useState("");
+  const [developmentSearchQuery, setDevelopmentSearchQuery] = useState("");
 
   useEffect(() => {
     if (open && lead) {
       setDraft({ ...lead });
       setEditing(defaultMode === "edit");
+      setActiveTab("info");
+      setActivityComment("");
+      setPropertySearchQuery("");
+      setDevelopmentSearchQuery("");
     }
   }, [open, lead, defaultMode]);
+
+  /** Debe ejecutarse antes de cualquier return: mismas reglas de hooks en todos los renders. */
+  const displayLead = lead != null ? draft ?? lead : null;
+  const assigneeTeamUser = useMemo(() => {
+    if (!displayLead) return undefined;
+    const source = editing && draft ? draft : displayLead;
+    return resolveLeadTeamUser(teamUsers, source);
+  }, [editing, draft, displayLead, teamUsers]);
+  const assigneeProfileOpen =
+    !!onViewTeamMember && isClickableTeamMemberProfile(assigneeTeamUser, currentUserId);
+  const filteredProperties = useMemo(() => {
+    const q = foldSearchText(propertySearchQuery);
+    if (!q) return properties;
+    return properties.filter((p) => foldSearchText(`${p.title} ${p.location} ${p.type}`).includes(q));
+  }, [properties, propertySearchQuery]);
+  const filteredDevelopments = useMemo(() => {
+    const q = foldSearchText(developmentSearchQuery);
+    if (!q) return developments;
+    return developments.filter((dev) => foldSearchText(`${dev.name} ${dev.location} ${dev.type}`).includes(q));
+  }, [developments, developmentSearchQuery]);
 
   if (!lead) {
     return null;
   }
 
   const d = draft ?? lead;
+  const canOpenClientProfile = canManageClients && !!onRegisterClientFromLead;
+  const whatsappDigits = d.phone.replace(/\D/g, "");
+  const whatsappMessage = `Hola ${d.name}, te contacto de Viterra para dar seguimiento a tu solicitud inmobiliaria.`;
+  const whatsappHref = `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(whatsappMessage)}`;
+  const sortedActivity = [...(d.activity ?? [])].sort(
+    (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)
+  );
+  const selectedProperty = properties.find((p) => p.id === d.relatedPropertyId);
+  const selectedDevelopment = developments.find((dev) => dev.id === d.relatedDevelopmentId);
 
   const handleSave = () => {
     if (!draft) return;
@@ -78,11 +142,35 @@ export function LeadDetailDialog({
     onSave({
       ...draft,
       clientNotes: prunedNotes,
-      assignedTo: getAssigneeNameById(draft.assignedToUserId),
+      assignedTo: resolveAssigneeName(draft.assignedToUserId, assigneeSelectOptions),
       updatedAt: new Date().toISOString(),
     });
     setEditing(false);
     onOpenChange(false);
+  };
+
+  const handleAddActivityComment = () => {
+    const text = activityComment.trim();
+    if (!text) return;
+    const now = new Date().toISOString();
+    setDraft((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        updatedAt: now,
+        activity: [
+          {
+            id: newLeadActivityId(),
+            type: "comment",
+            createdAt: now,
+            description: text,
+            status: prev.status,
+          },
+          ...(prev.activity ?? []),
+        ],
+      };
+    });
+    setActivityComment("");
   };
 
   const handleDelete = () => {
@@ -95,6 +183,7 @@ export function LeadDetailDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange} key={lead.id}>
       <DialogContent
+        hideCloseButton
         className={cn(
           "!fixed !inset-0 !left-0 !top-0 z-50 flex !h-[100dvh] !max-h-[100dvh] !w-full !max-w-none !translate-x-0 !translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-none duration-200",
           "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
@@ -102,28 +191,110 @@ export function LeadDetailDialog({
         )}
       >
         <div className="h-0.5 shrink-0 bg-gradient-to-r from-brand-gold/90 via-primary to-brand-burgundy/90" aria-hidden />
-        <div className="shrink-0 border-b border-stone-200/80 bg-stone-50/90 px-4 py-2.5 pr-12 sm:px-5 sm:pr-14">
+        <div className="shrink-0 border-b border-stone-200/80 bg-stone-50/90 px-4 py-4 sm:px-5">
           <DialogHeader className="gap-0 p-0 text-left">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] text-slate-500" style={{ fontWeight: 500 }}>
-                  <span className="text-primary/90">CRM</span>
-                  <span className="text-slate-400"> · </span>
-                  {editing ? "Edición de lead" : "Detalle de lead"}
-                </p>
-                <DialogTitle
-                  className="font-heading mt-0.5 truncate text-lg leading-tight text-brand-navy sm:text-xl"
-                  style={{ fontWeight: 600 }}
-                >
-                  {d.name}
-                </DialogTitle>
-              </div>
-              <span className="inline-flex max-w-[min(12rem,46%)] shrink-0 items-center justify-center rounded-full border border-primary/15 bg-primary/[0.05] px-3 py-1 text-center text-[11px] font-semibold uppercase leading-tight tracking-wide text-primary">
-                {labelForLeadStatus(
-                  d.status,
-                  statusOptions.map((o) => ({ id: o.value, label: o.label }))
+            <p className="text-[11px] text-slate-500" style={{ fontWeight: 500 }}>
+              <span className="text-primary/90">CRM</span>
+              <span className="text-slate-400"> · </span>
+              {editing ? "Edición de lead" : "Detalle de lead"}
+            </p>
+            <div className="mt-3 grid grid-cols-[minmax(0,1fr)_minmax(18rem,32rem)_minmax(0,1fr)] items-center gap-4">
+              <div className="min-w-0">
+                {canOpenClientProfile ? (
+                  <button
+                    type="button"
+                    onClick={() => onRegisterClientFromLead(d)}
+                    className="group inline-flex max-w-full items-center gap-2 truncate rounded-lg px-1 py-0.5 text-left text-primary transition-colors hover:text-primary/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                    style={{ fontWeight: 700, textShadow: "0 1px 0 rgba(255,255,255,0.5)" }}
+                    title="Abrir perfil del cliente en modulo Clientes"
+                  >
+                    <span className="font-heading truncate text-3xl leading-tight tracking-tight sm:text-4xl">{d.name}</span>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-primary">
+                      Ver perfil
+                      <ExternalLink className="h-3 w-3" strokeWidth={2} />
+                    </span>
+                  </button>
+                ) : (
+                  <DialogTitle
+                    className="font-heading truncate text-3xl leading-tight tracking-tight text-brand-navy sm:text-4xl"
+                    style={{ fontWeight: 700, textShadow: "0 1px 0 rgba(255,255,255,0.5)" }}
+                  >
+                    {d.name}
+                  </DialogTitle>
                 )}
-              </span>
+                {canOpenClientProfile && (
+                  <p className="mt-1 pl-1 text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                    Click en el nombre para abrir su perfil en Clientes.
+                  </p>
+                )}
+              </div>
+              <div className="justify-self-center">
+                <div className="inline-flex w-full min-w-[18rem] max-w-[32rem] items-center justify-center gap-1.5 rounded-xl border border-stone-200/90 bg-white/90 p-1 shadow-sm ring-1 ring-white/70">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("info")}
+                  className={`flex-1 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                    activeTab === "info"
+                      ? "bg-gradient-to-r from-brand-navy to-[#1f2d47] text-white shadow-md shadow-brand-navy/20"
+                      : "text-slate-600 hover:bg-stone-50 hover:text-brand-navy"
+                  }`}
+                >
+                  Información
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("activity")}
+                  className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                    activeTab === "activity"
+                      ? "bg-gradient-to-r from-brand-navy to-[#1f2d47] text-white shadow-md shadow-brand-navy/20"
+                      : "text-slate-600 hover:bg-stone-50 hover:text-brand-navy"
+                  }`}
+                >
+                  <History className="h-3.5 w-3.5" strokeWidth={1.9} />
+                  Actividad
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("contact")}
+                  className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                    activeTab === "contact"
+                      ? "bg-gradient-to-r from-brand-navy to-[#1f2d47] text-white shadow-md shadow-brand-navy/20"
+                      : "text-slate-600 hover:bg-stone-50 hover:text-brand-navy"
+                  }`}
+                >
+                  <MessageCircle className="h-3.5 w-3.5" strokeWidth={1.9} />
+                  Contacto
+                </button>
+                </div>
+              </div>
+              <div className="w-full max-w-[16rem] justify-self-end">
+                <label className="mb-1 block text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  Estado
+                </label>
+                <select
+                  value={
+                    statusOptions.some((o) => o.value === d.status)
+                      ? d.status
+                      : statusOptions[0]?.value ?? d.status
+                  }
+                  onChange={(e) => {
+                    if (editing && draft) {
+                      setDraft((prev) => (prev ? { ...prev, status: e.target.value } : prev));
+                    } else {
+                      onStatusChange?.(lead.id, e.target.value);
+                    }
+                  }}
+                  className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-brand-navy transition-colors focus:border-primary/35 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                  style={{ fontWeight: 600 }}
+                  aria-label="Cambiar estado del lead"
+                >
+                  {statusOptions.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <DialogDescription className="sr-only">
               Lead {d.name}, estado{" "}
@@ -135,7 +306,161 @@ export function LeadDetailDialog({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gradient-to-b from-stone-100/95 to-stone-100/80">
           <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
             <div className="mx-auto w-full max-w-[min(100%,88rem)]">
-          {editing && draft ? (
+          {activeTab === "contact" ? (
+            <section className="mx-auto w-full max-w-3xl rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
+              <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
+                Contactar cliente por WhatsApp
+              </h3>
+              <div className="mt-4 rounded-xl border border-stone-200 bg-stone-50/50 p-4">
+                <p className="text-xs uppercase tracking-wide text-slate-500" style={{ fontWeight: 600 }}>
+                  Cliente
+                </p>
+                <p className="mt-1 text-lg text-brand-navy" style={{ fontWeight: 700 }}>
+                  {canOpenClientProfile ? (
+                    <button
+                      type="button"
+                      onClick={() => onRegisterClientFromLead(d)}
+                      className="inline-flex items-center gap-1.5 rounded-md px-1 text-left text-primary underline decoration-primary/35 underline-offset-4 transition-colors hover:text-primary/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                      style={{ fontWeight: 700 }}
+                      title="Abrir perfil del cliente en modulo Clientes"
+                    >
+                      {d.name}
+                      <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} />
+                    </button>
+                  ) : (
+                    d.name
+                  )}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Teléfono: <span className="font-semibold text-slate-800">{d.phone}</span>
+                </p>
+                <p className="mt-3 text-sm text-slate-600">
+                  Mensaje sugerido:
+                </p>
+                <p className="mt-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-slate-700">
+                  {whatsappMessage}
+                </p>
+              </div>
+              <div className="mt-4">
+                <a
+                  href={whatsappHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white ${
+                    whatsappDigits.length >= 8
+                      ? "bg-[#25D366] hover:bg-[#1fb458]"
+                      : "pointer-events-none bg-slate-300"
+                  }`}
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  Abrir WhatsApp
+                </a>
+                {whatsappDigits.length < 8 && (
+                  <p className="mt-2 text-xs text-amber-700">
+                    El teléfono del lead no parece válido para WhatsApp. Edítalo en la pestaña de información.
+                  </p>
+                )}
+              </div>
+            </section>
+          ) : activeTab === "activity" ? (
+            <section className="mx-auto w-full max-w-5xl rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
+              <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
+                Historial de movimientos del lead
+              </h3>
+              <div className="mt-4 space-y-3">
+                <div className="rounded-xl border border-stone-200/90 bg-stone-50/60 p-3">
+                  <label className="mb-1.5 block text-xs text-slate-600" style={{ fontWeight: 600 }}>
+                    Añadir comentario
+                  </label>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <textarea
+                      rows={2}
+                      value={activityComment}
+                      onChange={(e) => setActivityComment(e.target.value)}
+                      className="flex-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-brand-navy placeholder:text-slate-400"
+                      placeholder="Escribe un comentario sobre este lead..."
+                    />
+                    <Button
+                      type="button"
+                      className="bg-primary text-primary-foreground hover:bg-brand-red-hover sm:self-end"
+                      onClick={handleAddActivityComment}
+                    >
+                      Agregar comentario
+                    </Button>
+                  </div>
+                </div>
+                {sortedActivity.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50/50 px-4 py-8 text-center text-sm text-slate-500">
+                    Sin actividad registrada.
+                  </p>
+                ) : (
+                  <div className="relative pl-8">
+                    <div className="absolute bottom-3 left-[15px] top-3 w-px bg-gradient-to-b from-primary/40 via-primary/20 to-transparent" />
+                    <div className="space-y-4">
+                      {sortedActivity.map((entry) => {
+                        const statusLabel = labelForLeadStatus(
+                          entry.status ?? d.status,
+                          statusOptions.map((o) => ({ id: o.value, label: o.label }))
+                        );
+                        const timelineMeta: Record<
+                          "created" | "status_change" | "updated" | "comment",
+                          { title: string; icon: typeof History; iconClassName: string; badgeClassName: string }
+                        > = {
+                          created: {
+                            title: "Lead creado",
+                            icon: Plus,
+                            iconClassName: "text-emerald-600",
+                            badgeClassName: "bg-emerald-100 text-emerald-700",
+                          },
+                          status_change: {
+                            title: "Cambio de estado",
+                            icon: Tag,
+                            iconClassName: "text-primary",
+                            badgeClassName: "bg-primary/10 text-primary",
+                          },
+                          updated: {
+                            title: "Información actualizada",
+                            icon: History,
+                            iconClassName: "text-amber-700",
+                            badgeClassName: "bg-amber-100 text-amber-700",
+                          },
+                          comment: {
+                            title: "Comentario",
+                            icon: MessageCircle,
+                            iconClassName: "text-brand-navy",
+                            badgeClassName: "bg-brand-navy/10 text-brand-navy",
+                          },
+                        };
+                        const meta = timelineMeta[entry.type];
+                        const Icon = meta.icon;
+
+                        return (
+                          <article key={entry.id} className="relative rounded-xl border border-stone-200/90 bg-stone-50/40 p-4 shadow-sm">
+                            <span className="absolute -left-8 top-4 inline-flex h-7 w-7 items-center justify-center rounded-full border border-stone-200 bg-white shadow-sm">
+                              <Icon className={cn("h-3.5 w-3.5", meta.iconClassName)} strokeWidth={2} />
+                            </span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
+                                {meta.title}
+                              </p>
+                              <span className={cn("rounded-full px-2 py-0.5 text-[11px]", meta.badgeClassName)}>
+                                {statusLabel}
+                              </span>
+                            </div>
+                            <p className="mt-1.5 text-sm text-slate-700">{entry.description}</p>
+                            <p className="mt-2 inline-flex items-center gap-1 text-xs text-slate-500">
+                              <Calendar className="h-3.5 w-3.5" />
+                              {formatLeadDate(entry.createdAt)}
+                            </p>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          ) : editing && draft ? (
             <div className="grid grid-cols-1 gap-6 text-sm lg:grid-cols-12 lg:items-start lg:gap-8 xl:gap-10">
               <div className="flex flex-col gap-5 lg:col-span-7 xl:col-span-8">
                 <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
@@ -209,65 +534,68 @@ export function LeadDetailDialog({
 
                 <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
                   <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
-                    Interés y propiedad
+                    Propiedad o desarrollo relacionado
                   </h3>
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
-                        Interés
+                        Propiedad
                       </Label>
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
+                        <input
+                          type="search"
+                          value={propertySearchQuery}
+                          onChange={(e) => setPropertySearchQuery(e.target.value)}
+                          placeholder="Buscar propiedad…"
+                          className="mb-2 h-9 w-full rounded-lg border border-stone-200 bg-white pl-9 pr-3 text-sm text-brand-navy focus:border-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-300/80"
+                        />
+                      </div>
                       <select
-                        value={draft.interest}
+                        value={draft.relatedPropertyId ?? ""}
                         onChange={(e) =>
-                          setDraft((d) =>
-                            d ? { ...d, interest: e.target.value as Lead["interest"] } : d
-                          )
+                          setDraft((d) => (d ? { ...d, relatedPropertyId: e.target.value || undefined } : d))
                         }
                         className={leadFieldClass}
                         style={{ fontWeight: 500 }}
                       >
-                        <option value="compra">Compra</option>
-                        <option value="venta">Venta</option>
-                        <option value="alquiler">Alquiler</option>
-                        <option value="asesoria">Asesoría</option>
+                        <option value="">Sin propiedad</option>
+                        {filteredProperties.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.title}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
-                        Tipo de propiedad
+                        Desarrollo
                       </Label>
-                      <input
-                        value={draft.propertyType}
-                        onChange={(e) => setDraft((d) => (d ? { ...d, propertyType: e.target.value } : d))}
-                        className={leadFieldClass}
-                        style={{ fontWeight: 500 }}
-                      />
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
-                        Presupuesto (USD)
-                      </Label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={draft.budget}
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
+                        <input
+                          type="search"
+                          value={developmentSearchQuery}
+                          onChange={(e) => setDevelopmentSearchQuery(e.target.value)}
+                          placeholder="Buscar desarrollo…"
+                          className="mb-2 h-9 w-full rounded-lg border border-stone-200 bg-white pl-9 pr-3 text-sm text-brand-navy focus:border-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-300/80"
+                        />
+                      </div>
+                      <select
+                        value={draft.relatedDevelopmentId ?? ""}
                         onChange={(e) =>
-                          setDraft((d) => (d ? { ...d, budget: Number(e.target.value) || 0 } : d))
+                          setDraft((d) => (d ? { ...d, relatedDevelopmentId: e.target.value || undefined } : d))
                         }
-                        className={cn(leadFieldClass, "max-w-xs")}
-                        style={{ fontWeight: 500 }}
-                      />
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
-                        Ubicación deseada
-                      </Label>
-                      <input
-                        value={draft.location}
-                        onChange={(e) => setDraft((d) => (d ? { ...d, location: e.target.value } : d))}
                         className={leadFieldClass}
                         style={{ fontWeight: 500 }}
-                      />
+                      >
+                        <option value="">Sin desarrollo</option>
+                        {filteredDevelopments.map((dev) => (
+                          <option key={dev.id} value={dev.id}>
+                            {dev.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </section>
@@ -281,7 +609,7 @@ export function LeadDetailDialog({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-8 border-stone-300 bg-white text-xs hover:bg-stone-50"
+                      className="h-8 border-stone-300 bg-white text-xs text-slate-700 hover:bg-stone-50 hover:text-slate-800"
                       onClick={() =>
                         setDraft((prev) =>
                           prev
@@ -433,53 +761,28 @@ export function LeadDetailDialog({
                       className={leadFieldClass}
                       style={{ fontWeight: 500 }}
                     >
-                      {CRM_ASSIGNEES.map((a) => (
+                      {assigneeSelectOptions.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.name}
                         </option>
                       ))}
                     </select>
+                    {assigneeProfileOpen && assigneeTeamUser ? (
+                      <button
+                        type="button"
+                        className="mt-2 text-left text-xs font-semibold text-primary underline decoration-primary/50 underline-offset-2 hover:text-primary/90"
+                        style={{ fontWeight: 600 }}
+                        onClick={() => onViewTeamMember?.(assigneeTeamUser.id)}
+                      >
+                        Ver ficha de {assigneeTeamUser.name}
+                      </button>
+                    ) : null}
                   </div>
                 </section>
               </aside>
             </div>
           ) : (
             <div className="flex flex-col gap-6 text-sm lg:gap-8">
-              <section className="relative overflow-hidden rounded-2xl border border-stone-200/90 bg-white p-5 shadow-[0_6px_28px_-10px_rgba(20,28,46,0.14)] sm:flex sm:flex-row sm:items-end sm:justify-between sm:gap-6 sm:p-6">
-                <div
-                  className="pointer-events-none absolute inset-y-4 left-0 w-[3px] rounded-full bg-gradient-to-b from-primary via-primary/85 to-brand-navy"
-                  aria-hidden
-                />
-                <div className="pl-5 sm:min-w-0 sm:flex-1 sm:pl-6">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
-                    Pipeline
-                  </p>
-                  <label className="mt-1 block text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                    Etapa en el embudo
-                  </label>
-                </div>
-                <div className="mt-3 pl-5 sm:mt-0 sm:max-w-md sm:flex-1 sm:pl-0 lg:max-w-lg">
-                  <select
-                    value={
-                      statusOptions.some((o) => o.value === d.status)
-                        ? d.status
-                        : statusOptions[0]?.value ?? d.status
-                    }
-                    onChange={(e) => onStatusChange?.(lead.id, e.target.value)}
-                    disabled={!onStatusChange}
-                    className="w-full rounded-xl border border-stone-200 bg-stone-50/60 px-3 py-3 text-sm text-brand-navy transition-colors focus:border-primary/35 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
-                    style={{ fontWeight: 600 }}
-                    aria-label="Cambiar fase del lead"
-                  >
-                    {statusOptions.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </section>
-
               <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-8 xl:gap-10">
                 <main className="flex flex-col gap-6 lg:col-span-7 xl:col-span-8">
                   <div className="flex items-center gap-2 border-b border-stone-200/90 pb-2">
@@ -533,26 +836,16 @@ export function LeadDetailDialog({
                   <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
                     <div className="flex flex-wrap items-end justify-between gap-2 border-b border-stone-100 pb-3">
                       <h3 className="text-base text-brand-navy" style={{ fontWeight: 700 }}>
-                        Interés y propiedad
+                        Propiedad o desarrollo relacionado
                       </h3>
                       <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                         Resumen
                       </span>
                     </div>
-                    <dl className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+                    <dl className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">
                       {[
-                        { label: "Interés", value: d.interest, capitalize: true },
-                        { label: "Tipo", value: d.propertyType },
-                        {
-                          label: "Presupuesto",
-                          value: (
-                            <>
-                              ${d.budget.toLocaleString()}{" "}
-                              <span className="text-xs font-normal text-slate-500">USD</span>
-                            </>
-                          ),
-                        },
-                        { label: "Ubicación", value: d.location },
+                        { label: "Propiedad", value: selectedProperty?.title ?? "Sin propiedad vinculada" },
+                        { label: "Desarrollo", value: selectedDevelopment?.name ?? "Sin desarrollo vinculado" },
                       ].map((item) => (
                         <div
                           key={item.label}
@@ -562,10 +855,7 @@ export function LeadDetailDialog({
                             {item.label}
                           </dt>
                           <dd
-                            className={cn(
-                              "mt-1.5 text-sm text-brand-navy",
-                              item.capitalize && "capitalize"
-                            )}
+                            className="mt-1.5 text-sm text-brand-navy"
                             style={{ fontWeight: 600 }}
                           >
                             {item.value}
@@ -693,7 +983,18 @@ export function LeadDetailDialog({
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                           Asignado a
                         </p>
-                        <p className="truncate text-lg font-bold text-brand-navy">{d.assignedTo}</p>
+                        {assigneeProfileOpen && assigneeTeamUser ? (
+                          <button
+                            type="button"
+                            className="truncate text-left text-lg font-bold text-primary underline decoration-primary/50 underline-offset-2 hover:text-primary/90"
+                            style={{ fontWeight: 700 }}
+                            onClick={() => onViewTeamMember?.(assigneeTeamUser.id)}
+                          >
+                            {d.assignedTo}
+                          </button>
+                        ) : (
+                          <p className="truncate text-lg font-bold text-brand-navy">{d.assignedTo}</p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -707,17 +1008,46 @@ export function LeadDetailDialog({
 
         <DialogFooter className="shrink-0 flex-col gap-2 border-t border-stone-200/90 bg-stone-50/90 px-4 py-3 sm:flex-row sm:justify-between sm:px-6">
           <div className="flex flex-wrap gap-2">
+            {canOpenClientProfile && (
+              <Button
+                type="button"
+                variant="outline"
+                className="border-stone-300 bg-white text-brand-navy hover:bg-stone-50 hover:!text-brand-navy"
+                onClick={() => onRegisterClientFromLead(d)}
+              >
+                <UserCircle2 className="mr-2 h-4 w-4" strokeWidth={1.75} />
+                Abrir perfil en Clientes
+              </Button>
+            )}
             <Button type="button" variant="destructive" onClick={handleDelete}>
               Eliminar
             </Button>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
-            {editing ? (
+            {activeTab === "activity" || activeTab === "contact" ? (
               <>
                 <Button
                   type="button"
                   variant="outline"
-                  className="border-stone-300 bg-white hover:bg-stone-50"
+                  className="border-stone-300 bg-white text-slate-700 hover:bg-stone-50 hover:text-slate-800"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Cerrar
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-primary hover:bg-brand-red-hover text-primary-foreground"
+                  onClick={handleSave}
+                >
+                  Guardar cambios
+                </Button>
+              </>
+            ) : editing ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-stone-300 bg-white text-slate-700 hover:bg-stone-50 hover:text-slate-800"
                   onClick={() => {
                     setDraft({ ...lead });
                     setEditing(false);
@@ -738,7 +1068,7 @@ export function LeadDetailDialog({
                 <Button
                   type="button"
                   variant="outline"
-                  className="border-stone-300 bg-white hover:bg-stone-50"
+                  className="border-stone-300 bg-white text-slate-700 hover:bg-stone-50 hover:text-slate-800"
                   onClick={() => onOpenChange(false)}
                 >
                   Cerrar

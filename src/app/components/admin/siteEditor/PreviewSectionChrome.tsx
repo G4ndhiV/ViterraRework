@@ -20,10 +20,10 @@ export function PreviewSectionChrome({
 
   const selected = v.activeBlockId === blockId;
   return (
-    <div id={`viterra-block-${blockId}`} className={cn("relative scroll-mt-4")}>
+    <div id={`viterra-block-${blockId}`} className={cn("relative h-full min-h-0 scroll-mt-4")}>
       <div
         className={cn(
-          "relative rounded-sm transition-[box-shadow] duration-150",
+          "relative h-full min-h-0 rounded-sm transition-[box-shadow] duration-150",
           selected && "z-[1] shadow-[0_0_0_2px_#C8102E,0_0_0_4px_rgba(255,255,255,0.95)]"
         )}
       >

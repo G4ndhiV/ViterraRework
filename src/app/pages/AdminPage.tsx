@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link, useNavigate } from "react-router";
 import {
   LayoutDashboard,
@@ -18,37 +18,93 @@ import {
   Bath,
   Square,
   Activity,
-  Mail,
-  Phone,
   ChevronRight,
   ChevronDown,
+  GripVertical,
   Target,
   Briefcase,
   Globe2,
+  Building2,
   LayoutGrid,
   Table2,
   Filter,
+  User as UserIcon,
+  Link2,
+  Download,
+  Calendar,
+  Settings,
+  Map as MapIcon,
+  UserCircle2,
 } from "lucide-react";
 import { AdminSiteEditor } from "../components/admin/AdminSiteEditor";
 import { useAuth } from "../contexts/AuthContext";
 import {
-  mockLeads,
   Lead,
-  normalizeStoredLead,
   LEAD_STATUS_LABEL,
-  BUILTIN_STATUS_ORDER,
   labelForLeadStatus,
+  newLeadActivityId,
   newCustomStageId,
   type CustomKanbanStage,
 } from "../data/leads";
+import { getSupabaseClient, getSupabaseProjectHost, syncSupabaseAuthSession } from "../lib/supabaseClient";
+import { logTableCountHints } from "../lib/supabaseDiagnostics";
+import {
+  fetchActiveLeads,
+  insertLead,
+  updateLead,
+  softDeleteLead,
+} from "../lib/supabaseLeads";
+import { toast } from "sonner";
+import {
+  appendClientActivity,
+  CLIENTS_STORAGE_KEY,
+  newClientId,
+  normalizeStoredClient,
+  normalizeEmailKey,
+  normalizePhoneKey,
+  newClientActivityId,
+  type CrmClient,
+} from "../data/clients";
 import { LeadsKanbanBoard } from "../components/admin/LeadsKanbanBoard";
 import { LeadPriorityBadge } from "../components/admin/LeadPriorityBadge";
 import { AddLeadDialog } from "../components/admin/AddLeadDialog";
 import { LeadDetailDialog } from "../components/admin/LeadDetailDialog";
+import { AdminClientsManager } from "../components/admin/AdminClientsManager";
 import { PropertyFormDialog } from "../components/admin/PropertyFormDialog";
-import { filterLeadsForUser, roleLabelEs } from "../lib/leadsAccess";
-import { mockProperties } from "../data/properties";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../components/ui/alert-dialog";
+import { canViewAllLeads, filterLeadsForUser, roleLabelEs } from "../lib/leadsAccess";
+import { copyPublicPageUrl } from "../lib/copyPublicLink";
 import { Property } from "../components/PropertyCard";
+import { useCatalogProperties } from "../hooks/useCatalogProperties";
+import {
+  insertProperty,
+  softDeleteProperty,
+  updateProperty,
+} from "../lib/supabaseProperties";
+import type { Development } from "../data/developments";
+import {
+  fetchDevelopmentsWithUnits,
+  upsertDevelopment,
+  softDeleteDevelopment,
+} from "../lib/supabaseDevelopments";
+import { AGENDA_STORAGE_KEY } from "../data/agenda";
+import { AdminAgendaModule } from "../components/admin/AdminAgendaModule";
+import { PropertyMap } from "../components/PropertyMap";
+import { AdminDevelopmentsManager } from "../components/admin/AdminDevelopmentsManager";
+import { AdminCompanySettings } from "../components/admin/AdminCompanySettings";
+import { AdminUsersManager } from "../components/admin/AdminUsersManager";
+import { PipelineStageReorderRow } from "../components/admin/PipelineStageReorderRow";
+import { DndProvider } from "react-dnd";
+import { HTML5Backend } from "react-dnd-html5-backend";
 import {
   BarChart,
   Bar,
@@ -60,128 +116,456 @@ import {
   Area,
   AreaChart
 } from "recharts";
+import { cn } from "../components/ui/utils";
+import {
+  DEFAULT_BUILTIN_STAGE_HEX,
+  DEFAULT_CUSTOM_STAGE_HEX,
+  LIST_STAGE_HEADER_BUTTON_CLASSES,
+  stageHexToChipStyle,
+  stageHexToListHeaderStyle,
+} from "../lib/stageColors";
+import {
+  DEFAULT_PIPELINE_GROUP_ID,
+  canConfigurePipelineForGroup,
+  createEmptyGroupPipelineSnapshot,
+  getAllowedPipelineGroupIds,
+  loadPipelineByGroup,
+  normalizeStageOrder,
+  pipelineContextStorageKey,
+  savePipelineByGroup,
+  type GroupPipelineSnapshot,
+} from "../lib/pipelineByGroup";
+import { type UserGroup } from "../lib/userGroups";
+import { fetchActiveUserGroups, softDeleteUserGroup, upsertUserGroup } from "../lib/supabaseUserGroups";
+import { foldSearchText } from "../lib/searchText";
 
-type TabType = "dashboard" | "leads" | "pipeline" | "properties" | "messages" | "site";
+type TabType =
+  | "dashboard"
+  | "leads"
+  | "clients"
+  | "pipeline"
+  | "agenda"
+  | "properties"
+  | "developments"
+  | "company"
+  | "messages";
+
+function dashboardTimeGreetingEs(): string {
+  const h = new Date().getHours();
+  if (h >= 6 && h < 12) return "Buenos días";
+  if (h >= 12 && h < 20) return "Buenas tardes";
+  return "Buenas noches";
+}
 
 export function AdminPage() {
   const navigate = useNavigate();
-  const { user, logout, isAuthenticated } = useAuth();
+  const {
+    user,
+    users,
+    logout,
+    authReady,
+    isAuthenticated,
+    createUser,
+    updateUser,
+    updateUserPassword,
+    updateUserPermissions,
+    archiveUser,
+    reactivateUser,
+  } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
+  const [companySubtab, setCompanySubtab] = useState<"users" | "site" | "leadStages" | "settings">("users");
+  const [stageDraftLabel, setStageDraftLabel] = useState("");
+  const [editingStageId, setEditingStageId] = useState<string | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
+  const [leadsLoading, setLeadsLoading] = useState(true);
+  const [leadsError, setLeadsError] = useState<string | null>(null);
+  const { properties, reload: reloadProperties } = useCatalogProperties();
+  const [newPropertyDraftId, setNewPropertyDraftId] = useState(() => crypto.randomUUID());
+  const [developments, setDevelopments] = useState<Development[]>([]);
+  const [developmentsLoading, setDevelopmentsLoading] = useState(true);
+  const [clients, setClients] = useState<CrmClient[]>([]);
+  const [focusClient, setFocusClient] = useState<{ id: string; nonce: number } | null>(null);
+  const [seedClientFromLead, setSeedClientFromLead] = useState<{ lead: Lead; nonce: number } | null>(
+    null
+  );
+  const [propertySearchQuery, setPropertySearchQuery] = useState("");
+  const [propertyOperationFilter, setPropertyOperationFilter] = useState("all");
+  const [propertyTypeFilter, setPropertyTypeFilter] = useState("all");
+  const [propertyCurrencyFilter, setPropertyCurrencyFilter] = useState("MXN");
+  const [propertyMaxPrice, setPropertyMaxPrice] = useState("");
+  const [propertyLocationFilter, setPropertyLocationFilter] = useState("all");
+  const [propertyInventoryView, setPropertyInventoryView] = useState<"cards" | "list" | "map">("cards");
+  const [adminHeaderQuery, setAdminHeaderQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
+  const [createdRangeFilter, setCreatedRangeFilter] = useState<
+    "all" | "1m" | "3m" | "6m" | "1y" | "custom"
+  >("all");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [leadsView, setLeadsView] = useState<"kanban" | "table">("kanban");
-  const [customKanbanStages, setCustomKanbanStages] = useState<CustomKanbanStage[]>([]);
+  /** Vista lista: secciones por estado; true = colapsada */
+  const [leadsTableSectionCollapsed, setLeadsTableSectionCollapsed] = useState<Record<string, boolean>>({});
+  const [pipelineByGroup, setPipelineByGroup] = useState<Record<string, GroupPipelineSnapshot>>(() =>
+    loadPipelineByGroup()
+  );
+  const [userGroups, setUserGroups] = useState<UserGroup[]>([]);
+  const [activePipelineGroupId, setActivePipelineGroupId] = useState<string>(DEFAULT_PIPELINE_GROUP_ID);
   const [leadDialog, setLeadDialog] = useState<{ lead: Lead; mode: "view" | "edit" } | null>(null);
+  const [usersPanelFocus, setUsersPanelFocus] = useState<{ id: string; nonce: number } | null>(null);
+  /** Si se abrió la ficha desde un lead (CRM), al cerrar restauramos tab y diálogo del lead. */
+  const pendingReturnFromUserDetailRef = useRef<{
+    tab: TabType;
+    companySubtab: "users" | "site" | "leadStages" | "settings";
+    leadsView: "kanban" | "table";
+    leadDialog: { lead: Lead; mode: "view" | "edit" } | null;
+  } | null>(null);
+  const [dashboardRouteSearchOpen, setDashboardRouteSearchOpen] = useState(false);
   const [propertyForm, setPropertyForm] = useState<{
     mode: "create" | "edit";
     property: Property | null;
   } | null>(null);
-
+  const [deletePipelineStage, setDeletePipelineStage] = useState<{ id: string; label: string } | null>(
+    null
+  );
+  const [deletePropertyId, setDeletePropertyId] = useState<string | null>(null);
   // Verificar autenticación y cargar datos
   useEffect(() => {
+    if (!authReady) return;
     if (!isAuthenticated) {
       navigate("/login");
       return;
     }
 
-    const savedLeads = localStorage.getItem("viterra_leads");
-    if (savedLeads) {
-      try {
-        const parsed = JSON.parse(savedLeads) as unknown[];
-        setLeads(parsed.map((row) => normalizeStoredLead(row as Record<string, unknown>)));
-      } catch {
-        setLeads(mockLeads);
+    let cancelled = false;
+    (async () => {
+      setLeadsLoading(true);
+      setDevelopmentsLoading(true);
+      setLeadsError(null);
+      const client = getSupabaseClient();
+      if (!client) {
+        setLeadsError(
+          "Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en .env (el prefijo VITE_ es obligatorio en Vite)."
+        );
+        setLeads([]);
+        setDevelopments([]);
+        setLeadsLoading(false);
+        setDevelopmentsLoading(false);
+        return;
       }
-    } else {
-      setLeads(mockLeads);
-    }
 
-    const savedProperties = localStorage.getItem("viterra_properties");
-    setProperties(savedProperties ? JSON.parse(savedProperties) : mockProperties);
+      const { hasSession } = await syncSupabaseAuthSession(client);
+      if (!hasSession) {
+        setLeadsError(
+          "No hay sesión de Supabase en el cliente. Cierra sesión y vuelve a entrar, o revisa que el dominio no bloquee localStorage."
+        );
+        setLeads([]);
+        setDevelopments([]);
+        setLeadsLoading(false);
+        setDevelopmentsLoading(false);
+        return;
+      }
 
-    const savedStages = localStorage.getItem("viterra_kanban_custom_stages");
-    if (savedStages) {
-      try {
-        const parsed = JSON.parse(savedStages) as unknown;
-        if (Array.isArray(parsed)) {
-          setCustomKanbanStages(
-            parsed.filter(
-              (x): x is CustomKanbanStage =>
-                typeof x === "object" &&
-                x !== null &&
-                typeof (x as CustomKanbanStage).id === "string" &&
-                typeof (x as CustomKanbanStage).label === "string"
-            )
+      const [leadsRes, devRes, groupsRes] = await Promise.all([
+        fetchActiveLeads(client),
+        fetchDevelopmentsWithUnits(client, { publicOnly: false }),
+        fetchActiveUserGroups(client),
+      ]);
+      if (cancelled) return;
+
+      if (leadsRes.error) {
+        setLeadsError(leadsRes.error.message);
+        setLeads([]);
+      } else {
+        setLeads(leadsRes.data);
+        if (import.meta.env.DEV && leadsRes.data.length === 0) {
+          void logTableCountHints(client, "leads");
+        }
+      }
+      setLeadsLoading(false);
+
+      if (devRes.error) {
+        toast.error(devRes.error.message);
+        setDevelopments([]);
+      } else {
+        setDevelopments(devRes.data ?? []);
+        if (import.meta.env.DEV && (devRes.data?.length ?? 0) === 0) {
+          void logTableCountHints(client, "developments");
+        }
+      }
+      setDevelopmentsLoading(false);
+
+      if (groupsRes.error) {
+        if (import.meta.env.DEV) {
+          console.warn("[Viterra] No se pudieron cargar grupos desde DB:", groupsRes.error.message);
+        }
+        setUserGroups([]);
+      } else {
+        setUserGroups(groupsRes.data);
+      }
+
+      if (import.meta.env.DEV) {
+        const host = getSupabaseProjectHost();
+        if (host) {
+          console.info(
+            "[Viterra] Comprueba que este host coincide con tu proyecto en Supabase Dashboard:",
+            host
           );
         }
+      }
+    })();
+
+    const savedClients = localStorage.getItem(CLIENTS_STORAGE_KEY);
+    if (savedClients) {
+      try {
+        const parsed = JSON.parse(savedClients) as unknown[];
+        if (Array.isArray(parsed)) {
+          setClients(parsed.map((row) => normalizeStoredClient(row as Record<string, unknown>)));
+        }
       } catch {
-        /* ignore */
+        setClients([]);
       }
     }
-  }, [navigate, isAuthenticated]);
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate, isAuthenticated, authReady]);
 
   useEffect(() => {
-    if (leads.length > 0) {
-      localStorage.setItem("viterra_leads", JSON.stringify(leads));
-    }
-  }, [leads]);
+    document.body.classList.add("admin-crm-montserrat");
+    return () => {
+      document.body.classList.remove("admin-crm-montserrat");
+    };
+  }, []);
 
   useEffect(() => {
-    if (properties.length > 0) {
-      localStorage.setItem("viterra_properties", JSON.stringify(properties));
-    }
-  }, [properties]);
+    localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(clients));
+  }, [clients]);
+
+  const handleUserGroupsChange = useCallback(
+    async (nextGroups: UserGroup[]) => {
+      const client = getSupabaseClient();
+      const prevGroups = userGroups;
+      setUserGroups(nextGroups);
+      if (!client) return;
+
+      const prevIds = new Set(prevGroups.map((g) => g.id));
+      const nextIds = new Set(nextGroups.map((g) => g.id));
+      const deletedIds = [...prevIds].filter((id) => !nextIds.has(id));
+
+      const upsertResults = await Promise.all(nextGroups.map((g) => upsertUserGroup(client, g)));
+      const deleteResults = await Promise.all(deletedIds.map((id) => softDeleteUserGroup(client, id)));
+      const failed = [
+        ...upsertResults.filter((r) => !!r.error).map((r) => r.error?.message ?? "upsert_error"),
+        ...deleteResults.filter((r) => !!r.error).map((r) => r.error?.message ?? "delete_error"),
+      ];
+      if (failed.length > 0) {
+        setUserGroups(prevGroups);
+        toast.error("No se pudieron guardar algunos cambios de grupos en la base de datos.");
+        if (import.meta.env.DEV) {
+          console.warn("[Viterra] Fallo al persistir grupos:", failed);
+        }
+        return;
+      }
+
+      if (nextGroups.length > prevGroups.length) {
+        toast.success("Grupo creado y guardado correctamente en la base de datos.");
+      } else if (nextGroups.length < prevGroups.length) {
+        toast.success("Grupo eliminado y cambios guardados en la base de datos.");
+      } else {
+        toast.success("Grupo actualizado y guardado en la base de datos.");
+      }
+    },
+    [userGroups]
+  );
+
+  const allowedPipelineGroupIds = useMemo(
+    () => (user ? getAllowedPipelineGroupIds(user, userGroups) : [DEFAULT_PIPELINE_GROUP_ID]),
+    [user, userGroups]
+  );
 
   useEffect(() => {
-    localStorage.setItem("viterra_kanban_custom_stages", JSON.stringify(customKanbanStages));
-  }, [customKanbanStages]);
+    if (!user) return;
+    setActivePipelineGroupId((prev) => {
+      if (allowedPipelineGroupIds.includes(prev)) return prev;
+      const key = pipelineContextStorageKey(user.id);
+      const saved = localStorage.getItem(key);
+      if (saved && allowedPipelineGroupIds.includes(saved)) return saved;
+      return allowedPipelineGroupIds[0] ?? DEFAULT_PIPELINE_GROUP_ID;
+    });
+  }, [user, allowedPipelineGroupIds]);
+
+  useEffect(() => {
+    if (!user) return;
+    localStorage.setItem(pipelineContextStorageKey(user.id), activePipelineGroupId);
+  }, [user, activePipelineGroupId]);
+
+  useEffect(() => {
+    setPipelineByGroup((prev) => {
+      if (prev[activePipelineGroupId]) return prev;
+      return {
+        ...prev,
+        [activePipelineGroupId]: createEmptyGroupPipelineSnapshot(),
+      };
+    });
+  }, [activePipelineGroupId]);
+
+  useEffect(() => {
+    savePipelineByGroup(pipelineByGroup);
+  }, [pipelineByGroup]);
+
+  const activePipeline =
+    pipelineByGroup[activePipelineGroupId] ?? createEmptyGroupPipelineSnapshot();
+  const customKanbanStages = activePipeline.customStages;
+  const pipelineStageOrder = activePipeline.stageOrder;
+  const stageColumnColors = activePipeline.stageColors;
+
+  const canConfigureActivePipeline = useMemo(
+    () => (user ? canConfigurePipelineForGroup(user, activePipelineGroupId, userGroups) : false),
+    [user, activePipelineGroupId, userGroups]
+  );
+
+  const allStageIds = useMemo(
+    () => [...customKanbanStages.map((s) => s.id)],
+    [customKanbanStages]
+  );
+
+  useEffect(() => {
+    setPipelineByGroup((map) => {
+      const id = activePipelineGroupId;
+      const cur = map[id] ?? createEmptyGroupPipelineSnapshot();
+      const normalized = normalizeStageOrder(cur.stageOrder, allStageIds);
+      if (
+        normalized.length === cur.stageOrder.length &&
+        normalized.every((x, i) => x === cur.stageOrder[i])
+      ) {
+        return map;
+      }
+      return { ...map, [id]: { ...cur, stageOrder: normalized } };
+    });
+  }, [allStageIds, activePipelineGroupId]);
+
+  const pipelineGroupLabel = useCallback(
+    (groupId: string) => {
+      if (groupId === DEFAULT_PIPELINE_GROUP_ID) return "General (todos los equipos)";
+      const g = userGroups.find((x) => x.id === groupId);
+      return g?.name ?? groupId;
+    },
+    [userGroups]
+  );
 
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
 
-  const handleDeleteProperty = (id: string) => {
-    if (window.confirm("¿Estás seguro de eliminar esta propiedad?")) {
-      setProperties(properties.filter(p => p.id !== id));
-    }
+  const requestDeleteProperty = (id: string) => {
+    setDeletePropertyId(id);
   };
 
-  const handleDeleteLead = (id: string) => {
-    if (window.confirm("¿Estás seguro de eliminar este lead?")) {
-      setLeads((prev) => prev.filter((l) => l.id !== id));
-      setLeadDialog((d) => (d?.lead.id === id ? null : d));
+  const executeDeleteProperty = useCallback(async () => {
+    if (!deletePropertyId) return;
+    const client = getSupabaseClient();
+    if (client) {
+      const { error: delErr } = await softDeleteProperty(client, deletePropertyId);
+      if (delErr) {
+        toast.error(delErr.message);
+        return;
+      }
     }
-  };
+    await reloadProperties();
+    setPropertyForm((f) => (f?.property?.id === deletePropertyId ? null : f));
+    setDeletePropertyId(null);
+  }, [deletePropertyId, reloadProperties]);
 
-  const handleUpdateLeadStatus = useCallback((leadId: string, newStatus: string) => {
-    const updatedAt = new Date().toISOString();
-    setLeads((prev) =>
-      prev.map((lead) =>
-        lead.id === leadId ? { ...lead, status: newStatus, updatedAt } : lead
-      )
-    );
-    setLeadDialog((d) =>
-      d && d.lead.id === leadId
-        ? { ...d, lead: { ...d.lead, status: newStatus, updatedAt } }
-        : d
-    );
+  const handleDeleteLead = useCallback(async (id: string) => {
+    const client = getSupabaseClient();
+    if (client) {
+      const { error: delLeadErr } = await softDeleteLead(client, id);
+      if (delLeadErr) {
+        toast.error(delLeadErr.message);
+        return;
+      }
+    }
+    setLeads((prev) => prev.filter((l) => l.id !== id));
+    setLeadDialog((d) => (d?.lead.id === id ? null : d));
+  }, []);
+
+  const handleDeleteDevelopment = useCallback(async (id: string) => {
+    const client = getSupabaseClient();
+    if (client) {
+      const { error } = await softDeleteDevelopment(client, id);
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      const { data, error: fetchErr } = await fetchDevelopmentsWithUnits(client, { publicOnly: false });
+      if (fetchErr) toast.error(fetchErr.message);
+      else setDevelopments(data ?? []);
+      return;
+    }
+    setDevelopments((prev) => prev.filter((row) => row.id !== id));
+  }, []);
+
+  const handleSaveDevelopment = useCallback(async (payload: Development) => {
+    const client = getSupabaseClient();
+    if (client) {
+      const res = await upsertDevelopment(client, payload);
+      if (res.error) {
+        toast.error(res.error.message);
+        return;
+      }
+      const { data, error: fetchErr } = await fetchDevelopmentsWithUnits(client, { publicOnly: false });
+      if (fetchErr) toast.error(fetchErr.message);
+      else setDevelopments(data ?? []);
+      return;
+    }
+    setDevelopments((prev) => {
+      const exists = prev.some((row) => row.id === payload.id);
+      return exists ? prev.map((row) => (row.id === payload.id ? payload : row)) : [...prev, payload];
+    });
   }, []);
 
   const leadColumnStatuses = useMemo(
-    () => [...BUILTIN_STATUS_ORDER, ...customKanbanStages.map((s) => s.id)],
-    [customKanbanStages]
+    () =>
+      pipelineStageOrder.length > 0
+        ? pipelineStageOrder
+        : [...customKanbanStages.map((s) => s.id)],
+    [pipelineStageOrder, customKanbanStages]
   );
 
   const statusSelectOptions = useMemo(
-    () => [
-      ...BUILTIN_STATUS_ORDER.map((s) => ({ value: s, label: LEAD_STATUS_LABEL[s] })),
-      ...customKanbanStages.map((s) => ({ value: s.id, label: s.label })),
-    ],
-    [customKanbanStages]
+    () =>
+      leadColumnStatuses.map((id) => {
+        if (Object.prototype.hasOwnProperty.call(LEAD_STATUS_LABEL, id)) {
+          return { value: id, label: LEAD_STATUS_LABEL[id as keyof typeof LEAD_STATUS_LABEL] };
+        }
+        const custom = customKanbanStages.find((s) => s.id === id);
+        return { value: id, label: custom?.label ?? id };
+      }),
+    [leadColumnStatuses, customKanbanStages]
+  );
+
+  const defaultLeadStageId = leadColumnStatuses[0] ?? null;
+
+  const effectiveStageColors = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const id of leadColumnStatuses) {
+      if (stageColumnColors[id]) out[id] = stageColumnColors[id];
+      else if (DEFAULT_BUILTIN_STAGE_HEX[id]) out[id] = DEFAULT_BUILTIN_STAGE_HEX[id];
+      else out[id] = DEFAULT_CUSTOM_STAGE_HEX;
+    }
+    return out;
+  }, [leadColumnStatuses, stageColumnColors]);
+
+  const resolveStageHex = useCallback(
+    (stageId: string) =>
+      effectiveStageColors[stageId] ??
+      DEFAULT_BUILTIN_STAGE_HEX[stageId] ??
+      DEFAULT_CUSTOM_STAGE_HEX,
+    [effectiveStageColors],
   );
 
   const resolveStatusLabel = useCallback(
@@ -189,36 +573,380 @@ export function AdminPage() {
     [customKanbanStages]
   );
 
-  const handleAddKanbanStage = useCallback((label: string) => {
-    const id = newCustomStageId();
-    setCustomKanbanStages((prev) => [...prev, { id, label }]);
+  const handleUpdateLeadStatus = useCallback(
+    async (leadId: string, newStatus: string) => {
+      const lead = leads.find((l) => l.id === leadId);
+      if (!lead || lead.status === newStatus) return;
+
+      const updatedAt = new Date().toISOString();
+      const prevLabel = resolveStatusLabel(lead.status);
+      const nextLabel = resolveStatusLabel(newStatus);
+      const nextLead: Lead = {
+        ...lead,
+        status: newStatus,
+        updatedAt,
+        activity: [
+          {
+            id: newLeadActivityId(),
+            type: "status_change",
+            createdAt: updatedAt,
+            description: `Se movió de ${prevLabel} a ${nextLabel}`,
+          },
+          ...(lead.activity ?? []),
+        ],
+      };
+
+      const client = getSupabaseClient();
+      if (client) {
+        const { error: updErr } = await updateLead(client, nextLead);
+        if (updErr) {
+          toast.error(updErr.message);
+          return;
+        }
+      }
+
+      setLeads((prev) => prev.map((l) => (l.id === leadId ? nextLead : l)));
+      setLeadDialog((d) =>
+        d && d.lead.id === leadId ? { ...d, lead: nextLead } : d
+      );
+    },
+    [leads, resolveStatusLabel]
+  );
+
+  const handleAddKanbanStage = useCallback(
+    (label: string) => {
+      const id = newCustomStageId();
+      setPipelineByGroup((map) => {
+        const cur = map[activePipelineGroupId] ?? createEmptyGroupPipelineSnapshot();
+        return {
+          ...map,
+          [activePipelineGroupId]: {
+            ...cur,
+            customStages: [...cur.customStages, { id, label }],
+            stageOrder: [...cur.stageOrder, id],
+          },
+        };
+      });
+    },
+    [activePipelineGroupId]
+  );
+
+  const handleUpdateKanbanStage = useCallback(
+    (stageId: string, label: string) => {
+      setPipelineByGroup((map) => {
+        const cur = map[activePipelineGroupId] ?? createEmptyGroupPipelineSnapshot();
+        return {
+          ...map,
+          [activePipelineGroupId]: {
+            ...cur,
+            customStages: cur.customStages.map((stage) =>
+              stage.id === stageId ? { ...stage, label } : stage
+            ),
+          },
+        };
+      });
+    },
+    [activePipelineGroupId]
+  );
+
+  const executeDeleteKanbanStage = useCallback(
+    (stageId: string, stageLabel: string) => {
+      const updatedAt = new Date().toISOString();
+      const gid = activePipelineGroupId;
+      let fallbackStageId = "";
+      setPipelineByGroup((map) => {
+        const cur = map[gid] ?? createEmptyGroupPipelineSnapshot();
+        const nextColors = { ...cur.stageColors };
+        if (Object.prototype.hasOwnProperty.call(nextColors, stageId)) delete nextColors[stageId];
+        const nextStageOrder = cur.stageOrder.filter((id) => id !== stageId);
+        fallbackStageId = nextStageOrder[0] ?? "";
+        return {
+          ...map,
+          [gid]: {
+            ...cur,
+            customStages: cur.customStages.filter((item) => item.id !== stageId),
+            stageOrder: nextStageOrder,
+            stageColors: nextColors,
+          },
+        };
+      });
+      setLeads((prev) => {
+        const next = prev.map((lead) =>
+          lead.status !== stageId || lead.pipelineGroupId !== gid
+            ? lead
+            : {
+                ...lead,
+                status: fallbackStageId,
+                updatedAt,
+                activity: [
+                  {
+                    id: newLeadActivityId(),
+                    type: "status_change" as const,
+                    createdAt: updatedAt,
+                    description: fallbackStageId
+                      ? `La columna ${stageLabel} se eliminó y el lead se movió a ${resolveStatusLabel(fallbackStageId)}`
+                      : `La columna ${stageLabel} se eliminó y el lead quedó sin columna asignada`,
+                  },
+                  ...(lead.activity ?? []),
+                ],
+              }
+        );
+
+        const client = getSupabaseClient();
+        if (client) {
+          const toSave = next.filter((lead) => {
+            const old = prev.find((x) => x.id === lead.id);
+            return (
+              !!old &&
+              old.status === stageId &&
+              lead.status === fallbackStageId &&
+              lead.pipelineGroupId === gid
+            );
+          });
+          void Promise.all(toSave.map((l) => updateLead(client, l))).then((responses) => {
+            const e = responses.find((r) => r.error)?.error;
+            if (e) toast.error(e.message);
+          });
+        }
+
+        return next;
+      });
+      setLeadDialog((current) =>
+        current &&
+        current.lead.status === stageId &&
+        current.lead.pipelineGroupId === gid
+          ? {
+              ...current,
+              lead: {
+                ...current.lead,
+                status: fallbackStageId,
+                updatedAt,
+              },
+            }
+          : current
+      );
+    },
+    [activePipelineGroupId, resolveStatusLabel]
+  );
+
+  const requestDeletePipelineStage = useCallback((stageId: string, label: string) => {
+    setDeletePipelineStage({ id: stageId, label });
   }, []);
 
-  const handleAddLead = useCallback((lead: Lead) => {
-    setLeads((prev) => [...prev, lead]);
-  }, []);
+  const handleReorderPipelineRows = useCallback(
+    (dragIndex: number, hoverIndex: number) => {
+      setPipelineByGroup((map) => {
+        const cur = map[activePipelineGroupId] ?? createEmptyGroupPipelineSnapshot();
+        const prev = cur.stageOrder;
+        const base = prev.length > 0 ? prev : allStageIds;
+        if (
+          dragIndex === hoverIndex ||
+          dragIndex < 0 ||
+          hoverIndex < 0 ||
+          dragIndex >= base.length ||
+          hoverIndex >= base.length
+        ) {
+          return map;
+        }
+        const nextOrder = [...base];
+        const [removed] = nextOrder.splice(dragIndex, 1);
+        nextOrder.splice(hoverIndex, 0, removed);
+        if (nextOrder.length === prev.length && nextOrder.every((id, i) => id === prev[i])) {
+          return map;
+        }
+        return {
+          ...map,
+          [activePipelineGroupId]: { ...cur, stageOrder: nextOrder },
+        };
+      });
+    },
+    [activePipelineGroupId, allStageIds]
+  );
 
-  const handleSaveLead = useCallback((updated: Lead) => {
-    setLeads((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+  const upsertClientFromLead = useCallback(
+    (prev: CrmClient[], lead: Lead): CrmClient[] => {
+      const emailKey = normalizeEmailKey(lead.email);
+      const phoneKey = normalizePhoneKey(lead.phone);
+      if (!emailKey && !phoneKey) return prev;
+
+      const existing = prev.find((c) => {
+        if (emailKey && normalizeEmailKey(c.email) === emailKey) return true;
+        if (phoneKey && normalizePhoneKey(c.phone) === phoneKey) return true;
+        return false;
+      });
+      const actorName = user?.name?.trim() || "Sistema CRM";
+
+      if (existing) {
+        if (existing.linkedLeadIds.includes(lead.id)) return prev;
+        const linked = appendClientActivity(
+          {
+            ...existing,
+            linkedLeadIds: [...existing.linkedLeadIds, lead.id],
+            updatedAt: new Date().toISOString(),
+          },
+          {
+            id: newClientActivityId(),
+            type: "link_lead",
+            description: `Vinculado automáticamente al lead «${lead.name}»`,
+            actorName,
+          }
+        );
+        return prev.map((c) => (c.id === existing.id ? linked : c));
+      }
+
+      const now = new Date().toISOString();
+      const created = appendClientActivity(
+        {
+          id: newClientId(),
+          name: lead.name,
+          email: lead.email,
+          phone: lead.phone,
+          propertyIds: [],
+          developmentIds: [],
+          linkedLeadIds: [lead.id],
+          primaryOwnerUserId: lead.assignedToUserId || user?.id || "",
+          createdAt: now,
+          updatedAt: now,
+          activity: [],
+        },
+        {
+          id: newClientActivityId(),
+          type: "created",
+          description: `Cliente creado automáticamente desde lead «${lead.name}»`,
+          actorName,
+        }
+      );
+
+      return [...prev, created];
+    },
+    [user?.id, user?.name]
+  );
+
+  useEffect(() => {
+    if (!user) return;
+    const visibleLeads = filterLeadsForUser(leads, user);
+    if (visibleLeads.length === 0) return;
+    setClients((prev) => {
+      let next = prev;
+      for (const lead of visibleLeads) {
+        next = upsertClientFromLead(next, lead);
+      }
+      return next;
+    });
+  }, [leads, user, upsertClientFromLead]);
+
+  const handleAddLead = useCallback(async (lead: Lead) => {
+    const createdAt = new Date().toISOString();
+    const withActivity: Lead = {
+      ...lead,
+      activity:
+        lead.activity && lead.activity.length > 0
+          ? lead.activity
+          : [
+              {
+                id: newLeadActivityId(),
+                type: "created",
+                createdAt,
+                description: "Lead creado",
+              },
+            ],
+    };
+
+    const client = getSupabaseClient();
+    if (client) {
+      const { error: insLeadErr } = await insertLead(client, withActivity);
+      if (insLeadErr) {
+        toast.error(insLeadErr.message);
+        return;
+      }
+    }
+    setLeads((prev) => [...prev, withActivity]);
+    setClients((prev) => upsertClientFromLead(prev, withActivity));
+  }, [upsertClientFromLead]);
+
+  const handleSaveLead = useCallback(async (updated: Lead) => {
+    let merged: Lead | null = null;
+    setLeads((prev) => {
+      const l = prev.find((x) => x.id === updated.id);
+      if (!l) return prev;
+      const baseActivity = updated.activity ?? l.activity ?? [];
+      const hasNewActivity = baseActivity.length > (l.activity ?? []).length;
+      merged = {
+        ...updated,
+        activity: hasNewActivity
+          ? baseActivity
+          : [
+              {
+                id: newLeadActivityId(),
+                type: "updated",
+                createdAt: new Date().toISOString(),
+                description: "Se actualizaron los datos del lead",
+              },
+              ...baseActivity,
+            ],
+      };
+      return prev.map((row) => (row.id === updated.id ? merged! : row));
+    });
+    if (!merged) return;
+
+    const client = getSupabaseClient();
+    if (client) {
+      const { error: saveLeadErr } = await updateLead(client, merged);
+      if (saveLeadErr) {
+        toast.error(saveLeadErr.message);
+        return;
+      }
+    }
     setLeadDialog((d) =>
-      d && d.lead.id === updated.id ? { ...d, lead: updated } : d
+      d && d.lead.id === updated.id ? { ...d, lead: merged } : d
     );
   }, []);
 
-  const nextPropertyId = useMemo(
-    () => String(Math.max(0, ...properties.map((p) => parseInt(p.id, 10) || 0)) + 1),
-    [properties]
+  const handleSaveProperty = useCallback(
+    async (p: Property) => {
+      const client = getSupabaseClient();
+      if (!client) {
+        toast.error("Supabase no configurado.");
+        return;
+      }
+      const exists = properties.some((x) => x.id === p.id);
+      const propRes = exists ? await updateProperty(client, p) : await insertProperty(client, p, p.id);
+      if (propRes.error) {
+        toast.error(propRes.error.message);
+        return;
+      }
+      await reloadProperties();
+    },
+    [properties, reloadProperties]
   );
 
-  const handleSaveProperty = useCallback((p: Property) => {
-    setProperties((prev) => {
-      const exists = prev.some((x) => x.id === p.id);
-      if (exists) return prev.map((x) => (x.id === p.id ? p : x));
-      return [...prev, p];
-    });
-  }, []);
-
   const leadsForUser = useMemo(() => filterLeadsForUser(leads, user), [leads, user]);
+
+  const leadsInActivePipeline = useMemo(
+    () => leadsForUser.filter((l) => l.pipelineGroupId === activePipelineGroupId),
+    [leadsForUser, activePipelineGroupId]
+  );
+
+  const assigneeFilterOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    for (const u of users) {
+      if (!u.isActive) continue;
+      options.set(u.id, u.name || u.email || "Asesor");
+    }
+    for (const lead of leadsInActivePipeline) {
+      if (lead.assignedToUserId && !options.has(lead.assignedToUserId)) {
+        options.set(lead.assignedToUserId, lead.assignedTo || "Asesor");
+        continue;
+      }
+      const assignedName = lead.assignedTo.trim();
+      if (!lead.assignedToUserId && assignedName) {
+        options.set(`name:${foldSearchText(assignedName)}`, `${assignedName} (sin usuario vinculado)`);
+      }
+    }
+    return [...options.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
+  }, [users, leadsInActivePipeline]);
 
   const openLeadDetail = useCallback(
     (lead: Lead, mode: "view" | "edit") => {
@@ -228,6 +956,52 @@ export function AdminPage() {
     [leads]
   );
 
+  const handleViewTeamMember = useCallback((userId: string) => {
+    pendingReturnFromUserDetailRef.current = {
+      tab: activeTab,
+      companySubtab,
+      leadsView,
+      leadDialog: leadDialog ? { lead: leadDialog.lead, mode: leadDialog.mode } : null,
+    };
+    setUsersPanelFocus({ id: userId, nonce: Date.now() });
+    setActiveTab("company");
+    setCompanySubtab("users");
+    setLeadDialog(null);
+  }, [activeTab, companySubtab, leadsView, leadDialog]);
+
+  const handleUserDetailClosed = useCallback(() => {
+    const ctx = pendingReturnFromUserDetailRef.current;
+    pendingReturnFromUserDetailRef.current = null;
+    if (!ctx) return;
+    setActiveTab(ctx.tab);
+    setCompanySubtab(ctx.companySubtab);
+    setLeadsView(ctx.leadsView);
+    if (ctx.leadDialog) {
+      const fresh = leads.find((l) => l.id === ctx.leadDialog.lead.id) ?? ctx.leadDialog.lead;
+      setLeadDialog({ lead: fresh, mode: ctx.leadDialog.mode });
+    } else {
+      setLeadDialog(null);
+    }
+  }, [leads]);
+
+  const handleUsersPanelFocusConsumed = useCallback(() => {
+    setUsersPanelFocus(null);
+  }, []);
+
+  const canAccessClients = useMemo(
+    () => Boolean(user?.permissions?.includes("manage_clients")),
+    [user]
+  );
+
+  const handleRegisterClientFromLead = useCallback((lead: Lead) => {
+    setLeadDialog(null);
+    setActiveTab("clients");
+    setSeedClientFromLead({ lead, nonce: Date.now() });
+  }, []);
+
+  const handleFocusClientConsumed = useCallback(() => setFocusClient(null), []);
+  const handleSeedClientFromLeadConsumed = useCallback(() => setSeedClientFromLead(null), []);
+
   // Stats calculations (respetan rol: el asesor solo cuenta sus leads)
   const totalLeads = leadsForUser.length;
   const newLeads = leadsForUser.filter((l) => l.status === "nuevo").length;
@@ -236,14 +1010,199 @@ export function AdminPage() {
   const propertiesForSale = properties.filter(p => p.status === "venta").length;
   const propertiesForRent = properties.filter(p => p.status === "alquiler").length;
 
-  const filteredLeads = leadsForUser.filter((lead) => {
+  const filteredLeads = leadsInActivePipeline.filter((lead) => {
+    const createdAtDate = lead.createdAt ? new Date(lead.createdAt) : null;
+    const now = new Date();
+    const fromByRange = (() => {
+      if (createdRangeFilter === "all" || createdRangeFilter === "custom") return null;
+      const d = new Date(now);
+      if (createdRangeFilter === "1m") d.setMonth(d.getMonth() - 1);
+      if (createdRangeFilter === "3m") d.setMonth(d.getMonth() - 3);
+      if (createdRangeFilter === "6m") d.setMonth(d.getMonth() - 6);
+      if (createdRangeFilter === "1y") d.setFullYear(d.getFullYear() - 1);
+      return d;
+    })();
+    const customFromDate = createdRangeFilter === "custom" && createdFrom ? new Date(`${createdFrom}T00:00:00`) : null;
+    const customToDate = createdRangeFilter === "custom" && createdTo ? new Date(`${createdTo}T23:59:59`) : null;
+    const q = foldSearchText(searchQuery);
     const matchesSearch =
-      lead.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.phone.includes(searchQuery);
+      !q ||
+      foldSearchText(lead.name).includes(q) ||
+      foldSearchText(lead.email).includes(q) ||
+      foldSearchText(lead.phone).includes(q);
     const matchesStatus = statusFilter === "all" || lead.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const selectedAssigneeLabel = assigneeFilterOptions.find((opt) => opt.value === assigneeFilter)?.label ?? "";
+    const selectedAssigneeName = selectedAssigneeLabel.replace(/\s+\(sin usuario vinculado\)\s*$/i, "").trim();
+    const matchesAssignee =
+      assigneeFilter === "all" ||
+      (assigneeFilter.startsWith("name:")
+        ? foldSearchText(lead.assignedTo) === assigneeFilter.slice(5)
+        : lead.assignedToUserId === assigneeFilter ||
+          (selectedAssigneeName.length > 0 &&
+            foldSearchText(lead.assignedTo) === foldSearchText(selectedAssigneeName)));
+    const matchesCreatedRange =
+      createdRangeFilter === "all" ||
+      (createdAtDate !== null &&
+        !Number.isNaN(createdAtDate.getTime()) &&
+        ((fromByRange ? createdAtDate >= fromByRange : true) &&
+          (customFromDate ? createdAtDate >= customFromDate : true) &&
+          (customToDate ? createdAtDate <= customToDate : true)));
+    return matchesSearch && matchesStatus && matchesAssignee && matchesCreatedRange;
   });
+
+  const normalizeStageToken = useCallback((value: string) => {
+    return value
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[\s-]+/g, "_")
+      .replace(/_+/g, "_");
+  }, []);
+
+  const stageAliasToConfiguredId = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const id of leadColumnStatuses) {
+      out.set(normalizeStageToken(id), id);
+    }
+    for (const stage of customKanbanStages) {
+      out.set(normalizeStageToken(stage.label), stage.id);
+    }
+    return out;
+  }, [leadColumnStatuses, customKanbanStages, normalizeStageToken]);
+
+  const filteredLeadsForBoard = useMemo(
+    () =>
+      filteredLeads.map((lead) => {
+        if (leadColumnStatuses.includes(lead.status)) return lead;
+        const mapped = stageAliasToConfiguredId.get(normalizeStageToken(lead.status));
+        return mapped && mapped !== lead.status ? { ...lead, status: mapped } : lead;
+      }),
+    [filteredLeads, leadColumnStatuses, stageAliasToConfiguredId, normalizeStageToken]
+  );
+
+  useEffect(() => {
+    if (leadColumnStatuses.length === 0) return;
+    const client = getSupabaseClient();
+    if (!client) return;
+
+    const toMigrate = leadsInActivePipeline
+      .map((lead) => {
+        if (!lead.status || leadColumnStatuses.includes(lead.status)) return null;
+        const mapped = stageAliasToConfiguredId.get(normalizeStageToken(lead.status));
+        if (!mapped || mapped === lead.status) return null;
+        return { lead, mapped };
+      })
+      .filter((x): x is { lead: Lead; mapped: string } => x !== null);
+
+    if (toMigrate.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      const responses = await Promise.all(
+        toMigrate.map(async ({ lead, mapped }) => {
+          const next: Lead = { ...lead, status: mapped, updatedAt: new Date().toISOString() };
+          const { error } = await updateLead(client, next);
+          return { id: lead.id, mapped, error };
+        })
+      );
+      if (cancelled) return;
+
+      const ok = responses.filter((r) => !r.error);
+      const failed = responses.filter((r) => !!r.error);
+
+      if (ok.length > 0) {
+        const map = new Map(ok.map((r) => [r.id, r.mapped]));
+        setLeads((prev) =>
+          prev.map((lead) => {
+            const mapped = map.get(lead.id);
+            return mapped ? { ...lead, status: mapped } : lead;
+          })
+        );
+        if (import.meta.env.DEV) {
+          console.info(`[Viterra] Estados legacy migrados en DB: ${ok.length}`);
+        }
+      }
+      if (failed.length > 0) {
+        toast.error("No se pudieron normalizar algunos estados legacy del pipeline.");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    leadsInActivePipeline,
+    leadColumnStatuses,
+    stageAliasToConfiguredId,
+    normalizeStageToken,
+  ]);
+
+  const leadStatusesForRendering = useMemo(() => {
+    const seen = new Set(leadColumnStatuses);
+    const extraIds = [...new Set(filteredLeadsForBoard.map((l) => l.status))]
+      .filter((id) => !!id && !seen.has(id))
+      .sort();
+    return [...leadColumnStatuses, ...extraIds];
+  }, [leadColumnStatuses, filteredLeadsForBoard]);
+
+  /** Vista tabla: grupos por estado (orden del pipeline), sin columnas fijas que fuercen scroll horizontal */
+  const leadsTableGroupedByStatus = useMemo(() => {
+    const byStatus = new Map<string, Lead[]>();
+    for (const lead of filteredLeadsForBoard) {
+      const list = byStatus.get(lead.status) ?? [];
+      list.push(lead);
+      byStatus.set(lead.status, list);
+    }
+    const sections: { statusId: string; label: string; leads: Lead[] }[] = [];
+    for (const id of leadStatusesForRendering) {
+      const list = byStatus.get(id);
+      if (list?.length) sections.push({ statusId: id, label: resolveStatusLabel(id), leads: list });
+    }
+    return sections;
+  }, [filteredLeadsForBoard, leadStatusesForRendering, resolveStatusLabel]);
+
+  const toggleLeadsTableSection = useCallback((statusId: string) => {
+    setLeadsTableSectionCollapsed((prev) => ({ ...prev, [statusId]: !prev[statusId] }));
+  }, []);
+
+  const filteredProperties = properties.filter((property) => {
+    const q = foldSearchText(propertySearchQuery);
+    const matchesSearch = !q || (
+      foldSearchText(property.title).includes(q) ||
+      foldSearchText(property.location).includes(q) ||
+      foldSearchText(property.type).includes(q) ||
+      foldSearchText(property.status).includes(q)
+    );
+    const matchesOperation =
+      propertyOperationFilter === "all" || property.status === propertyOperationFilter;
+    const matchesType =
+      propertyTypeFilter === "all" || property.type === propertyTypeFilter;
+    const matchesLocation =
+      propertyLocationFilter === "all" || property.location === propertyLocationFilter;
+
+    const rawMax = Number(propertyMaxPrice);
+    const normalizedPrice =
+      propertyCurrencyFilter === "USD" ? property.price : property.price * 17;
+    const matchesMaxPrice =
+      propertyMaxPrice.trim() === "" || Number.isNaN(rawMax) || normalizedPrice <= rawMax;
+
+    return (
+      matchesSearch &&
+      matchesOperation &&
+      matchesType &&
+      matchesLocation &&
+      matchesMaxPrice
+    );
+  });
+  const propertyTypeOptions = useMemo(
+    () => Array.from(new Set(properties.map((p) => p.type).filter(Boolean))),
+    [properties]
+  );
+  const propertyLocationOptions = useMemo(
+    () => Array.from(new Set(properties.map((p) => p.location).filter(Boolean))),
+    [properties]
+  );
 
   // Datos para gráficas - tonos elegantes
   const trendData = [
@@ -266,17 +1225,214 @@ export function AdminPage() {
   const conversionRate = totalLeads > 0 ? ((closedDeals / totalLeads) * 100).toFixed(1) : "0";
   const totalValue = properties.reduce((sum, p) => sum + p.price, 0);
   const avgPropertyPrice = properties.length > 0 ? (totalValue / properties.length).toFixed(0) : "0";
+  const [animatedStats, setAnimatedStats] = useState({
+    totalLeads: 0,
+    conversionRate: 0,
+    totalProperties: 0,
+    avgPropertyPrice: 0,
+  });
 
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      nuevo: "bg-slate-100 text-slate-700 border border-slate-200",
-      contactado: "bg-amber-50 text-amber-700 border border-amber-200",
-      calificado: "bg-sky-50 text-sky-800 border border-sky-200",
-      negociacion: "bg-purple-50 text-purple-700 border border-purple-200",
-      cerrado: "bg-green-50 text-green-700 border border-green-200",
-      perdido: "bg-gray-100 text-gray-600 border border-gray-200",
+  useEffect(() => {
+    if (activeTab !== "dashboard") return;
+    const target = {
+      totalLeads,
+      conversionRate: Number(conversionRate) || 0,
+      totalProperties,
+      avgPropertyPrice: parseInt(avgPropertyPrice, 10) || 0,
     };
-    return colors[status] ?? "bg-indigo-50 text-indigo-800 border border-indigo-200";
+    const durationMs = 900;
+    const start = performance.now();
+    let frameId = 0;
+
+    const tick = (now: number) => {
+      const progress = Math.min((now - start) / durationMs, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setAnimatedStats({
+        totalLeads: target.totalLeads * eased,
+        conversionRate: target.conversionRate * eased,
+        totalProperties: target.totalProperties * eased,
+        avgPropertyPrice: target.avgPropertyPrice * eased,
+      });
+      if (progress < 1) frameId = requestAnimationFrame(tick);
+    };
+
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [activeTab, totalLeads, conversionRate, totalProperties, avgPropertyPrice]);
+
+  const adminNavigationRoutes = useMemo(
+    () => [
+      {
+        id: "dashboard",
+        title: "Dashboard",
+        description: "Resumen general del CRM",
+        keywords: ["inicio", "resumen", "dashboard", "panel"],
+        action: () => setActiveTab("dashboard"),
+      },
+      {
+        id: "leads",
+        title: "Leads",
+        description: "Pipeline y seguimiento comercial",
+        keywords: ["lead", "clientes", "pipeline", "kanban", "prospectos"],
+        action: () => setActiveTab("leads"),
+      },
+      ...(canAccessClients
+        ? [
+            {
+              id: "clients",
+              title: "Clientes",
+              description: "Fichas de clientes e historial",
+              keywords: ["clientes", "crm", "compradores", "contactos"],
+              action: () => setActiveTab("clients"),
+            },
+          ]
+        : []),
+      {
+        id: "agenda",
+        title: "Agenda",
+        description: "Calendario semanal de citas",
+        keywords: ["agenda", "calendario", "citas", "semana", "horario"],
+        action: () => setActiveTab("agenda"),
+      },
+      {
+        id: "properties",
+        title: "Propiedades",
+        description: "Catálogo y administración de propiedades",
+        keywords: ["propiedades", "inmuebles", "venta", "renta"],
+        action: () => setActiveTab("properties"),
+      },
+      {
+        id: "developments",
+        title: "Desarrollos",
+        description: "Gestión de desarrollos propios",
+        keywords: ["desarrollos", "proyectos", "desarrollo"],
+        action: () => setActiveTab("developments"),
+      },
+      {
+        id: "company-users",
+        title: "Mi empresa · Usuarios",
+        description: "Administración de usuarios y permisos",
+        keywords: ["usuarios", "mi empresa", "permisos", "roles", "equipo"],
+        action: () => {
+          setActiveTab("company");
+          setCompanySubtab("users");
+        },
+      },
+      {
+        id: "company-site",
+        title: "Mi empresa · Editar sitio",
+        description: "Editor visual del sitio web",
+        keywords: ["editar sitio", "sitio", "web", "editor", "contenido"],
+        action: () => {
+          setActiveTab("company");
+          setCompanySubtab("site");
+        },
+      },
+      {
+        id: "company-pipeline",
+        title: "Mi empresa · Pipeline de leads",
+        description: "Configura estados y orden del pipeline",
+        keywords: ["estados", "columnas", "pipeline de leads", "kanban", "orden"],
+        action: () => {
+          setActiveTab("company");
+          setCompanySubtab("leadStages");
+        },
+      },
+      {
+        id: "company-settings",
+        title: "Mi empresa · Configuración",
+        description: "Espacio de trabajo, copias de seguridad y datos locales",
+        keywords: ["configuración", "ajustes", "respaldo", "localStorage", "mi empresa"],
+        action: () => {
+          setActiveTab("company");
+          setCompanySubtab("settings");
+        },
+      },
+      {
+        id: "messages",
+        title: "Mensajes",
+        description: "Accesos al centro de mensajes",
+        keywords: ["mensajes", "contacto", "correo"],
+        action: () => setActiveTab("messages"),
+      },
+      {
+        id: "site-home",
+        title: "Sitio público · Inicio",
+        description: "Ir a la página principal del sitio",
+        keywords: ["sitio", "home", "inicio público", "web"],
+        action: () => navigate("/"),
+      },
+      {
+        id: "site-properties",
+        title: "Sitio público · Propiedades",
+        description: "Ir al catálogo público de propiedades",
+        keywords: ["sitio propiedades", "catálogo", "propiedades públicas"],
+        action: () => navigate("/propiedades"),
+      },
+      {
+        id: "site-developments",
+        title: "Sitio público · Desarrollos",
+        description: "Ir a la página pública de desarrollos",
+        keywords: ["sitio desarrollos", "desarrollos públicos"],
+        action: () => navigate("/desarrollos"),
+      },
+      {
+        id: "site-contact",
+        title: "Sitio público · Contacto",
+        description: "Ir al formulario de contacto",
+        keywords: ["contacto", "formulario", "mensaje", "sitio contacto"],
+        action: () => navigate("/contacto"),
+      },
+    ],
+    [navigate, canAccessClients]
+  );
+
+  const headerSearchValue = adminHeaderQuery;
+  const headerSearchPlaceholder = "Buscar ruta, módulo, sección o usuario…";
+
+  const filteredAdminRoutes = useMemo(() => {
+    const query = adminHeaderQuery.trim().toLowerCase();
+    if (!query) return adminNavigationRoutes.slice(0, 6);
+
+    return adminNavigationRoutes
+      .filter((route) => {
+        const haystack = [route.title, route.description, ...route.keywords].join(" ").toLowerCase();
+        return haystack.includes(query);
+      })
+      .slice(0, 8);
+  }, [adminHeaderQuery, adminNavigationRoutes]);
+
+  const filteredDashboardUsers = useMemo(() => {
+    const q = adminHeaderQuery.trim().toLowerCase();
+    const active = users.filter((u) => u.isActive);
+    const sorted = [...active].sort((a, b) => a.name.localeCompare(b.name, "es"));
+    if (!q) return sorted.slice(0, 8);
+    return sorted
+      .filter((u) => {
+        const roleLabel = roleLabelEs(u.role).toLowerCase();
+        const haystack = [u.name, u.email, roleLabel, u.id].join(" ").toLowerCase();
+        return haystack.includes(q);
+      })
+      .slice(0, 8);
+  }, [adminHeaderQuery, users]);
+
+  const hasDashboardSearchResults =
+    filteredAdminRoutes.length > 0 || filteredDashboardUsers.length > 0;
+
+  const handleHeaderSearchChange = (value: string) => {
+    setAdminHeaderQuery(value);
+  };
+
+  const handleDashboardRouteSelect = (route: (typeof adminNavigationRoutes)[number]) => {
+    route.action();
+    setAdminHeaderQuery("");
+    setDashboardRouteSearchOpen(false);
+  };
+
+  const handleDashboardUserSelect = (userId: string) => {
+    handleViewTeamMember(userId);
+    setAdminHeaderQuery("");
+    setDashboardRouteSearchOpen(false);
   };
 
   if (!user) {
@@ -285,171 +1441,313 @@ export function AdminPage() {
 
   return (
     <div className="viterra-page viterra-crm min-h-screen bg-gradient-to-b from-[#f7f5f2] via-slate-50 to-slate-100">
-      <header className="sticky top-0 z-50 border-b border-brand-gold/15 bg-brand-navy text-white shadow-[0_4px_24px_-4px_rgba(0,0,0,0.35)]">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-[72px] items-center justify-between gap-4">
-            <Link
-              to="/"
-              aria-label="Ir al inicio del sitio público"
-              className="group flex min-w-0 items-center rounded-lg px-2 py-1.5 -ml-2 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-brand-navy active:bg-white/[0.12]"
+      <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-[14.5rem] lg:flex-col lg:border-r lg:border-brand-gold/20 lg:bg-brand-navy lg:text-white">
+        <div className="border-b border-white/15 px-5 py-5">
+          <Link
+            to="/"
+            aria-label="Ir al inicio del sitio público"
+            className="group block rounded-lg px-2 py-1.5 transition-colors hover:bg-white/10"
+          >
+            <span className="font-heading block font-light leading-tight tracking-[0.22em] text-white sm:text-lg">
+              VITERRA
+            </span>
+            <span className="relative my-2 block h-px w-[11rem] overflow-hidden rounded-full" aria-hidden>
+              <span className="absolute inset-0 bg-white/50" />
+              <span className="absolute inset-0 origin-left bg-[#C8102E]" style={{ transform: "scaleX(0.55)" }} />
+            </span>
+            <p
+              className="text-[10px] font-normal uppercase tracking-[0.26em] text-white/72 group-hover:text-white/88"
+              style={{
+                fontFamily: 'Perpetua, "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif',
+              }}
             >
-              <div className="min-w-0 text-left">
-                <span className="font-heading block font-light leading-tight tracking-[0.22em] text-white transition group-hover:text-white sm:text-lg">
-                  VITERRA
-                </span>
-                <span className="relative my-2 block h-px w-[min(100%,11rem)] max-w-[11rem] overflow-hidden rounded-full" aria-hidden>
-                  <span className="absolute inset-0 bg-white/50" />
-                  <span className="absolute inset-0 origin-left bg-[#C8102E]" style={{ transform: "scaleX(0.55)" }} />
-                </span>
-                <p
-                  className="text-[10px] font-normal uppercase tracking-[0.26em] text-white/72 group-hover:text-white/88"
-                  style={{
-                    fontFamily: 'Perpetua, "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif',
-                  }}
-                >
-                  CRM System
-                </p>
-              </div>
-            </Link>
-
-            <nav className="flex items-center gap-2 sm:gap-4 md:gap-6" aria-label="Acciones de cuenta">
-              <Link
-                to="/"
-                className="hidden rounded-lg px-3 py-2 text-sm font-medium text-white/90 underline-offset-4 transition-colors hover:bg-white/10 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 sm:inline"
-                style={{ fontWeight: 500 }}
-              >
-                Volver al sitio
-              </Link>
-
-              <div
-                className="flex items-center gap-3 border-l border-white/20 pl-3 sm:pl-6"
-                aria-label={`Sesión: ${user.name}, ${roleLabelEs(user.role)}`}
-              >
-                <div className="hidden min-w-0 text-right sm:block">
-                  <p className="truncate text-sm font-semibold text-white" style={{ fontWeight: 600 }}>
-                    {user.name}
-                  </p>
-                  <p className="truncate text-xs text-white/60" style={{ fontWeight: 500 }}>
-                    {roleLabelEs(user.role)}
-                  </p>
-                </div>
-                <div
-                  className="flex h-10 w-10 shrink-0 cursor-default items-center justify-center rounded-lg border border-white/20 bg-white/10 transition hover:border-white/35 hover:bg-white/15"
-                  title={user.name}
-                >
-                  <span className="text-sm font-semibold text-white" style={{ fontWeight: 600 }}>
-                    {user.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="rounded-lg p-2.5 text-white/75 transition-all hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/45 active:bg-white/[0.14]"
-                title="Cerrar sesión"
-                aria-label="Cerrar sesión"
-              >
-                <LogOut className="h-5 w-5" strokeWidth={1.5} />
-              </button>
-            </nav>
-          </div>
+              CRM System
+            </p>
+          </Link>
         </div>
-      </header>
+        <div className="flex-1 overflow-y-auto px-4 py-5">
+          <p className="px-2 pb-2 text-[11px] uppercase tracking-[0.14em] text-white/55" style={{ fontWeight: 600 }}>
+            Módulos admin
+          </p>
+          <nav className="space-y-1.5" aria-label="Navegación del panel admin">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("dashboard")}
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                    activeTab === "dashboard" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  <LayoutDashboard className="h-4 w-4" strokeWidth={activeTab === "dashboard" ? 2 : 1.75} />
+                  Dashboard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("leads")}
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                    activeTab === "leads" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  <Users className="h-4 w-4" strokeWidth={activeTab === "leads" ? 2 : 1.75} />
+                  Leads
+                </button>
+                {canAccessClients && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("clients")}
+                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                      activeTab === "clients"
+                        ? "bg-white text-brand-navy"
+                        : "text-white/80 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    <UserCircle2 className="h-4 w-4" strokeWidth={activeTab === "clients" ? 2 : 1.75} />
+                    Clientes
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("agenda")}
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                    activeTab === "agenda" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  <Calendar className="h-4 w-4" strokeWidth={activeTab === "agenda" ? 2 : 1.75} />
+                  Agenda
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("properties")}
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                    activeTab === "properties" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  <Home className="h-4 w-4" strokeWidth={activeTab === "properties" ? 2 : 1.75} />
+                  Propiedades
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("developments")}
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                    activeTab === "developments" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  <Building2 className="h-4 w-4" strokeWidth={activeTab === "developments" ? 2 : 1.75} />
+                  Desarrollos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("company")}
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                    activeTab === "company" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  <Briefcase className="h-4 w-4" strokeWidth={activeTab === "company" ? 2 : 1.75} />
+                  Mi empresa
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("messages")}
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                    activeTab === "messages" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  <MessageSquare className="h-4 w-4" strokeWidth={activeTab === "messages" ? 2 : 1.75} />
+                  Mensajes
+                </button>
+          </nav>
+        </div>
+        <div className="border-t border-white/15 px-5 py-4">
+          <p className="truncate text-sm text-white" style={{ fontWeight: 600 }}>{user.name}</p>
+          <p className="truncate text-[11px] uppercase tracking-[0.08em] text-white/65">
+            {roleLabelEs(user.role)}
+          </p>
+        </div>
+      </aside>
 
-      <div data-reveal className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
-        <div className="mb-10">
-          <nav className="flex flex-wrap gap-6 border-b border-slate-200/90 sm:gap-8 md:gap-10">
-            <button
-              onClick={() => setActiveTab("dashboard")}
-              type="button"
-              className={`font-heading pb-4 px-1 text-sm transition-all border-b-2 -mb-px ${
-                activeTab === "dashboard"
-                  ? "border-primary text-brand-navy"
-                  : "border-transparent text-slate-500 hover:text-brand-navy"
-              }`}
-              style={{ fontWeight: activeTab === "dashboard" ? 600 : 500 }}
-            >
-              <div className="flex items-center gap-2.5">
-                <LayoutDashboard className="w-4.5 h-4.5" strokeWidth={activeTab === "dashboard" ? 2 : 1.5} />
-                Dashboard
+      <div
+        data-reveal
+        className="viterra-reveal-off px-4 pb-4 pt-4 sm:px-6 sm:pt-4 lg:pl-[16.5rem] lg:pr-8"
+      >
+        {activeTab === "dashboard" && (
+          <header
+            className="sticky top-3 z-50 overflow-visible rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white/95 via-white/95 to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.22)] ring-1 ring-slate-900/[0.04] backdrop-blur-md"
+          >
+            <div
+              className="h-1.5 w-full shrink-0 bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none absolute -right-16 top-14 h-40 w-40 rounded-full bg-gradient-to-br from-primary/[0.1] to-transparent blur-3xl"
+              aria-hidden
+            />
+            <div className="relative px-4 py-4 sm:px-5 sm:py-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+                <div className="min-w-0 flex-1">
+                  <p
+                    className="text-[10px] font-semibold uppercase tracking-[0.28em] text-primary"
+                    style={{ fontWeight: 600 }}
+                  >
+                    Panel Viterra
+                  </p>
+                  <h2
+                    className="font-heading mt-1.5 text-[1.25rem] leading-tight text-brand-navy sm:text-[1.45rem]"
+                    style={{ fontWeight: 600 }}
+                  >
+                    {dashboardTimeGreetingEs()}
+                    {user?.name?.trim()
+                      ? `, ${user.name.trim().split(/\s+/)[0]}`
+                      : ""}
+                  </h2>
+                  <p className="mt-1.5 max-w-xl text-xs leading-relaxed text-slate-600 sm:text-sm" style={{ fontWeight: 500 }}>
+                    Bienvenido al panel. Aquí ves el resumen de leads, propiedades y el pulso del negocio.
+                  </p>
+                </div>
+
+                <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end sm:gap-3">
+                  <Link
+                    to="/"
+                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200/90 bg-white px-3 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-brand-navy"
+                    style={{ fontWeight: 600 }}
+                  >
+                    <Globe2 className="h-4 w-4" strokeWidth={1.8} />
+                    Ir al sitio
+                  </Link>
+
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200/90 bg-white px-3 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+                    style={{ fontWeight: 600 }}
+                  >
+                    <LogOut className="h-4 w-4" strokeWidth={1.8} />
+                    Cerrar sesión
+                  </button>
+                </div>
               </div>
-            </button>
-            <button
-              onClick={() => setActiveTab("leads")}
-              type="button"
-              className={`font-heading pb-4 px-1 text-sm transition-all border-b-2 -mb-px ${
-                activeTab === "leads"
-                  ? "border-primary text-brand-navy"
-                  : "border-transparent text-slate-500 hover:text-brand-navy"
-              }`}
-              style={{ fontWeight: activeTab === "leads" ? 600 : 500 }}
-            >
-              <div className="flex items-center gap-2.5">
-                <Users className="w-4.5 h-4.5" strokeWidth={activeTab === "leads" ? 2 : 1.5} />
-                Leads
-                <span
-                  className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary ring-1 ring-primary/15"
-                  style={{ fontWeight: 600 }}
-                >
-                  {totalLeads}
-                </span>
+
+              <div className="relative mt-4 min-w-0">
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
+                <input
+                  type="search"
+                  value={headerSearchValue}
+                  onChange={(e) => handleHeaderSearchChange(e.target.value)}
+                  onFocus={() => setDashboardRouteSearchOpen(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      if (filteredAdminRoutes[0]) {
+                        e.preventDefault();
+                        handleDashboardRouteSelect(filteredAdminRoutes[0]);
+                      } else if (filteredDashboardUsers[0]) {
+                        e.preventDefault();
+                        handleDashboardUserSelect(filteredDashboardUsers[0].id);
+                      }
+                    }
+                    if (e.key === "Escape") {
+                      setDashboardRouteSearchOpen(false);
+                    }
+                  }}
+                  onBlur={() => {
+                    window.setTimeout(() => setDashboardRouteSearchOpen(false), 120);
+                  }}
+                  placeholder={headerSearchPlaceholder}
+                  className="h-10 w-full rounded-xl border border-slate-200/90 bg-white py-2.5 pl-10 pr-3 text-sm text-brand-navy shadow-sm placeholder:text-slate-400 focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                  aria-label="Buscar rutas, módulos o usuarios del equipo"
+                />
+                {dashboardRouteSearchOpen && hasDashboardSearchResults && (
+                  <div className="absolute left-0 right-0 top-[calc(100%+0.6rem)] z-[60] overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_24px_60px_-18px_rgba(20,28,46,0.2)]">
+                    <div className="max-h-[min(24rem,70vh)] overflow-y-auto">
+                      {filteredAdminRoutes.length > 0 && (
+                        <>
+                          <div className="sticky top-0 z-[1] border-b border-slate-100 bg-white px-4 py-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                            Rutas sugeridas
+                          </div>
+                          <div className="py-1.5">
+                            {filteredAdminRoutes.map((route) => (
+                              <button
+                                key={route.id}
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => handleDashboardRouteSelect(route)}
+                                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm text-brand-navy" style={{ fontWeight: 600 }}>
+                                    {route.title}
+                                  </p>
+                                  <p className="truncate text-xs text-slate-500">{route.description}</p>
+                                </div>
+                                <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" strokeWidth={1.8} />
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                      {filteredDashboardUsers.length > 0 && (
+                        <>
+                          <div className="sticky top-0 z-[1] border-b border-slate-100 bg-white px-4 py-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                            Usuarios del equipo
+                          </div>
+                          <div className="py-1.5">
+                            {filteredDashboardUsers.map((u) => (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => handleDashboardUserSelect(u.id)}
+                                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
+                              >
+                                <div className="flex min-w-0 flex-1 items-center gap-3">
+                                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                                    <UserIcon className="h-4 w-4" strokeWidth={2} aria-hidden />
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm text-brand-navy" style={{ fontWeight: 600 }}>
+                                      {u.name}
+                                    </p>
+                                    <p className="truncate text-xs text-slate-500">{u.email}</p>
+                                    <p className="truncate text-[11px] text-slate-400">{roleLabelEs(u.role)}</p>
+                                  </div>
+                                </div>
+                                <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" strokeWidth={1.8} />
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
-            </button>
-            <button
-              onClick={() => setActiveTab("properties")}
-              type="button"
-              className={`font-heading pb-4 px-1 text-sm transition-all border-b-2 -mb-px ${
-                activeTab === "properties"
-                  ? "border-primary text-brand-navy"
-                  : "border-transparent text-slate-500 hover:text-brand-navy"
-              }`}
-              style={{ fontWeight: activeTab === "properties" ? 600 : 500 }}
-            >
-              <div className="flex items-center gap-2.5">
-                <Home className="w-4.5 h-4.5" strokeWidth={activeTab === "properties" ? 2 : 1.5} />
-                Propiedades
-                <span
-                  className="rounded-full bg-slate-200/80 px-2.5 py-0.5 text-xs font-semibold text-brand-navy ring-1 ring-slate-300/60"
-                  style={{ fontWeight: 600 }}
-                >
-                  {totalProperties}
-                </span>
-              </div>
-            </button>
-            <button
-              onClick={() => setActiveTab("messages")}
-              type="button"
-              className={`font-heading pb-4 px-1 text-sm transition-all border-b-2 -mb-px ${
-                activeTab === "messages"
-                  ? "border-primary text-brand-navy"
-                  : "border-transparent text-slate-500 hover:text-brand-navy"
-              }`}
-              style={{ fontWeight: activeTab === "messages" ? 600 : 500 }}
-            >
-              <div className="flex items-center gap-2.5">
-                <MessageSquare className="w-4.5 h-4.5" strokeWidth={activeTab === "messages" ? 2 : 1.5} />
-                Mensajes
-              </div>
-            </button>
-            <button
-              onClick={() => setActiveTab("site")}
-              type="button"
-              className={`font-heading pb-4 px-1 text-sm transition-all border-b-2 -mb-px ${
-                activeTab === "site"
-                  ? "border-primary text-brand-navy"
-                  : "border-transparent text-slate-500 hover:text-brand-navy"
-              }`}
-              style={{ fontWeight: activeTab === "site" ? 600 : 500 }}
-            >
-              <div className="flex items-center gap-2.5">
-                <Globe2 className="w-4.5 h-4.5" strokeWidth={activeTab === "site" ? 2 : 1.5} />
-                Editar sitio
-              </div>
-            </button>
+            </div>
+          </header>
+        )}
+
+        <div className="mb-6 rounded-xl border border-slate-200/90 bg-white p-3 shadow-sm lg:hidden">
+          <p className="px-2 pb-2 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
+            Módulos admin
+          </p>
+          <nav className="grid grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Navegación del panel admin">
+            {[
+              { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+              { id: "leads", label: "Leads", icon: Users },
+              { id: "agenda", label: "Agenda", icon: Calendar },
+              { id: "properties", label: "Propiedades", icon: Home },
+              { id: "developments", label: "Desarrollos", icon: Building2 },
+              { id: "company", label: "Mi empresa", icon: Briefcase },
+              { id: "messages", label: "Mensajes", icon: MessageSquare },
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveTab(item.id as TabType)}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${
+                  activeTab === item.id ? "bg-brand-navy text-white" : "bg-slate-50 text-slate-700"
+                }`}
+              >
+                <item.icon className="h-4 w-4" strokeWidth={1.75} />
+                {item.label}
+              </button>
+            ))}
           </nav>
         </div>
 
@@ -457,57 +1755,53 @@ export function AdminPage() {
         {activeTab === "dashboard" && (
           <div className="space-y-8">
             {/* Stats Cards - Elegantes y minimalistas */}
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-6 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
                 <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-primary to-brand-burgundy opacity-90" aria-hidden />
-                <div className="flex items-start justify-between pl-1 mb-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white shadow-sm">
-                    <Users className="h-5 w-5 text-brand-navy" strokeWidth={1.5} />
-                  </div>
-                  <TrendingUp className="h-4 w-4 text-brand-gold/90" strokeWidth={1.5} />
+                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
+                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Total Leads</p>
+                  <TrendingUp className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
-                <p className="font-heading mb-1 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Total Leads</p>
-                <p className="font-heading text-3xl text-brand-navy mb-1" style={{ fontWeight: 700 }}>{totalLeads}</p>
-                <p className="text-xs text-slate-500" style={{ fontWeight: 500 }}>+{newLeads} este mes</p>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
+                  {Math.round(animatedStats.totalLeads)}
+                </p>
+                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>+{newLeads} este mes</p>
               </div>
 
-              <div className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-6 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
+              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
                 <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-burgundy to-brand-gold opacity-90" aria-hidden />
-                <div className="flex items-start justify-between pl-1 mb-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white shadow-sm">
-                    <Target className="h-5 w-5 text-brand-navy" strokeWidth={1.5} />
-                  </div>
-                  <Activity className="h-4 w-4 text-brand-gold/90" strokeWidth={1.5} />
+                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
+                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Conversión</p>
+                  <Activity className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
-                <p className="font-heading mb-1 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Conversión</p>
-                <p className="font-heading text-3xl text-brand-navy mb-1" style={{ fontWeight: 700 }}>{conversionRate}%</p>
-                <p className="text-xs text-slate-500" style={{ fontWeight: 500 }}>{closedDeals} cerrados</p>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
+                  {animatedStats.conversionRate.toFixed(1)}%
+                </p>
+                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>{closedDeals} cerrados</p>
               </div>
 
-              <div className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-6 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
+              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
                 <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-navy to-slate-600 opacity-90" aria-hidden />
-                <div className="flex items-start justify-between pl-1 mb-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white shadow-sm">
-                    <Home className="h-5 w-5 text-brand-navy" strokeWidth={1.5} />
-                  </div>
-                  <Briefcase className="h-4 w-4 text-brand-gold/90" strokeWidth={1.5} />
+                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
+                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Propiedades</p>
+                  <Briefcase className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
-                <p className="font-heading mb-1 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Propiedades</p>
-                <p className="font-heading text-3xl text-brand-navy mb-1" style={{ fontWeight: 700 }}>{totalProperties}</p>
-                <p className="text-xs text-slate-500" style={{ fontWeight: 500 }}>{propertiesForSale} venta · {propertiesForRent} alquiler</p>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
+                  {Math.round(animatedStats.totalProperties)}
+                </p>
+                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>{propertiesForSale} venta · {propertiesForRent} alquiler</p>
               </div>
 
-              <div className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-6 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
+              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
                 <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-gold to-primary opacity-90" aria-hidden />
-                <div className="flex items-start justify-between pl-1 mb-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white shadow-sm">
-                    <DollarSign className="h-5 w-5 text-brand-navy" strokeWidth={1.5} />
-                  </div>
-                  <TrendingUp className="h-4 w-4 text-brand-gold/90" strokeWidth={1.5} />
+                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
+                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Valor Promedio</p>
+                  <TrendingUp className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
-                <p className="font-heading mb-1 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Valor Promedio</p>
-                <p className="font-heading text-3xl text-brand-navy mb-1" style={{ fontWeight: 700 }}>${parseInt(avgPropertyPrice).toLocaleString()}</p>
-                <p className="text-xs text-slate-500" style={{ fontWeight: 500 }}>por propiedad</p>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
+                  ${Math.round(animatedStats.avgPropertyPrice).toLocaleString()}
+                </p>
+                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>por propiedad</p>
               </div>
             </div>
 
@@ -602,18 +1896,14 @@ export function AdminPage() {
                       onClick={() => openLeadDetail(lead, "view")}
                       className="flex w-full items-center justify-between rounded-lg p-3 text-left transition-colors hover:bg-slate-50"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center">
-                          <span className="text-xs font-semibold text-slate-700" style={{ fontWeight: 600 }}>
-                            {lead.name.split(" ").map(n => n[0]).join("")}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-slate-900" style={{ fontWeight: 600 }}>{lead.name}</p>
-                          <p className="text-xs text-slate-500 mt-0.5" style={{ fontWeight: 500 }}>{lead.email}</p>
-                        </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900" style={{ fontWeight: 600 }}>{lead.name}</p>
+                        <p className="mt-0.5 text-xs text-slate-500" style={{ fontWeight: 500 }}>{lead.email}</p>
                       </div>
-                      <span className={`px-2.5 py-1 rounded-md text-xs font-medium ${getStatusColor(lead.status)}`} style={{ fontWeight: 600 }}>
+                      <span
+                        className="shrink-0 rounded-md px-2.5 py-1 text-xs font-medium"
+                        style={{ fontWeight: 600, ...stageHexToChipStyle(resolveStageHex(lead.status)) }}
+                      >
                         {resolveStatusLabel(lead.status)}
                       </span>
                     </button>
@@ -701,53 +1991,35 @@ export function AdminPage() {
 
                   <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
                     <div
-                      className="inline-flex rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 shadow-[inset_0_1px_2px_rgba(20,28,46,0.06)]"
+                      className="inline-flex w-full rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 shadow-[inset_0_1px_2px_rgba(20,28,46,0.06)] sm:w-auto"
                       role="group"
                       aria-label="Vista de leads"
                     >
                       <button
                         type="button"
+                        aria-label="Vista Kanban"
                         onClick={() => setLeadsView("kanban")}
-                        className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] transition-all sm:text-[13px] ${
+                        className={`inline-flex h-11 flex-1 items-center justify-center rounded-xl transition-all sm:h-10 sm:flex-none sm:w-10 ${
                           leadsView === "kanban"
                             ? "bg-brand-navy text-white shadow-md shadow-brand-navy/25"
                             : "text-slate-600 hover:bg-white/80 hover:text-brand-navy"
                         }`}
-                        style={{ fontWeight: 600 }}
                       >
                         <LayoutGrid className="h-4 w-4 shrink-0" strokeWidth={2} />
-                        Kanban
                       </button>
                       <button
                         type="button"
+                        aria-label="Vista tabla"
                         onClick={() => setLeadsView("table")}
-                        className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] transition-all sm:text-[13px] ${
+                        className={`inline-flex h-11 flex-1 items-center justify-center rounded-xl transition-all sm:h-10 sm:flex-none sm:w-10 ${
                           leadsView === "table"
                             ? "bg-brand-navy text-white shadow-md shadow-brand-navy/25"
                             : "text-slate-600 hover:bg-white/80 hover:text-brand-navy"
                         }`}
-                        style={{ fontWeight: 600 }}
                       >
                         <Table2 className="h-4 w-4 shrink-0" strokeWidth={2} />
-                        Tabla
                       </button>
                     </div>
-
-                    {user.role === "lider_grupo" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const name = window.prompt("Nombre de la nueva etapa del embudo");
-                          if (name?.trim()) handleAddKanbanStage(name.trim());
-                        }}
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200/90 bg-white px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-brand-navy shadow-sm transition-all hover:border-brand-navy/25 hover:bg-slate-50 sm:flex-initial sm:text-[13px]"
-                        style={{ fontWeight: 600 }}
-                        title="Solo líderes de grupo pueden añadir columnas al tablero"
-                      >
-                        <Plus className="h-4 w-4 shrink-0" strokeWidth={2} />
-                        Nueva etapa
-                      </button>
-                    )}
 
                     <button
                       type="button"
@@ -761,7 +2033,7 @@ export function AdminPage() {
                   </div>
                 </div>
 
-                <div className="mt-8 flex flex-col gap-3 border-t border-slate-200/80 pt-6 sm:flex-row sm:items-stretch">
+                <div className="mt-8 flex flex-col gap-3 border-t border-slate-200/80 pt-6">
                   <div className="relative min-h-[2.75rem] flex-1">
                     <Search
                       className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
@@ -776,6 +2048,75 @@ export function AdminPage() {
                       style={{ fontWeight: 500 }}
                       autoComplete="off"
                     />
+                  </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-stretch">
+                  <div className="relative sm:w-[min(100%,260px)]">
+                    <Users
+                      className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
+                      strokeWidth={1.75}
+                    />
+                    <select
+                      id="crm-pipeline-group"
+                      value={activePipelineGroupId}
+                      onChange={(e) => setActivePipelineGroupId(e.target.value)}
+                      className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                      style={{ fontWeight: 500 }}
+                    >
+                      {allowedPipelineGroupIds.map((id) => (
+                        <option key={id} value={id}>
+                          Grupo: {pipelineGroupLabel(id)}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
+                      <ChevronDown className="h-4 w-4" strokeWidth={2} />
+                    </span>
+                  </div>
+                  <div className="relative sm:w-[min(100%,220px)]">
+                    <UserIcon
+                      className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-400"
+                      strokeWidth={1.75}
+                    />
+                    <select
+                      value={assigneeFilter}
+                      onChange={(e) => setAssigneeFilter(e.target.value)}
+                      className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-10 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                      style={{ fontWeight: 500 }}
+                    >
+                      <option value="all">Todos los asesores</option>
+                      {assigneeFilterOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
+                      <ChevronDown className="h-4 w-4" strokeWidth={2} />
+                    </span>
+                  </div>
+                  <div className="relative sm:w-[min(100%,230px)]">
+                    <Calendar
+                      className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-400"
+                      strokeWidth={1.75}
+                    />
+                    <select
+                      value={createdRangeFilter}
+                      onChange={(e) =>
+                        setCreatedRangeFilter(e.target.value as "all" | "1m" | "3m" | "6m" | "1y" | "custom")
+                      }
+                      className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-10 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                      style={{ fontWeight: 500 }}
+                    >
+                      <option value="all">Cualquier fecha</option>
+                      <option value="1m">Ultimo mes</option>
+                      <option value="3m">Ultimos 3 meses</option>
+                      <option value="6m">Ultimos 6 meses</option>
+                      <option value="1y">Ultimo ano</option>
+                      <option value="custom">Fecha personalizada</option>
+                    </select>
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
+                      <ChevronDown className="h-4 w-4" strokeWidth={2} />
+                    </span>
                   </div>
                   <div className="relative sm:w-[min(100%,220px)]">
                     <Filter
@@ -799,6 +2140,35 @@ export function AdminPage() {
                       <ChevronDown className="h-4 w-4" strokeWidth={2} />
                     </span>
                   </div>
+                  </div>
+                  {createdRangeFilter === "custom" && (
+                    <div className="grid gap-3 sm:max-w-[460px] sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          Desde
+                        </label>
+                        <input
+                          type="date"
+                          value={createdFrom}
+                          onChange={(e) => setCreatedFrom(e.target.value)}
+                          className="h-11 w-full rounded-2xl border border-slate-200/90 bg-white px-4 text-sm text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                          style={{ fontWeight: 500 }}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          Hasta
+                        </label>
+                        <input
+                          type="date"
+                          value={createdTo}
+                          onChange={(e) => setCreatedTo(e.target.value)}
+                          className="h-11 w-full rounded-2xl border border-slate-200/90 bg-white px-4 text-sm text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                          style={{ fontWeight: 500 }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -810,188 +2180,559 @@ export function AdminPage() {
               onAddLead={handleAddLead}
               user={user}
               customKanbanStages={customKanbanStages}
+              pipelineGroupId={activePipelineGroupId}
+          defaultStageId={defaultLeadStageId}
+              properties={properties}
+              developments={developments}
             />
 
+            {leadsError && (
+              <div
+                className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+                style={{ fontWeight: 500 }}
+                role="alert"
+              >
+                {leadsError}
+              </div>
+            )}
+
+            {!leadsLoading && leadColumnStatuses.length === 0 && (
+              <div
+                className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                style={{ fontWeight: 500 }}
+                role="status"
+              >
+                Este pipeline no tiene columnas todavía. Crea la primera en <code className="text-xs">Mi empresa → Pipeline de ventas</code>.
+              </div>
+            )}
+
+            {!leadsLoading &&
+              user &&
+              !canViewAllLeads(user.role) &&
+              leads.length > 0 &&
+              leadsForUser.length === 0 && (
+                <div
+                  className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                  style={{ fontWeight: 500 }}
+                  role="status"
+                >
+                  Hay {leads.length} lead{leads.length === 1 ? "" : "s"} en el sistema, pero ninguno está asignado a tu
+                  usuario ({roleLabelEs(user.role)}). Pide a un administrador que asigne{" "}
+                  <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">assigned_to_user_id</code> a tu id de
+                  sesión, o configura en Supabase el metadata{" "}
+                  <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">role: &quot;admin&quot;</code> para ver
+                  todos.
+                </div>
+              )}
+
+            {!leadsLoading && leads.length === 0 && (
+              <div
+                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+                style={{ fontWeight: 500 }}
+              >
+                No hay leads en la base de datos (tabla <code className="text-xs">leads</code>). Si esperabas datos de
+                Tokko, revisa el sync; si es entorno nuevo, crea un lead desde aquí.
+              </div>
+            )}
+
+            {leadsLoading ? (
+              <div className="rounded-2xl border border-slate-200/80 bg-white/95 px-6 py-16 text-center text-slate-600 shadow-sm">
+                Cargando leads…
+              </div>
+            ) : (
+              <>
             {leadsView === "kanban" && (
               <LeadsKanbanBoard
-                leads={filteredLeads}
-                columnStatuses={leadColumnStatuses}
+                leads={filteredLeadsForBoard}
+                columnStatuses={leadStatusesForRendering}
+                columnHexByStatus={effectiveStageColors}
                 statusLabel={resolveStatusLabel}
                 onStatusChange={handleUpdateLeadStatus}
                 onLeadOpen={(l) => openLeadDetail(l, "view")}
-                canAddStage={user.role === "lider_grupo"}
-                onAddStage={handleAddKanbanStage}
               />
             )}
 
-            {/* Leads Table */}
+            {/* Leads: vista tabla — agrupada por estado, tarjetas a ancho completo (sin scroll horizontal) */}
             {leadsView === "table" && (
             <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_8px_32px_-10px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02]">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="border-b border-slate-200/90 bg-gradient-to-r from-slate-50/95 to-white">
-                    <tr>
-                      <th className="font-heading px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75" style={{ fontWeight: 600 }}>
-                        Lead
-                      </th>
-                      <th className="font-heading px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75" style={{ fontWeight: 600 }}>
-                        Contacto
-                      </th>
-                      <th className="font-heading px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75" style={{ fontWeight: 600 }}>
-                        Interés
-                      </th>
-                      <th className="font-heading px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75" style={{ fontWeight: 600 }}>
-                        Presupuesto
-                      </th>
-                      <th className="font-heading px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75" style={{ fontWeight: 600 }}>
-                        Estado
-                      </th>
-                      <th className="font-heading px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75" style={{ fontWeight: 600 }}>
-                        Prioridad
-                      </th>
-                      <th className="font-heading px-6 py-4 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75" style={{ fontWeight: 600 }}>
-                        Acciones
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-slate-200">
-                    {filteredLeads.map((lead) => (
-                      <tr key={lead.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="w-10 h-10 bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                              <span className="text-xs font-semibold text-slate-700" style={{ fontWeight: 600 }}>
-                                {lead.name.split(" ").map(n => n[0]).join("")}
-                              </span>
-                            </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-slate-900" style={{ fontWeight: 600 }}>{lead.name}</div>
-                              <div className="text-xs text-slate-500 mt-0.5" style={{ fontWeight: 500 }}>{lead.source}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-xs text-slate-700 flex items-center gap-1.5" style={{ fontWeight: 500 }}>
-                            <Mail className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.5} />
-                            {lead.email}
-                          </div>
-                          <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-1" style={{ fontWeight: 500 }}>
-                            <Phone className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.5} />
-                            {lead.phone}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-slate-900 capitalize" style={{ fontWeight: 600 }}>{lead.interest}</div>
-                          <div className="text-xs text-slate-500 mt-0.5" style={{ fontWeight: 500 }}>{lead.propertyType}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-semibold text-slate-900" style={{ fontWeight: 600 }}>
-                            ${lead.budget.toLocaleString()}
-                          </div>
-                          <div className="text-xs text-slate-500 mt-0.5" style={{ fontWeight: 500 }}>{lead.location}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <select
-                            value={lead.status}
-                            onChange={(e) => handleUpdateLeadStatus(lead.id, e.target.value)}
-                            className={`max-w-[10.5rem] cursor-pointer rounded-lg border border-slate-200/80 py-1.5 pl-2 pr-6 text-xs font-medium ${getStatusColor(lead.status)}`}
-                            style={{ fontWeight: 600 }}
-                            aria-label={`Cambiar estado de ${lead.name}`}
+              {filteredLeads.length === 0 ? (
+                <div className="py-16 text-center">
+                  <Users className="mx-auto mb-4 h-12 w-12 text-slate-300" strokeWidth={1.5} />
+                  <p className="text-sm text-slate-500" style={{ fontWeight: 500 }}>
+                    No se encontraron leads
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-200/80">
+                  {leadsTableGroupedByStatus.map(({ statusId, label, leads: sectionLeads }) => {
+                    const sectionCollapsed = leadsTableSectionCollapsed[statusId] === true;
+                    return (
+                    <section key={statusId} className="bg-white">
+                      <button
+                        type="button"
+                        onClick={() => toggleLeadsTableSection(statusId)}
+                        className={LIST_STAGE_HEADER_BUTTON_CLASSES}
+                        style={stageHexToListHeaderStyle(resolveStageHex(statusId))}
+                        aria-expanded={!sectionCollapsed}
+                        aria-label={
+                          sectionCollapsed ? `Expandir sección ${label}, ${sectionLeads.length} leads` : `Contraer sección ${label}`
+                        }
+                      >
+                        <ChevronDown
+                          className={cn(
+                            "h-5 w-5 shrink-0 text-slate-500 transition-transform duration-200 ease-out",
+                            sectionCollapsed ? "-rotate-90" : "rotate-0",
+                          )}
+                          strokeWidth={2}
+                          aria-hidden
+                        />
+                        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
+                          <h3
+                            className="font-heading inline-block bg-gradient-to-br from-brand-navy via-[#1a2744] to-brand-navy bg-clip-text text-base tracking-tight text-transparent sm:text-[1.125rem]"
+                            style={{ fontWeight: 700 }}
                           >
-                            {statusSelectOptions.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <LeadPriorityBadge stars={lead.priorityStars} size="md" />
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              type="button"
-                              onClick={() => openLeadDetail(lead, "view")}
-                              className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                              title="Ver"
-                            >
-                              <Eye className="h-4 w-4" strokeWidth={1.5} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openLeadDetail(lead, "edit")}
-                              className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                              title="Editar"
-                            >
-                              <Edit className="h-4 w-4" strokeWidth={1.5} />
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteLead(lead.id)}
-                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" 
-                              title="Eliminar"
-                            >
-                              <Trash2 className="w-4 h-4" strokeWidth={1.5} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              
-              {filteredLeads.length === 0 && (
-                <div className="text-center py-16">
-                  <Users className="w-12 h-12 text-slate-300 mx-auto mb-4" strokeWidth={1.5} />
-                  <p className="text-slate-500 text-sm" style={{ fontWeight: 500 }}>No se encontraron leads</p>
+                            {label}
+                          </h3>
+                          <span
+                            className="inline-flex items-center rounded-full bg-white/90 px-2.5 py-0.5 text-xs font-bold tabular-nums text-slate-800 shadow-sm ring-1 ring-slate-200/90 backdrop-blur-sm"
+                            style={{ fontWeight: 700 }}
+                          >
+                            {sectionLeads.length}
+                          </span>
+                        </div>
+                      </button>
+                      <div
+                        className={cn(
+                          "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+                          sectionCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]",
+                        )}
+                      >
+                        <div className="min-h-0 overflow-hidden">
+                      <ul className="divide-y divide-slate-100 border-t border-slate-100/90 bg-white">
+                        {sectionLeads.map((lead) => (
+                          <li
+                            key={lead.id}
+                            className="py-1.5 pl-5 pr-3 transition-colors hover:bg-slate-50/90 sm:pl-8 sm:pr-4"
+                          >
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-start justify-between gap-1.5 sm:gap-2">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
+                                      <p
+                                        className="text-[13.6px] font-semibold leading-none tracking-tight text-slate-900"
+                                        style={{ fontWeight: 600 }}
+                                      >
+                                        {lead.name}
+                                      </p>
+                                      <span className="text-[10.2px] text-slate-500" style={{ fontWeight: 500 }}>
+                                        {lead.source}
+                                      </span>
+                                    </div>
+                                    <p className="mt-px text-[11.9px] leading-tight text-slate-600">
+                                      <span className="inline break-words">{lead.email}</span>
+                                      <span className="mx-1 text-slate-300">·</span>
+                                      <span>{lead.phone}</span>
+                                    </p>
+                                  </div>
+                                  <div className="flex shrink-0 items-center gap-2 sm:hidden">
+                                    <div className="flex h-8 items-center">
+                                      <LeadPriorityBadge stars={lead.priorityStars} size="sm" />
+                                    </div>
+                                    <div className="flex h-8 items-center gap-0.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => openLeadDetail(lead, "view")}
+                                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                        title="Ver"
+                                      >
+                                        <Eye className="h-6 w-6" strokeWidth={1.5} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => openLeadDetail(lead, "edit")}
+                                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                        title="Editar"
+                                      >
+                                        <Edit className="h-6 w-6" strokeWidth={1.5} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (window.confirm("¿Eliminar este lead?")) {
+                                            void handleDeleteLead(lead.id);
+                                          }
+                                        }}
+                                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
+                                        title="Eliminar"
+                                      >
+                                        <Trash2 className="h-6 w-6" strokeWidth={1.5} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                                <p className="mt-1 min-w-0 text-[11.9px] leading-tight text-slate-600">
+                                  <span className="font-semibold capitalize text-slate-800">{lead.interest}</span>
+                                  <span className="mx-1 text-slate-300">·</span>
+                                  <span>{lead.propertyType}</span>
+                                  <span className="mx-1 text-slate-300">·</span>
+                                  <span className="font-semibold tabular-nums text-slate-900">${lead.budget.toLocaleString()}</span>
+                                  <span className="mx-1 text-slate-300">·</span>
+                                  <span className="text-slate-600">{lead.location}</span>
+                                </p>
+                                <div className="mt-1.5 sm:hidden">
+                                  <select
+                                    id={`lead-status-${lead.id}`}
+                                    value={lead.status}
+                                    onChange={(e) => handleUpdateLeadStatus(lead.id, e.target.value)}
+                                    className="h-8 w-full min-w-0 max-w-full cursor-pointer rounded-md px-2 py-0 text-[11.9px] font-semibold shadow-sm"
+                                    style={{
+                                      fontWeight: 600,
+                                      ...stageHexToChipStyle(resolveStageHex(lead.status)),
+                                    }}
+                                    aria-label={`Cambiar estado de ${lead.name}`}
+                                  >
+                                    {statusSelectOptions.map((opt) => (
+                                      <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div className="hidden shrink-0 items-center gap-2 sm:flex">
+                                <div className="flex h-8 items-center">
+                                  <LeadPriorityBadge stars={lead.priorityStars} size="sm" />
+                                </div>
+                                <select
+                                  value={lead.status}
+                                  onChange={(e) => handleUpdateLeadStatus(lead.id, e.target.value)}
+                                  className="h-8 min-w-[8.75rem] max-w-full cursor-pointer rounded-md px-2 py-0 text-[11.9px] font-semibold shadow-sm sm:min-w-[9.25rem]"
+                                  style={{
+                                    fontWeight: 600,
+                                    ...stageHexToChipStyle(resolveStageHex(lead.status)),
+                                  }}
+                                  aria-label={`Cambiar estado de ${lead.name}`}
+                                >
+                                  {statusSelectOptions.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <div className="flex h-8 items-center gap-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => openLeadDetail(lead, "view")}
+                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                    title="Ver"
+                                  >
+                                    <Eye className="h-6 w-6" strokeWidth={1.5} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openLeadDetail(lead, "edit")}
+                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                    title="Editar"
+                                  >
+                                    <Edit className="h-6 w-6" strokeWidth={1.5} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                          if (window.confirm("¿Eliminar este lead?")) {
+                                            void handleDeleteLead(lead.id);
+                                          }
+                                        }}
+                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
+                                    title="Eliminar"
+                                  >
+                                    <Trash2 className="h-6 w-6" strokeWidth={1.5} />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                        </div>
+                      </div>
+                    </section>
+                    );
+                  })}
                 </div>
               )}
             </div>
             )}
+              </>
+            )}
           </div>
         )}
+
+        {activeTab === "clients" && canAccessClients && (
+          <div className="space-y-6">
+            <AdminClientsManager
+              currentUser={user}
+              users={users}
+              clients={clients}
+              onSetClients={(updater) => setClients(updater)}
+              properties={properties}
+              developments={developments}
+              leads={leads}
+              focusClient={focusClient}
+              onFocusClientConsumed={handleFocusClientConsumed}
+              seedFromLead={seedClientFromLead}
+              onSeedFromLeadConsumed={handleSeedClientFromLeadConsumed}
+            />
+          </div>
+        )}
+
+        {activeTab === "agenda" && <AdminAgendaModule />}
 
         {/* Properties Tab */}
         {activeTab === "properties" && (
           <div className="space-y-6">
             {/* Properties Header */}
-            <div className="bg-white border border-slate-200 rounded-lg p-6">
-              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+            <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
+              <div
+                className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
+                aria-hidden
+              />
+              <div className="p-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <h2 className="text-xl font-semibold text-slate-900 mb-1" style={{ fontWeight: 600 }}>Gestión de Propiedades</h2>
                   <p className="text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                    {propertiesForSale} en venta · {propertiesForRent} en alquiler · {totalProperties} total
+                    Filtra, edita y publica propiedades del catálogo.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setPropertyForm({ mode: "create", property: null })}
-                  className="flex items-center gap-2 rounded-lg bg-[#C8102E] px-5 py-2.5 font-medium text-white transition-all hover:bg-[#a00d25]"
-                  style={{ fontWeight: 600 }}
-                >
-                  <Plus className="h-4.5 w-4.5" strokeWidth={2} />
-                  Nueva Propiedad
-                </button>
+                <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
+                  <div
+                    className="inline-flex w-full flex-wrap rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 shadow-[inset_0_1px_2px_rgba(20,28,46,0.06)] sm:w-auto"
+                    role="group"
+                    aria-label="Vista del inventario"
+                  >
+                    <button
+                      type="button"
+                      aria-label="Vista de tarjetas"
+                      onClick={() => setPropertyInventoryView("cards")}
+                      className={`inline-flex h-11 flex-1 items-center justify-center rounded-xl transition-all sm:h-10 sm:flex-none sm:w-10 ${
+                        propertyInventoryView === "cards"
+                          ? "bg-brand-navy text-white shadow-md shadow-brand-navy/25"
+                          : "text-slate-600 hover:bg-white/80 hover:text-brand-navy"
+                      }`}
+                    >
+                      <LayoutGrid className="h-4 w-4 shrink-0" strokeWidth={2} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Vista de lista"
+                      onClick={() => setPropertyInventoryView("list")}
+                      className={`inline-flex h-11 flex-1 items-center justify-center rounded-xl transition-all sm:h-10 sm:flex-none sm:w-10 ${
+                        propertyInventoryView === "list"
+                          ? "bg-brand-navy text-white shadow-md shadow-brand-navy/25"
+                          : "text-slate-600 hover:bg-white/80 hover:text-brand-navy"
+                      }`}
+                    >
+                      <Table2 className="h-4 w-4 shrink-0" strokeWidth={2} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Vista de mapa"
+                      onClick={() => setPropertyInventoryView("map")}
+                      className={`inline-flex h-11 flex-1 items-center justify-center rounded-xl transition-all sm:h-10 sm:flex-none sm:w-10 ${
+                        propertyInventoryView === "map"
+                          ? "bg-brand-navy text-white shadow-md shadow-brand-navy/25"
+                          : "text-slate-600 hover:bg-white/80 hover:text-brand-navy"
+                      }`}
+                    >
+                      <MapIcon className="h-4 w-4 shrink-0" strokeWidth={2} />
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewPropertyDraftId(crypto.randomUUID());
+                      setPropertyForm({ mode: "create", property: null });
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#C8102E] px-5 py-2.5 font-medium text-white transition-all hover:bg-[#a00d25] sm:w-auto"
+                    style={{ fontWeight: 600 }}
+                  >
+                    <Plus className="h-4.5 w-4.5" strokeWidth={2} />
+                    Nueva Propiedad
+                  </button>
+                </div>
+              </div>
+              <div className="mt-4 relative">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+                  <select
+                    value={propertyOperationFilter}
+                    onChange={(e) => setPropertyOperationFilter(e.target.value)}
+                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                  >
+                    <option value="all">Operación</option>
+                    <option value="venta">Venta</option>
+                    <option value="alquiler">Alquiler</option>
+                  </select>
+                  <select
+                    value={propertyTypeFilter}
+                    onChange={(e) => setPropertyTypeFilter(e.target.value)}
+                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                  >
+                    <option value="all">Tipo de propiedad</option>
+                    {propertyTypeOptions.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={propertyCurrencyFilter}
+                    onChange={(e) => setPropertyCurrencyFilter(e.target.value)}
+                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                  >
+                    <option value="MXN">MXN</option>
+                    <option value="USD">USD</option>
+                  </select>
+                  <input
+                    type="number"
+                    min={0}
+                    value={propertyMaxPrice}
+                    onChange={(e) => setPropertyMaxPrice(e.target.value)}
+                    placeholder="Sin límite"
+                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 placeholder:text-slate-500"
+                  />
+                  <select
+                    value={propertyLocationFilter}
+                    onChange={(e) => setPropertyLocationFilter(e.target.value)}
+                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                  >
+                    <option value="all">Ubicación</option>
+                    {propertyLocationOptions.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="mt-3 relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
+                <input
+                  type="search"
+                  value={propertySearchQuery}
+                  onChange={(e) => setPropertySearchQuery(e.target.value)}
+                  placeholder="Buscar propiedades por título..."
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-navy placeholder:text-slate-400 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                />
+              </div>
               </div>
             </div>
 
-            {/* Properties Grid */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
+                <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-primary to-brand-burgundy opacity-90" aria-hidden />
+                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
+                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
+                    Total propiedades
+                  </p>
+                  <TrendingUp className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
+                </div>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
+                  {totalProperties}
+                </p>
+                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
+                  Inventario en el panel
+                </p>
+              </div>
+
+              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
+                <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-burgundy to-brand-gold opacity-90" aria-hidden />
+                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
+                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
+                    En venta
+                  </p>
+                  <Activity className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
+                </div>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
+                  {propertiesForSale}
+                </p>
+                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
+                  Listadas como venta
+                </p>
+              </div>
+
+              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
+                <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-navy to-slate-600 opacity-90" aria-hidden />
+                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
+                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
+                    En alquiler
+                  </p>
+                  <Briefcase className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
+                </div>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
+                  {propertiesForRent}
+                </p>
+                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
+                  Listadas como alquiler
+                </p>
+              </div>
+
+              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
+                <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-gold to-primary opacity-90" aria-hidden />
+                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
+                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
+                    Valor promedio
+                  </p>
+                  <TrendingUp className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
+                </div>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
+                  ${parseInt(avgPropertyPrice, 10).toLocaleString()}
+                </p>
+                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
+                  Por propiedad (precio listado)
+                </p>
+              </div>
+            </div>
+
+            {/* Properties: tarjetas, lista o mapa */}
+            {propertyInventoryView === "map" && filteredProperties.length > 0 && (
+              <div className="space-y-3">
+                {filteredProperties.some((p) => p.coordinates) ? (
+                  <PropertyMap
+                    properties={filteredProperties}
+                    mapHeightClassName="h-[min(60vh,560px)] min-h-[320px]"
+                  />
+                ) : (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-6 py-12 text-center text-sm text-slate-600" style={{ fontWeight: 500 }}>
+                    Ninguna propiedad del listado tiene coordenadas. Edita una ficha y guarda ubicación para verla en el mapa.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {propertyInventoryView === "cards" && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {properties.map((property) => (
+              {filteredProperties.map((property) => (
                 <div key={property.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden hover:border-slate-300 transition-all group">
-                  <div className="relative h-48 overflow-hidden bg-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setPropertyForm({ mode: "edit", property })}
+                    className="relative block h-48 w-full cursor-pointer overflow-hidden bg-slate-100 p-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
+                    aria-label={`Abrir ficha: ${property.title}`}
+                  >
                     <img
                       src={property.image}
-                      alt={property.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      alt=""
+                      className="pointer-events-none h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
-                    <div className="absolute top-3 right-3">
+                    <div className="pointer-events-none absolute top-3 right-3">
                       <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-white/95 backdrop-blur-sm text-slate-900 border border-slate-200" style={{ fontWeight: 600 }}>
                         {property.status.toUpperCase()}
                       </span>
                     </div>
-                  </div>
+                  </button>
                   
                   <div className="p-5">
                     <span className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-2 block" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>
@@ -1028,6 +2769,23 @@ export function AdminPage() {
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
+                          onClick={() => copyPublicPageUrl(`/propiedades/${property.id}`)}
+                          className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                          title="Copiar enlace público"
+                          aria-label="Copiar enlace público"
+                        >
+                          <Link2 className="h-4 w-4" strokeWidth={1.5} />
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                          title="Exportar información (próximamente)"
+                          aria-label="Exportar información"
+                        >
+                          <Download className="h-4 w-4" strokeWidth={1.5} />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => navigate(`/propiedades/${property.id}`)}
                           className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
                           title="Ver en el sitio"
@@ -1044,7 +2802,7 @@ export function AdminPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDeleteProperty(property.id)}
+                          onClick={() => requestDeleteProperty(property.id)}
                           className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
                           title="Eliminar"
                         >
@@ -1056,31 +2814,585 @@ export function AdminPage() {
                 </div>
               ))}
             </div>
+            )}
 
-            {properties.length === 0 && (
+            {propertyInventoryView === "list" && filteredProperties.length > 0 && (
+              <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_8px_32px_-10px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02]">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[720px]">
+                    <thead className="border-b border-slate-200/90 bg-gradient-to-r from-slate-50/95 to-white">
+                      <tr>
+                        <th
+                          className="font-heading px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                          style={{ fontWeight: 600 }}
+                        >
+                          Propiedad
+                        </th>
+                        <th
+                          className="font-heading px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                          style={{ fontWeight: 600 }}
+                        >
+                          Tipo
+                        </th>
+                        <th
+                          className="font-heading px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                          style={{ fontWeight: 600 }}
+                        >
+                          Ubicación
+                        </th>
+                        <th
+                          className="font-heading px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                          style={{ fontWeight: 600 }}
+                        >
+                          Operación
+                        </th>
+                        <th
+                          className="font-heading px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                          style={{ fontWeight: 600 }}
+                        >
+                          Precio
+                        </th>
+                        <th
+                          className="font-heading px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                          style={{ fontWeight: 600 }}
+                        >
+                          Acciones
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 bg-white">
+                      {filteredProperties.map((property) => (
+                        <tr key={property.id} className="transition-colors hover:bg-slate-50">
+                          <td className="px-4 py-3 sm:px-6 sm:py-4">
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={property.image}
+                                alt=""
+                                className="h-12 w-16 shrink-0 rounded-lg object-cover"
+                              />
+                              <div className="min-w-0">
+                                <p className="line-clamp-2 text-sm font-medium text-slate-900" style={{ fontWeight: 600 }}>
+                                  {property.title}
+                                </p>
+                                <p className="mt-0.5 text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                                  {property.bedrooms} rec · {property.bathrooms} baños · {property.area} m²
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-800 sm:px-6 sm:py-4" style={{ fontWeight: 500 }}>
+                            {property.type}
+                          </td>
+                          <td className="max-w-[12rem] px-4 py-3 text-sm text-slate-600 sm:px-6 sm:py-4" style={{ fontWeight: 500 }}>
+                            <span className="line-clamp-2">{property.location}</span>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 sm:px-6 sm:py-4">
+                            <span
+                              className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${
+                                property.status === "venta"
+                                  ? "bg-red-50 text-red-800 ring-1 ring-red-200/80"
+                                  : "bg-slate-100 text-slate-800 ring-1 ring-slate-200/80"
+                              }`}
+                              style={{ fontWeight: 600 }}
+                            >
+                              {property.status === "venta" ? "Venta" : "Alquiler"}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-slate-900 sm:px-6 sm:py-4" style={{ fontWeight: 700 }}>
+                            ${property.price.toLocaleString()}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right sm:px-6 sm:py-4">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={() => copyPublicPageUrl(`/propiedades/${property.id}`)}
+                                className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                title="Copiar enlace público"
+                                aria-label="Copiar enlace público"
+                              >
+                                <Link2 className="h-4 w-4" strokeWidth={1.5} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/propiedades/${property.id}`)}
+                                className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                title="Ver en el sitio"
+                              >
+                                <Eye className="h-4 w-4" strokeWidth={1.5} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPropertyForm({ mode: "edit", property })}
+                                className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                title="Editar"
+                              >
+                                <Edit className="h-4 w-4" strokeWidth={1.5} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => requestDeleteProperty(property.id)}
+                                className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {filteredProperties.length === 0 && (
               <div className="bg-white border border-slate-200 rounded-lg p-20 text-center">
                 <div className="max-w-sm mx-auto">
                   <div className="w-16 h-16 bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center mx-auto mb-6">
                     <Home className="w-8 h-8 text-slate-400" strokeWidth={1.5} />
                   </div>
                   <h3 className="text-lg font-semibold text-slate-900 mb-2" style={{ fontWeight: 600 }}>
-                    No hay propiedades
+                    {properties.length === 0 ? "No hay propiedades" : "Sin resultados"}
                   </h3>
                   <p className="text-sm text-slate-600 mb-6" style={{ fontWeight: 500 }}>
-                    Comienza agregando tu primera propiedad al catálogo
+                    {properties.length === 0
+                      ? "Comienza agregando tu primera propiedad al catálogo"
+                      : "Prueba con otro término de búsqueda."}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setPropertyForm({ mode: "create", property: null })}
-                    className="inline-flex items-center gap-2 rounded-lg bg-[#C8102E] px-6 py-2.5 font-medium text-white transition-all hover:bg-[#a00d25]"
-                    style={{ fontWeight: 600 }}
-                  >
-                    <Plus className="h-4.5 w-4.5" strokeWidth={2} />
-                    Nueva Propiedad
-                  </button>
+                  {properties.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                      setNewPropertyDraftId(crypto.randomUUID());
+                      setPropertyForm({ mode: "create", property: null });
+                    }}
+                      className="inline-flex items-center gap-2 rounded-lg bg-[#C8102E] px-6 py-2.5 font-medium text-white transition-all hover:bg-[#a00d25]"
+                      style={{ fontWeight: 600 }}
+                    >
+                      <Plus className="h-4.5 w-4.5" strokeWidth={2} />
+                      Nueva Propiedad
+                    </button>
+                  )}
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === "developments" &&
+          (developmentsLoading ? (
+            <div className="py-16 text-center text-slate-600" style={{ fontWeight: 500 }}>
+              Cargando desarrollos…
+            </div>
+          ) : (
+            <AdminDevelopmentsManager
+              developments={developments}
+              onSave={handleSaveDevelopment}
+              onDelete={handleDeleteDevelopment}
+            />
+          ))}
+
+        {activeTab === "company" && (
+          <div className="space-y-5">
+            <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
+              <div
+                className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
+                aria-hidden
+              />
+              <div
+                className="pointer-events-none absolute -right-20 top-8 h-56 w-56 rounded-full bg-gradient-to-br from-primary/[0.07] to-transparent blur-3xl"
+                aria-hidden
+              />
+              <div className="relative px-5 pb-6 pt-6 md:px-8 md:pb-7 md:pt-7">
+                <p
+                  className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary"
+                  style={{ fontWeight: 600 }}
+                >
+                  Centro de administración
+                </p>
+                <h2 className="font-heading mt-2 text-2xl tracking-tight text-brand-navy sm:text-3xl" style={{ fontWeight: 700 }}>
+                  Mi empresa
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
+                  Equipo, sitio, embudo comercial y ajustes del espacio de trabajo. Elige un área para continuar.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-4">
+              {(
+                [
+                  {
+                    id: "users" as const,
+                    title: "Equipo y accesos",
+                    desc: "Usuarios del CRM, roles y permisos.",
+                    icon: Users,
+                  },
+                  {
+                    id: "site" as const,
+                    title: "Sitio web",
+                    desc: "Contenido y bloques del sitio público.",
+                    icon: Globe2,
+                  },
+                  {
+                    id: "leadStages" as const,
+                    title: "Pipeline de ventas",
+                    desc: "Columnas del Kanban por grupo (admin y líder de grupo).",
+                    icon: LayoutGrid,
+                  },
+                  {
+                    id: "settings" as const,
+                    title: "Configuración",
+                    desc: "Espacio de trabajo, respaldos y accesos.",
+                    icon: Settings,
+                  },
+                ] as const
+              ).map((item) => {
+                const active = companySubtab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setCompanySubtab(item.id)}
+                    className={cn(
+                      "group flex w-full flex-row items-center gap-3 rounded-xl border px-3 py-2 text-left transition-all duration-200",
+                      active
+                        ? "border-primary/35 bg-gradient-to-br from-primary/[0.07] via-white to-white shadow-[0_12px_32px_-16px_rgba(200,16,46,0.25)] ring-2 ring-primary/15"
+                        : "border-slate-200/90 bg-white hover:border-slate-300 hover:shadow-md",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors",
+                        active
+                          ? "border-primary/25 bg-primary/10 text-primary"
+                          : "border-slate-200/90 bg-slate-50 text-slate-600 group-hover:border-slate-300 group-hover:bg-white",
+                      )}
+                    >
+                      <item.icon className="h-4 w-4" strokeWidth={active ? 2 : 1.75} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={cn(
+                          "font-heading text-sm leading-tight",
+                          active ? "text-brand-navy" : "text-slate-900",
+                        )}
+                        style={{ fontWeight: 600 }}
+                      >
+                        {item.title}
+                      </p>
+                      <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
+                        {item.desc}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_16px_48px_-28px_rgba(20,28,46,0.14)] ring-1 ring-black/[0.03]">
+              {companySubtab === "users" && user && (
+                <div className="p-5 md:p-8">
+                  <AdminUsersManager
+                    currentUser={user}
+                    users={users}
+                    leads={leads}
+                    userGroups={userGroups}
+                    onUserGroupsChange={handleUserGroupsChange}
+                    onViewLead={(lead) => {
+                      setActiveTab("leads");
+                      openLeadDetail(lead, "view");
+                    }}
+                    onCreateUser={(input) => createUser(input, user.name)}
+                    onUpdateUser={(id, input) => updateUser(id, input, user.name)}
+                    onUpdatePassword={(id, password) => updateUserPassword(id, password, user.name)}
+                    onUpdatePermissions={(id, role, permissions) =>
+                      updateUserPermissions(id, role, permissions, user.name)
+                    }
+                    onArchive={(id) => archiveUser(id, user.name)}
+                    onReactivate={(id) => reactivateUser(id, user.name)}
+                    focusUser={usersPanelFocus}
+                    onFocusUserConsumed={handleUsersPanelFocusConsumed}
+                    onUserDetailClosed={handleUserDetailClosed}
+                  />
+                </div>
+              )}
+              {companySubtab === "site" && (
+                <div className="p-5 md:p-8">
+                  <AdminSiteEditor />
+                </div>
+              )}
+              {companySubtab === "settings" && (
+                <AdminCompanySettings
+                  counts={{
+                    leads: leads.length,
+                    properties: properties.length,
+                    developments: developments.length,
+                    users: users.length,
+                    agenda: (() => {
+                      try {
+                        const raw = localStorage.getItem(AGENDA_STORAGE_KEY);
+                        if (!raw) return 0;
+                        const p = JSON.parse(raw) as unknown;
+                        return Array.isArray(p) ? p.length : 0;
+                      } catch {
+                        return 0;
+                      }
+                    })(),
+                  }}
+                  onNavigate={(spec) => {
+                    if (spec.type === "tab") {
+                      setActiveTab(spec.tab);
+                    } else {
+                      setActiveTab("company");
+                      setCompanySubtab(spec.sub);
+                    }
+                  }}
+                />
+              )}
+              {companySubtab === "leadStages" && (
+                <div className="flex flex-col gap-6 p-5 md:p-8">
+                  <div className="flex flex-col gap-4 rounded-xl border border-slate-200/80 bg-slate-50/50 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        Grupo de trabajo
+                      </p>
+                      <p className="mt-0.5 text-sm text-brand-navy" style={{ fontWeight: 600 }}>
+                        {pipelineGroupLabel(activePipelineGroupId)}
+                      </p>
+                    </div>
+                    {allowedPipelineGroupIds.length > 1 ? (
+                      <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:min-w-[240px]">
+                        <label htmlFor="pipeline-config-group" className="text-[11px] font-medium text-slate-500">
+                          Configurar pipeline para
+                        </label>
+                        <select
+                          id="pipeline-config-group"
+                          value={activePipelineGroupId}
+                          onChange={(e) => setActivePipelineGroupId(e.target.value)}
+                          className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-navy focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                          style={{ fontWeight: 500 }}
+                        >
+                          {allowedPipelineGroupIds.map((id) => (
+                            <option key={id} value={id}>
+                              {pipelineGroupLabel(id)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="max-w-2xl">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-primary" style={{ fontWeight: 600 }}>
+                        Embudo comercial
+                      </p>
+                      <h3 className="mt-1 text-2xl text-brand-navy" style={{ fontWeight: 600 }}>
+                        Pipeline de leads
+                      </h3>
+                      <p className="mt-2 text-sm text-slate-600" style={{ fontWeight: 500 }}>
+                        Cada grupo tiene sus propias columnas. Solo el administrador o el líder del grupo pueden crearlas, ordenarlas y colorearlas. Los cambios aplican al tablero cuando ese grupo está seleccionado en el CRM.
+                      </p>
+                    </div>
+                    <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:max-w-xl">
+                      <input
+                        type="text"
+                        value={stageDraftLabel}
+                        onChange={(e) => setStageDraftLabel(e.target.value)}
+                        placeholder="Nueva columna del pipeline"
+                        className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm text-brand-navy placeholder:text-slate-400 focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                        disabled={!canConfigureActivePipeline}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const label = stageDraftLabel.trim();
+                          if (!label) return;
+                          handleAddKanbanStage(label);
+                          setStageDraftLabel("");
+                        }}
+                        disabled={!canConfigureActivePipeline || !stageDraftLabel.trim()}
+                        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm text-white transition hover:bg-brand-red-hover disabled:cursor-not-allowed disabled:opacity-50"
+                        style={{ fontWeight: 600 }}
+                      >
+                        <Plus className="h-4 w-4" strokeWidth={2} />
+                        Agregar columna
+                      </button>
+                    </div>
+                  </div>
+
+                  {!canConfigureActivePipeline && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                      Solo el administrador o el líder de este grupo pueden modificar las columnas del pipeline.
+                    </div>
+                  )}
+
+                  <section className="rounded-2xl border border-slate-200/70 bg-slate-50/40 p-5">
+                    <div>
+                      <h4 className="text-base text-brand-navy" style={{ fontWeight: 600 }}>Orden de columnas del pipeline</h4>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Arrastra cada fila para ordenar las columnas del Kanban. Usa el selector de color para el acento de cada columna en el tablero y la vista lista.
+                      </p>
+                    </div>
+
+                    <DndProvider backend={HTML5Backend}>
+                    <div className="mt-4 space-y-3">
+                      {leadColumnStatuses.map((stageId, index) => {
+                        const customStage = customKanbanStages.find((stage) => stage.id === stageId);
+                        const stageLabel =
+                          Object.prototype.hasOwnProperty.call(LEAD_STATUS_LABEL, stageId)
+                          ? LEAD_STATUS_LABEL[stageId as keyof typeof LEAD_STATUS_LABEL]
+                          : customStage?.label ?? stageId;
+                        const isEditing = editingStageId === stageId;
+                        const leadsInStage = leads.filter(
+                          (lead) =>
+                            lead.status === stageId && lead.pipelineGroupId === activePipelineGroupId
+                        ).length;
+
+                        return (
+                          <PipelineStageReorderRow
+                            key={stageId}
+                            index={index}
+                            moveRow={handleReorderPipelineRows}
+                            canDrag={canConfigureActivePipeline}
+                          >
+                          <div
+                            className={`rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 ${
+                              canConfigureActivePipeline ? "cursor-grab active:cursor-grabbing" : ""
+                            }`}
+                          >
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                              {canConfigureActivePipeline && (
+                                <div
+                                  className="flex shrink-0 items-center justify-center text-slate-400 lg:pt-0.5"
+                                  aria-hidden
+                                >
+                                  <GripVertical className="h-5 w-5" strokeWidth={1.75} />
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                {isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={stageDraftLabel}
+                                    onChange={(e) => setStageDraftLabel(e.target.value)}
+                                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-navy focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                                    disabled={!canConfigureActivePipeline}
+                                  />
+                                ) : (
+                                  <>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="text-sm text-brand-navy" style={{ fontWeight: 600 }}>
+                                        {stageLabel}
+                                      </p>
+                                      <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] uppercase tracking-[0.08em] text-primary">
+                                        Columna
+                                      </span>
+                                    </div>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      Clave: {stageId} · {leadsInStage} lead{leadsInStage === 1 ? "" : "s"} en esta etapa
+                                    </p>
+                                  </>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {canConfigureActivePipeline && !isEditing && (
+                                  <label className="flex items-center gap-2 rounded-lg border border-slate-200/80 bg-white px-2.5 py-1.5 text-[11px] font-medium text-slate-600 shadow-sm">
+                                    Color columna
+                                    <input
+                                      type="color"
+                                      value={resolveStageHex(stageId)}
+                                      onChange={(e) => {
+                                        const hex = e.target.value;
+                                        setPipelineByGroup((map) => {
+                                          const cur =
+                                            map[activePipelineGroupId] ??
+                                            createEmptyGroupPipelineSnapshot();
+                                          return {
+                                            ...map,
+                                            [activePipelineGroupId]: {
+                                              ...cur,
+                                              stageColors: { ...cur.stageColors, [stageId]: hex },
+                                            },
+                                          };
+                                        });
+                                      }}
+                                      className="h-8 w-11 cursor-pointer rounded border border-slate-200 bg-white p-0.5"
+                                      title="Acento visual en Kanban, vista lista y chips de estado"
+                                      aria-label={`Color de columna para ${stageLabel}`}
+                                    />
+                                  </label>
+                                )}
+                                {isEditing ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const label = stageDraftLabel.trim();
+                                        if (!label) return;
+                                        handleUpdateKanbanStage(stageId, label);
+                                        setEditingStageId(null);
+                                        setStageDraftLabel("");
+                                      }}
+                                      disabled={!canConfigureActivePipeline || !stageDraftLabel.trim()}
+                                      className="inline-flex items-center rounded-lg bg-brand-navy px-3 py-2 text-xs text-white transition hover:bg-[#1e2a45] disabled:cursor-not-allowed disabled:opacity-50"
+                                      style={{ fontWeight: 600 }}
+                                    >
+                                      Guardar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingStageId(null);
+                                        setStageDraftLabel("");
+                                      }}
+                                      className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 transition hover:bg-slate-50"
+                                      style={{ fontWeight: 600 }}
+                                    >
+                                      Cancelar
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingStageId(stageId);
+                                        setStageDraftLabel(stageLabel);
+                                      }}
+                                      disabled={!canConfigureActivePipeline}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                      style={{ fontWeight: 600 }}
+                                    >
+                                      <Edit className="h-3.5 w-3.5" strokeWidth={1.8} />
+                                      Editar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => requestDeletePipelineStage(stageId, stageLabel)}
+                                      disabled={!canConfigureActivePipeline}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                      style={{ fontWeight: 600 }}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} />
+                                      Eliminar
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          </PipelineStageReorderRow>
+                        );
+                      })}
+                    </div>
+                    </DndProvider>
+                  </section>
+                </div>
+              )}
+            </section>
           </div>
         )}
 
@@ -1118,14 +3430,8 @@ export function AdminPage() {
           </div>
         )}
 
-        {activeTab === "site" && (
-          <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm md:p-8">
-            <AdminSiteEditor />
-          </div>
-        )}
-
         <LeadDetailDialog
-          open={!!leadDialog}
+          open={!!leadDialog && activeTab === "leads"}
           onOpenChange={(o) => {
             if (!o) setLeadDialog(null);
           }}
@@ -1135,7 +3441,110 @@ export function AdminPage() {
           onStatusChange={handleUpdateLeadStatus}
           onSave={handleSaveLead}
           onDelete={handleDeleteLead}
+          teamUsers={users}
+          currentUserId={user?.id ?? ""}
+          onViewTeamMember={handleViewTeamMember}
+          canManageClients={canAccessClients}
+          onRegisterClientFromLead={handleRegisterClientFromLead}
+          properties={properties}
+          developments={developments}
         />
+
+        <AlertDialog
+          open={!!deletePipelineStage && activeTab === "leads"}
+          onOpenChange={(open) => {
+            if (!open) setDeletePipelineStage(null);
+          }}
+        >
+          <AlertDialogContent className="max-w-md gap-0 overflow-hidden rounded-2xl border border-stone-200/90 p-0 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.22)] sm:max-w-md">
+            <div
+              className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
+              aria-hidden
+            />
+            <div className="px-6 pb-2 pt-5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary" style={{ fontWeight: 600 }}>
+                CRM · Pipeline
+              </p>
+              <AlertDialogHeader className="mt-2 space-y-2 text-left">
+                <AlertDialogTitle className="font-heading text-xl text-brand-navy" style={{ fontWeight: 600 }}>
+                  ¿Eliminar esta columna?
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
+                  Vas a eliminar la columna{" "}
+                  <span className="font-semibold text-brand-navy">«{deletePipelineStage?.label}»</span>. Los leads que
+                  estén en esta etapa se moverán a la primera columna disponible (si no hay otra, quedarán sin columna
+                  asignada).
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+            </div>
+            <AlertDialogFooter className="flex-col-reverse gap-2 border-t border-stone-200/80 bg-stone-50/90 px-6 py-4 sm:flex-row sm:justify-end">
+              <AlertDialogCancel className="mt-0 border-stone-300 bg-white text-slate-700 hover:bg-stone-50 hover:text-slate-800">
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-primary text-primary-foreground hover:bg-brand-red-hover"
+                style={{ fontWeight: 600 }}
+                onClick={() => {
+                  if (deletePipelineStage) {
+                    executeDeleteKanbanStage(deletePipelineStage.id, deletePipelineStage.label);
+                    setDeletePipelineStage(null);
+                  }
+                }}
+              >
+                Eliminar columna
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog
+          open={!!deletePropertyId && activeTab === "properties"}
+          onOpenChange={(open) => {
+            if (!open) setDeletePropertyId(null);
+          }}
+        >
+          <AlertDialogContent className="max-w-md gap-0 overflow-hidden rounded-2xl border border-stone-200/90 p-0 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.22)] sm:max-w-md">
+            <div
+              className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
+              aria-hidden
+            />
+            <div className="px-6 pb-2 pt-5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary" style={{ fontWeight: 600 }}>
+                Panel admin · Propiedades
+              </p>
+              <AlertDialogHeader className="mt-2 space-y-2 text-left">
+                <AlertDialogTitle className="font-heading text-xl text-brand-navy" style={{ fontWeight: 600 }}>
+                  ¿Eliminar esta propiedad?
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
+                  {deletePropertyId ? (
+                    <>
+                      Vas a eliminar{" "}
+                      <span className="font-semibold text-brand-navy">
+                        «{properties.find((p) => p.id === deletePropertyId)?.title ?? "esta propiedad"}»
+                      </span>
+                      . Esta acción no se puede deshacer y la ficha dejará de mostrarse en el catálogo público.
+                    </>
+                  ) : (
+                    "Esta acción no se puede deshacer."
+                  )}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+            </div>
+            <AlertDialogFooter className="flex-col-reverse gap-2 border-t border-stone-200/80 bg-stone-50/90 px-6 py-4 sm:flex-row sm:justify-end">
+              <AlertDialogCancel className="mt-0 border-stone-300 bg-white text-slate-700 hover:bg-stone-50 hover:text-slate-800">
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-primary text-primary-foreground hover:bg-brand-red-hover"
+                style={{ fontWeight: 600 }}
+                onClick={executeDeleteProperty}
+              >
+                Eliminar propiedad
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <PropertyFormDialog
           key={
@@ -1143,16 +3552,17 @@ export function AdminPage() {
               ? `${propertyForm.mode}-${propertyForm.property?.id ?? "new"}`
               : "closed"
           }
-          open={!!propertyForm}
+          open={!!propertyForm && activeTab === "properties"}
           onOpenChange={(o) => {
             if (!o) setPropertyForm(null);
           }}
           mode={propertyForm?.mode ?? "create"}
           property={propertyForm?.mode === "edit" ? propertyForm.property : null}
-          newId={nextPropertyId}
+          newId={newPropertyDraftId}
           onSave={handleSaveProperty}
         />
       </div>
+
     </div>
   );
 }

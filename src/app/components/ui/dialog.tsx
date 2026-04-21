@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { XIcon } from "lucide-react";
 
 import { cn } from "./utils";
 
@@ -49,8 +48,12 @@ function DialogOverlay({
 function DialogContent({
   className,
   children,
+  hideCloseButton,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  /** Oculta el botón «Cerrar» fijo (p. ej. para colocar uno junto a otras acciones en la cabecera). */
+  hideCloseButton?: boolean;
+}) {
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
@@ -63,10 +66,18 @@ function DialogContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
-          <XIcon />
-          <span className="sr-only">Close</span>
-        </DialogPrimitive.Close>
+        {!hideCloseButton && (
+          <DialogPrimitive.Close
+            type="button"
+            className={cn(
+              "absolute right-4 top-4 z-[1] inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-stone-300 bg-white px-3.5 text-sm text-slate-700 shadow-sm transition-colors hover:bg-stone-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:pointer-events-none",
+              "data-[state=open]:bg-white"
+            )}
+            style={{ fontWeight: 600 }}
+          >
+            Cerrar
+          </DialogPrimitive.Close>
+        )}
       </DialogPrimitive.Content>
     </DialogPortal>
   );

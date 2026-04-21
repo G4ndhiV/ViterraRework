@@ -4,3 +4,10 @@
 @import './crm.css';
 @import './map-search.css';
 @import './animations.css';
+
+/* Viterra: interfaz con esquinas rectas (incluye utilidades rounded-* y componentes sin clase) */
+*,
+*::before,
+*::after {
+  border-radius: 0 !important;
+}

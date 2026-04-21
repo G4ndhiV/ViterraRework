@@ -110,7 +110,7 @@ export interface SiteContent {
     teamKicker: string;
     teamTitle: string;
     teamIntro: string;
-    team: { name: string; role: string; initials: string }[];
+    team: { name: string; role: string; initials: string; image?: string }[];
   };
   developments: {
     heroImage: string;
@@ -186,7 +186,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
   },
   services: {
     heroImage:
-      "https://images.unsplash.com/photo-1757924461488-ef9ad0670978?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxsdXh1cnklMjBwZW50aG91c2UlMjBpbnRlcmlvciUyMGxpdmluZyUyMHJvb218ZW58MXx8fHwxNzc2MDk1NzU3fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "https://wallpapers.com/images/hd/4k-office-background-silapjkl0bkxakj4.jpg",
     heroTitle: "Nuestros servicios",
     heroSubtitle: "Soluciones integrales para todas tus necesidades inmobiliarias",
     cards: [
@@ -291,14 +291,32 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     teamTitle: "Nuestro Equipo",
     teamIntro: "Profesionales dedicados con años de experiencia en el mercado inmobiliario",
     team: [
-      { name: "María González", role: "CEO & Fundadora", initials: "MG" },
-      { name: "Carlos Rodríguez", role: "Director de Ventas", initials: "CR" },
-      { name: "Ana Martínez", role: "Gerente de Operaciones", initials: "AM" },
+      {
+        name: "María González",
+        role: "CEO & Fundadora",
+        initials: "MG",
+        image:
+          "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=600&h=600&q=80",
+      },
+      {
+        name: "Carlos Rodríguez",
+        role: "Director de Ventas",
+        initials: "CR",
+        image:
+          "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=600&h=600&q=80",
+      },
+      {
+        name: "Ana Martínez",
+        role: "Gerente de Operaciones",
+        initials: "AM",
+        image:
+          "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=600&h=600&q=80",
+      },
     ],
   },
   developments: {
     heroImage:
-      "https://images.unsplash.com/photo-1764562155616-facdda23671a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjByZXNpZGVudGlhbCUyMGRldmVsb3BtZW50JTIwYXJjaGl0ZWN0dXJlJTIwYWVyaWFsfGVufDF8fHx8MTc3NDM5ODA0OHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "https://images.adsttc.com/media/images/5ef2/f7ce/b357/6589/8c00/019a/large_jpg/847A0737.jpg?1592981436",
     heroTitle: "Proyectos Excepcionales",
     heroSubtitle:
       "Descubre nuestros desarrollos inmobiliarios exclusivos con arquitectura vanguardista y amenidades de clase mundial.",
