@@ -85,7 +85,13 @@ export function HomePage() {
 
       {/* Hero portada: layout propio (no compartido con el resto de páginas). */}
       <PreviewSectionChrome blockId="home-hero" label="Portada principal">
-      <section className="viterra-reveal-off scroll-fade-exit-white relative flex min-h-[100svh] flex-col justify-end overflow-hidden pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] pt-[calc(env(safe-area-inset-top,0px)+5.25rem)] sm:pb-16 sm:pt-[calc(env(safe-area-inset-top,0px)+6.5rem)] md:pb-24 md:pt-52">
+      <section
+        className={
+          "viterra-reveal-off scroll-fade-exit-white relative flex min-h-[100svh] flex-col justify-center overflow-hidden " +
+          "pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] sm:pb-16 md:pb-24 " +
+          "pt-[calc(env(safe-area-inset-top,0px)+4.25rem)] lg:pt-[calc(env(safe-area-inset-top,0px)+8.25rem)]"
+        }
+      >
         <div className="absolute inset-0 z-0 overflow-hidden">
           <motion.img
             src={h.heroImage}

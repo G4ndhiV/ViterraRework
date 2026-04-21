@@ -99,24 +99,24 @@ export function ServicesPage() {
 
       <section className="bg-white py-24">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
-          <div className={cn("grid gap-8", pl.gridCols("grid-cols-1 md:grid-cols-2 lg:grid-cols-3"))}>
+          <div className={cn("grid items-stretch gap-8", pl.gridCols("grid-cols-1 md:grid-cols-2 lg:grid-cols-3"))}>
             {cards.map((card, index) => {
               const Icon = CARD_ICONS[index] ?? Home;
               return (
                 <PreviewSectionChrome key={`${card.title}-${index}`} blockId={`services-card-${index}`} label={`Tarjeta ${index + 1}`}>
-                  <Reveal delay={Math.min(index * 0.065, 0.4)} y={24}>
+                  <Reveal delay={Math.min(index * 0.065, 0.4)} y={24} className="h-full min-h-0">
                     <motion.div
-                      className="group rounded-2xl border border-brand-navy/12 p-8 transition-all duration-300 hover:border-brand-navy/30 hover:shadow-lg"
+                      className="group flex h-full min-h-0 flex-col rounded-2xl border border-brand-navy/12 p-8 transition-all duration-300 hover:border-brand-navy/30 hover:shadow-lg"
                       whileHover={reduceMotion ? undefined : { y: -4 }}
                       transition={{ type: "spring", stiffness: 380, damping: 28 }}
                     >
-                      <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-xl bg-brand-canvas transition-all group-hover:scale-110 group-hover:bg-primary">
+                      <div className="mb-6 flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-brand-canvas transition-all group-hover:scale-110 group-hover:bg-primary">
                         <Icon className="h-7 w-7 text-brand-navy transition-colors group-hover:text-white" />
                       </div>
-                      <h3 className="font-heading mb-4 text-2xl font-light text-brand-navy not-italic">
+                      <h3 className="font-heading mb-4 shrink-0 text-2xl font-light text-brand-navy not-italic">
                         {card.title}
                       </h3>
-                      <p className="font-heading mb-6 leading-relaxed text-brand-navy/72 font-light not-italic">
+                      <p className="font-heading mb-6 shrink-0 leading-relaxed text-brand-navy/72 font-light not-italic">
                         {card.description}
                       </p>
                       <ul className="mb-6 space-y-3">
@@ -130,7 +130,7 @@ export function ServicesPage() {
                       {card.linkTo && card.linkLabel ? (
                         <Link
                           to={card.linkTo}
-                          className="font-heading inline-flex items-center gap-2 text-sm text-brand-navy transition-colors hover:text-primary font-medium"
+                          className="font-heading mt-auto inline-flex shrink-0 items-center gap-2 text-sm font-medium text-brand-navy transition-colors hover:text-primary"
                         >
                           {card.linkLabel}
                           <ArrowRight className="h-4 w-4" />

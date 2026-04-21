@@ -29,12 +29,17 @@ type SocialHeaderDropdownProps = {
    * `start`: ancla al borde izquierdo del botón — evita que el panel se salga por la izquierda si el botón está a la izquierda del header.
    */
   menuAlign?: "start" | "end";
+  /**
+   * `compact`: una sola fila de iconos, sin cabecera “Síguenos” ni lista larga (p. ej. barra del mapa).
+   */
+  variant?: "default" | "compact";
 };
 
 export function SocialHeaderDropdown({
   triggerClassName,
   iconSize = "md",
   menuAlign = "end",
+  variant = "default",
 }: SocialHeaderDropdownProps) {
   const location = useLocation();
   const reduceMotion = useReducedMotion();
@@ -49,6 +54,11 @@ export function SocialHeaderDropdown({
 
   const updatePanelMaxHeight = useCallback(() => {
     if (!open || !triggerRef.current) return;
+    if (variant === "compact") {
+      setPanelMaxPx(52);
+      setPanelFade(1);
+      return;
+    }
     const triggerBottom = triggerRef.current.getBoundingClientRect().bottom;
     const panelTop = triggerBottom + 8;
     const vh = window.innerHeight;
@@ -63,7 +73,7 @@ export function SocialHeaderDropdown({
     setPanelMaxPx(px > 0 ? px : 56);
     const fade = Math.max(0, Math.min(1, available / FOOTER_FADE_RANGE));
     setPanelFade(fade);
-  }, [open]);
+  }, [open, variant]);
 
   const hidden =
     location.pathname.startsWith("/admin") || location.pathname.startsWith("/login");
@@ -91,12 +101,6 @@ export function SocialHeaderDropdown({
   useEffect(() => {
     setOpen(false);
   }, [location.pathname]);
-
-  useEffect(() => {
-    if (!open || panelFade > 0.08) return;
-    const id = window.setTimeout(() => setOpen(false), 480);
-    return () => window.clearTimeout(id);
-  }, [open, panelFade]);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -157,51 +161,79 @@ export function SocialHeaderDropdown({
               pointerEvents: panelFade < 0.12 ? "none" : "auto",
             }}
             className={cn(
-              "absolute top-full z-[60] mt-2 flex min-w-[220px] max-w-[min(calc(100vw-1.5rem),260px)] flex-col overflow-hidden",
+              "absolute top-full z-[60] flex overflow-hidden text-white shadow-lg backdrop-blur-xl",
+              variant === "compact"
+                ? "mt-1.5 max-w-[calc(100vw-0.75rem)] flex-row items-center gap-0.5 rounded-lg border border-white/18 px-1.5 py-1.5"
+                : "mt-2 min-w-[220px] max-w-[min(calc(100vw-1.5rem),260px)] flex-col rounded-xl border border-white/20 py-1.5",
               menuAlign === "start" ? "left-0 right-auto" : "left-auto right-0",
-              "rounded-xl border border-white/20 py-1.5 text-white shadow-lg backdrop-blur-xl",
               "bg-brand-navy/72 ring-1 ring-brand-navy/40 supports-[backdrop-filter]:bg-brand-navy/62"
             )}
           >
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/18 px-2.5 pb-2 pt-0.5">
-              <p className="font-heading text-[9px] font-medium uppercase tracking-[0.22em] text-white/85">
-                Síguenos
-              </p>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className={cn(
-                  "-m-0.5 shrink-0 rounded-md p-1.5 text-white/75 transition-colors",
-                  "hover:text-white",
-                  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                )}
-                aria-label="Cerrar panel de redes sociales"
-              >
-                <ChevronUp className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
-              </button>
-            </div>
-            <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain px-1.5 pt-1.5" role="none">
-              {SOCIAL_LINKS.map(({ id, label, href }) => {
-                const Icon = iconById[id];
-                return (
-                  <li key={id} role="none">
-                    <a
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      role="menuitem"
-                      className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-normal text-white/95 transition-colors hover:bg-white/12"
-                      onClick={() => setOpen(false)}
-                    >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/15 bg-white/10 text-white backdrop-blur-sm">
-                        <Icon className="h-4 w-4" strokeWidth={1.5} aria-hidden />
-                      </span>
-                      <span className="truncate">{label}</span>
-                    </a>
-                  </li>
-                );
-              })}
-            </ul>
+            {variant === "compact" ? (
+              <ul className="flex flex-nowrap items-center gap-0.5" role="none">
+                {SOCIAL_LINKS.map(({ id, label, href }) => {
+                  const Icon = iconById[id];
+                  return (
+                    <li key={id} role="none">
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        role="menuitem"
+                        title={label}
+                        aria-label={label}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/12 bg-white/10 text-white/95 transition-colors hover:bg-white/18"
+                        onClick={() => setOpen(false)}
+                      >
+                        <Icon className="h-[15px] w-[15px]" strokeWidth={1.5} aria-hidden />
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <>
+                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/18 px-2.5 pb-2 pt-0.5">
+                  <p className="font-heading text-[9px] font-medium uppercase tracking-[0.22em] text-white/85">
+                    Síguenos
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setOpen(false)}
+                    className={cn(
+                      "-m-0.5 shrink-0 rounded-md p-1.5 text-white/75 transition-colors",
+                      "hover:text-white",
+                      "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                    )}
+                    aria-label="Cerrar panel de redes sociales"
+                  >
+                    <ChevronUp className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+                  </button>
+                </div>
+                <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain px-1.5 pt-1.5" role="none">
+                  {SOCIAL_LINKS.map(({ id, label, href }) => {
+                    const Icon = iconById[id];
+                    return (
+                      <li key={id} role="none">
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          role="menuitem"
+                          className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-normal text-white/95 transition-colors hover:bg-white/12"
+                          onClick={() => setOpen(false)}
+                        >
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/15 bg-white/10 text-white backdrop-blur-sm">
+                            <Icon className="h-4 w-4" strokeWidth={1.5} aria-hidden />
+                          </span>
+                          <span className="truncate">{label}</span>
+                        </a>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

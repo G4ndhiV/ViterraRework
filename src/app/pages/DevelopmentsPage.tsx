@@ -1,7 +1,7 @@
 import { motion, useReducedMotion } from "motion/react";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
-import { ArrowRight, MapPin, CheckCircle, Sparkles } from "lucide-react";
+import { ArrowRight, MapPin, CheckCircle } from "lucide-react";
 import { Link } from "react-router";
 import { developments } from "../data/developments";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
@@ -27,15 +27,9 @@ export function DevelopmentsPage() {
   const featuredDevelopments = developments.filter((x) => x.featured);
   const otherDevelopments = developments.filter((x) => !x.featured);
 
-  const getStatusColor = (status: string) => {
-    const colors = {
-      "En Construcción": "bg-brand-gold/15 text-brand-navy border border-brand-gold/35",
-      "Pre-venta": "bg-brand-navy/10 text-brand-navy border border-brand-navy/25",
-      "Disponible": "bg-primary/10 text-primary border border-primary/30",
-      "Próximamente": "bg-brand-canvas text-brand-navy/80 border border-brand-navy/15"
-    };
-    return colors[status as keyof typeof colors] || "bg-brand-canvas text-brand-navy/80 border border-brand-navy/15";
-  };
+  /** Etiqueta sobre imagen: blanco sólido + texto negro (legible en cualquier foto). */
+  const statusBadgeClass =
+    "border border-black/15 bg-white text-neutral-950 shadow-[0_1px_3px_rgba(0,0,0,0.12)]";
 
   const heroContainerVariants = {
     hidden: {},
@@ -142,7 +136,7 @@ export function DevelopmentsPage() {
                         className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                       />
                       <div className="absolute left-4 top-4 sm:left-6 sm:top-6">
-                        <span className={`font-heading rounded-lg px-3 py-1.5 text-xs font-semibold backdrop-blur-sm ${getStatusColor(dev.status)}`}>
+                        <span className={`font-heading rounded-lg px-3 py-1.5 text-xs font-semibold ${statusBadgeClass}`}>
                           {dev.status}
                         </span>
                       </div>
@@ -240,9 +234,7 @@ export function DevelopmentsPage() {
                         className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                       />
                       <div className="absolute left-6 top-6">
-                        <span
-                          className={`font-heading rounded-lg px-3 py-1.5 text-xs font-semibold backdrop-blur-sm ${getStatusColor(dev.status)}`}
-                        >
+                        <span className={`font-heading rounded-lg px-3 py-1.5 text-xs font-semibold ${statusBadgeClass}`}>
                           {dev.status}
                         </span>
                       </div>
@@ -298,38 +290,33 @@ export function DevelopmentsPage() {
       )}
 
       {/* CTA Section */}
-      <section className="bg-brand-navy py-12 sm:py-16 md:py-24">
+      <section className="border-t border-brand-navy/10 bg-gradient-to-b from-[#f5f3ef] via-white to-brand-canvas py-12 sm:py-16 md:py-24">
         <Reveal className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8" y={26}>
           <div>
-            <div className="mb-6 inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 backdrop-blur-sm sm:mb-8 sm:px-4">
-              <Sparkles className="w-4 h-4 text-white" strokeWidth={1.5} />
-              <span className="font-heading text-sm text-white font-medium tracking-wide">Invierte en Tu Futuro</span>
-            </div>
-
-            <h2 className="font-heading mb-4 text-2xl font-semibold tracking-tight text-white sm:mb-6 sm:text-4xl md:text-5xl">
-              ¿Listo para invertir?
+            <h2 className="font-heading mb-4 text-2xl font-semibold tracking-tight text-brand-navy sm:mb-6 sm:text-4xl md:text-5xl">
+              Contáctanos
             </h2>
-            <p className="font-heading mx-auto mb-8 max-w-2xl text-base font-normal leading-relaxed text-white/80 not-italic sm:mb-10 sm:text-lg">
-              Agenda una cita con nuestros expertos y descubre las oportunidades de inversión
-              en nuestros desarrollos exclusivos.
+            <p className="font-heading mx-auto mb-8 max-w-2xl text-base font-normal leading-relaxed text-brand-navy/70 not-italic sm:mb-10 sm:text-lg">
+              Agenda una visita o escríbenos: con gusto te orientamos sobre disponibilidad, precios y opciones en
+              nuestros desarrollos exclusivos.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <div className="flex flex-col justify-center gap-4 sm:flex-row">
               <motion.div whileHover={reduceMotion ? undefined : { y: -3 }} transition={{ type: "spring", stiffness: 380, damping: 24 }}>
                 <Link
                   to="/contacto"
-                  className="font-heading inline-flex items-center justify-center gap-2 bg-white text-brand-navy px-8 py-4 rounded-lg hover:bg-brand-canvas transition-all font-medium"
+                  className="font-heading inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-8 py-4 font-medium text-white transition-all hover:bg-brand-red-hover"
                 >
-                  Agendar Cita
-                  <ArrowRight className="w-5 h-5" strokeWidth={2} />
+                  Agendar cita
+                  <ArrowRight className="h-5 w-5" strokeWidth={2} />
                 </Link>
               </motion.div>
               <motion.div whileHover={reduceMotion ? undefined : { y: -3 }} transition={{ type: "spring", stiffness: 380, damping: 24 }}>
                 <a
                   href="tel:+1234567890"
-                  className="font-heading inline-flex items-center justify-center gap-2 bg-transparent text-white px-8 py-4 rounded-lg border border-white/30 hover:bg-white/10 transition-all font-medium"
+                  className="font-heading inline-flex items-center justify-center gap-2 rounded-lg border border-brand-navy/25 bg-white px-8 py-4 font-medium text-brand-navy transition-all hover:border-brand-navy/40 hover:bg-brand-navy/[0.04]"
                 >
-                  Llamar Ahora
+                  Llamar ahora
                 </a>
               </motion.div>
             </div>

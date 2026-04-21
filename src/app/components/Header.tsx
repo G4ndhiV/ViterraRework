@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { usePreviewCanvas } from "../../contexts/PreviewCanvasContext";
 import { SocialHeaderDropdown } from "./SocialHeaderDropdown";
 import { cn } from "./ui/utils";
-import { VITERRA_NAV_ITEMS } from "../config/siteNav";
+import { VITERRA_NAV_ITEMS, isActiveNavPath } from "../config/siteNav";
 
 /** Recorrido de scroll (px) para interpolar header (home e internas) */
 const SCROLL_RANGE = 200;
@@ -13,6 +13,8 @@ const NAVY = { r: 20, g: 28, b: 46 } as const;
 
 /** Opacidad máxima del fondo navy: <1 deja traslucir el fondo bajo el header */
 const BG_ALPHA_MAX = 0.94;
+/** Panel del menú hamburguesa (< lg): cristal arriba del todo; con scroll → mismo cuerpo que la barra. */
+const MOBILE_MENU_BG_ALPHA_TOP = 0.48;
 
 function clamp01(x: number) {
   return Math.min(1, Math.max(0, x));
@@ -43,11 +45,14 @@ function ViterraMarkLeftHero({
   boxH,
   scale,
   className,
+  enableTransformTransition = true,
 }: {
   boxW: number;
   boxH: number;
   scale: number;
   className?: string;
+  /** En móvil el `scale` es fijo: sin transición en `transform` (evita “respirar” al hacer scroll). */
+  enableTransformTransition?: boolean;
 }) {
   return (
     <span
@@ -69,7 +74,7 @@ function ViterraMarkLeftHero({
           objectPosition: "bottom center",
           transform: `scale(${scale})`,
           transformOrigin: "bottom center",
-          transition: "transform 0.2s ease",
+          transition: enableTransformTransition ? "transform 0.2s ease" : "none",
           opacity: 0.96,
         }}
       />
@@ -82,11 +87,13 @@ function ViterraMarkLeftScrolled({
   boxH,
   scale,
   className,
+  enableTransformTransition = true,
 }: {
   boxW: number;
   boxH: number;
   scale: number;
   className?: string;
+  enableTransformTransition?: boolean;
 }) {
   return (
     <span
@@ -108,7 +115,7 @@ function ViterraMarkLeftScrolled({
           objectPosition: "bottom center",
           transform: `scale(${scale})`,
           transformOrigin: "bottom center",
-          transition: "transform 0.2s ease",
+          transition: enableTransformTransition ? "transform 0.2s ease" : "none",
           opacity: 0.96,
         }}
       />
@@ -158,10 +165,6 @@ export function Header() {
 
   const p = scrollP;
 
-  useEffect(() => {
-    if (scrollP > 0.92) setIsMenuOpen(false);
-  }, [scrollP]);
-
   /** 1 en la parte superior, 0 tras un poco de scroll — refuerzo del velo solo al inicio */
   const firstModeHero = 1 - smoothstep01(p, 0.02, 0.16);
   const heroVeilBoost = firstModeHero * 0.17;
@@ -203,11 +206,21 @@ export function Header() {
   const markScale = lerp(1, 0.52, markShrink);
   const markBoxW = 200;
   const markBoxH = 50;
-  const markBoxWMobile = 168;
-  const markBoxHMobile = 42;
+  /**
+   * Móvil/tablet (< lg): caja fija + escala fija para mono y rojo.
+   * No usar `markScale` del scroll (eso anima el logo de escritorio): al mezclarlo con el crossfade
+   * blanco→rojo el tamaño “respira” y el PNG rojo se ve desacomodado.
+   */
+  const markBoxWMobile = 104;
+  const markBoxHMobile = 26;
+  const MOBILE_HEADER_MARK_SCALE = 0.92 * MARK_MONO_SCALE_FACTOR;
 
   const navLinkClass =
     "font-normal uppercase text-white/85 hover:text-white transition-colors shrink-0";
+  /** Modo 1 (nav centrada, inicio de scroll): subrayado blanco. Modo 2 (nav partida): rojo corporativo. */
+  const navLinkActiveBase = "text-white font-semibold underline decoration-2 underline-offset-[7px]";
+  const navLinkActiveClassCenter = `${navLinkActiveBase} decoration-white`;
+  const navLinkActiveClassSplit = `${navLinkActiveBase} decoration-primary`;
   const iconBtnClass = "p-2 text-white/80 hover:text-white rounded-sm";
 
   return (
@@ -299,11 +312,20 @@ export function Header() {
             aria-hidden={!showCenterNav}
           >
             <div className="flex min-w-0 flex-1 items-center justify-center" style={{ gap: `${navGap}px` }}>
-              {VITERRA_NAV_ITEMS.map(([to, label]) => (
-                <Link key={`c-${to}`} to={to} className={navLinkClass} style={{ fontSize: `${navFontPx}px`, letterSpacing: `${navTrackEm}em` }}>
-                  {label}
-                </Link>
-              ))}
+              {VITERRA_NAV_ITEMS.map(([to, label]) => {
+                const active = isActiveNavPath(location.pathname, to);
+                return (
+                  <Link
+                    key={`c-${to}`}
+                    to={to}
+                    className={cn(navLinkClass, active && navLinkActiveClassCenter)}
+                    style={{ fontSize: `${navFontPx}px`, letterSpacing: `${navTrackEm}em` }}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
             </div>
             <div className="flex w-20 shrink-0 items-center justify-end gap-0.5 self-stretch">
               <button type="button" className={iconBtnClass} aria-label="Cuenta">
@@ -322,19 +344,37 @@ export function Header() {
             aria-hidden={!showSplitNav}
           >
             <div className="flex min-w-0 items-center gap-4 self-stretch xl:gap-5">
-              {VITERRA_NAV_ITEMS.slice(0, 3).map(([to, label]) => (
-                <Link key={`l-${to}`} to={to} className={`${navLinkClass} text-white/90`} style={{ fontSize: `${navFontPx}px`, letterSpacing: `${navTrackEm}em` }}>
-                  {label}
-                </Link>
-              ))}
+              {VITERRA_NAV_ITEMS.slice(0, 3).map(([to, label]) => {
+                const active = isActiveNavPath(location.pathname, to);
+                return (
+                  <Link
+                    key={`l-${to}`}
+                    to={to}
+                    className={cn(navLinkClass, "text-white/90", active && navLinkActiveClassSplit)}
+                    style={{ fontSize: `${navFontPx}px`, letterSpacing: `${navTrackEm}em` }}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
             </div>
             <div className="w-28 shrink-0" aria-hidden />
             <div className="flex min-w-0 items-center justify-end gap-4 self-stretch xl:gap-5">
-              {VITERRA_NAV_ITEMS.slice(3).map(([to, label]) => (
-                <Link key={`r-${to}`} to={to} className={`${navLinkClass} text-white/90`} style={{ fontSize: `${navFontPx}px`, letterSpacing: `${navTrackEm}em` }}>
-                  {label}
-                </Link>
-              ))}
+              {VITERRA_NAV_ITEMS.slice(3).map(([to, label]) => {
+                const active = isActiveNavPath(location.pathname, to);
+                return (
+                  <Link
+                    key={`r-${to}`}
+                    to={to}
+                    className={cn(navLinkClass, "text-white/90", active && navLinkActiveClassSplit)}
+                    style={{ fontSize: `${navFontPx}px`, letterSpacing: `${navTrackEm}em` }}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
               <button type="button" className="shrink-0 p-2 text-white/85 hover:text-white" aria-label="Cuenta">
                 <User className="h-[18px] w-[18px]" strokeWidth={1.5} />
               </button>
@@ -343,52 +383,64 @@ export function Header() {
         </div>
 
         <div
-          className={cn("flex items-stretch justify-between gap-2 border-t-0 sm:gap-3", inPreviewCanvas ? "flex" : "flex lg:hidden")}
-          style={{
-            minHeight: `${lerp(52, 48, p)}px`,
-            paddingTop: `${lerp(6, 4, p)}px`,
-            paddingBottom: `${lerp(6, 4, p)}px`,
-          }}
+          className={cn(
+            "relative flex min-h-[52px] items-center justify-between gap-2 border-t-0 px-2 py-1.5 sm:px-3",
+            inPreviewCanvas ? "flex" : "flex lg:hidden"
+          )}
         >
-          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-visible sm:gap-2">
+          <div className="relative z-[56] flex w-11 shrink-0 items-center justify-start sm:w-12">
             <SocialHeaderDropdown
               triggerClassName="p-2 text-white/85 hover:text-white"
               menuAlign="start"
             />
+          </div>
+          <div className="relative z-[52] flex min-w-0 flex-1 items-center justify-end gap-1.5 sm:gap-2">
             <Link
               to="/"
-              className="inline-flex min-w-0 items-center gap-2.5 overflow-visible"
+              className="flex min-w-0 max-w-[min(58vw,12rem)] items-center gap-1.5 overflow-visible sm:max-w-none sm:gap-2"
               onClick={() => setIsMenuOpen(false)}
               aria-label="Viterra Grupo Inmobiliario — Inicio"
             >
-            <span className="relative ml-0 shrink-0 overflow-visible sm:ml-1" style={{ width: markBoxWMobile, height: markBoxHMobile }}>
               <span
-                className="absolute inset-0 flex items-end justify-center overflow-visible transition-opacity duration-300 ease-out"
-                style={{ opacity: 1 - compactLeftMark, pointerEvents: compactLeftMark > 0.92 ? "none" : "auto" }}
+                className="relative shrink-0 overflow-hidden rounded-sm"
+                style={{ width: markBoxWMobile, height: markBoxHMobile }}
               >
-                <ViterraMarkLeftHero
-                  boxW={markBoxWMobile}
-                  boxH={markBoxHMobile}
-                  scale={markScale * MARK_MONO_SCALE_FACTOR}
-                />
+                <span
+                  className="absolute inset-0 flex items-end justify-center overflow-hidden transition-opacity duration-200 ease-out"
+                  style={{ opacity: 1 - compactLeftMark, pointerEvents: compactLeftMark > 0.92 ? "none" : "auto" }}
+                >
+                  <ViterraMarkLeftHero
+                    boxW={markBoxWMobile}
+                    boxH={markBoxHMobile}
+                    scale={MOBILE_HEADER_MARK_SCALE}
+                    enableTransformTransition={false}
+                  />
+                </span>
+                <span
+                  className="absolute inset-0 flex items-end justify-center overflow-hidden transition-opacity duration-200 ease-out"
+                  style={{ opacity: compactLeftMark, pointerEvents: compactLeftMark < 0.08 ? "none" : "auto" }}
+                >
+                  <ViterraMarkLeftScrolled
+                    boxW={markBoxWMobile}
+                    boxH={markBoxHMobile}
+                    scale={MOBILE_HEADER_MARK_SCALE}
+                    enableTransformTransition={false}
+                  />
+                </span>
               </span>
-              <span
-                className="absolute inset-0 flex items-end justify-center overflow-visible transition-opacity duration-300 ease-out"
-                style={{ opacity: compactLeftMark, pointerEvents: compactLeftMark < 0.08 ? "none" : "auto" }}
-              >
-                <ViterraMarkLeftScrolled boxW={markBoxWMobile} boxH={markBoxHMobile} scale={markScale} />
+              <span className="inline-flex min-w-0 flex-col items-start gap-0.5">
+                <span className="font-heading truncate text-[13px] font-medium tracking-[0.16em] text-white sm:tracking-[0.18em]">
+                  VITERRA
+                </span>
+                <span className="h-px w-7 bg-[#C8102E] sm:w-8" aria-hidden />
               </span>
-            </span>
-            <span className="inline-flex min-w-0 flex-col items-start gap-1">
-              <span className="font-heading truncate font-medium tracking-[0.18em] text-white" style={{ fontSize: `${lerp(15, 13, p)}px` }}>
-                VITERRA
-              </span>
-              <span className="h-px w-8 bg-[#C8102E]" style={{ opacity: lerp(0.85, 1, p) }} aria-hidden />
-            </span>
             </Link>
-          </div>
-          <div className="flex shrink-0 items-center gap-0.5 self-stretch">
-            <button type="button" onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 text-white" aria-expanded={isMenuOpen}>
+            <button
+              type="button"
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="relative z-[56] shrink-0 p-2 text-white"
+              aria-expanded={isMenuOpen}
+            >
               {isMenuOpen ? <X className="h-6 w-6" strokeWidth={1.5} /> : <Menu className="h-6 w-6" strokeWidth={1.5} />}
             </button>
           </div>
@@ -398,26 +450,36 @@ export function Header() {
       {isMenuOpen && (
         <nav
           className={cn(
-            "max-h-[min(70vh,calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-5rem))] overflow-y-auto overscroll-contain border-t border-white/10 backdrop-blur-md",
+            "max-h-[min(70vh,calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-5rem))] overflow-y-auto overscroll-contain border-t border-white/10",
             inPreviewCanvas ? "block" : "lg:hidden"
           )}
           style={{
-            backgroundColor: `rgba(${NAVY.r},${NAVY.g},${NAVY.b},${lerp(0.86, 0.92, p)})`,
-            backdropFilter: "blur(14px)",
-            WebkitBackdropFilter: "blur(14px)",
+            backgroundColor: `rgba(${NAVY.r},${NAVY.g},${NAVY.b},${lerp(MOBILE_MENU_BG_ALPHA_TOP, BG_ALPHA_MAX, p)})`,
+            backdropFilter: `saturate(140%) blur(${lerp(20, 16, p)}px)`,
+            WebkitBackdropFilter: `saturate(140%) blur(${lerp(20, 16, p)}px)`,
+            transition: "background-color 0.35s ease, backdrop-filter 0.35s ease, -webkit-backdrop-filter 0.35s ease",
           }}
         >
           <div className="mx-auto max-w-7xl space-y-1 px-4 py-5 sm:px-6 sm:py-6">
-            {VITERRA_NAV_ITEMS.map(([to, label]) => (
-              <Link
-                key={to}
-                to={to}
-                onClick={() => setIsMenuOpen(false)}
-                className="block py-3 text-sm uppercase tracking-[0.14em] text-white/90"
-              >
-                {label}
-              </Link>
-            ))}
+            {VITERRA_NAV_ITEMS.map(([to, label]) => {
+              const active = isActiveNavPath(location.pathname, to);
+              return (
+                <Link
+                  key={to}
+                  to={to}
+                  onClick={() => setIsMenuOpen(false)}
+                  className={cn(
+                    "block border-l-[3px] py-3 pl-4 text-sm uppercase tracking-[0.14em] transition-colors",
+                    active
+                      ? "border-primary font-semibold text-white"
+                      : "border-transparent text-white/90 hover:text-white"
+                  )}
+                  aria-current={active ? "page" : undefined}
+                >
+                  {label}
+                </Link>
+              );
+            })}
           </div>
         </nav>
       )}
