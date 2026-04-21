@@ -112,7 +112,7 @@ export function HomePage() {
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/25" />
         </div>
 
-        <div className="relative z-10 mx-auto w-full max-w-5xl px-4 text-center sm:px-6 lg:px-8">
+        <div className="relative z-10 mx-auto w-full max-w-5xl px-4 pt-10 text-center sm:px-6 sm:pt-12 lg:px-8 lg:pt-16">
           <motion.div
             variants={heroContainerVariants}
             initial="hidden"
@@ -121,7 +121,7 @@ export function HomePage() {
           >
             <motion.p
               variants={heroItemVariants}
-              className="text-[11px] font-normal uppercase tracking-[0.35em] text-white/70 md:text-xs"
+              className="text-[11px] font-normal uppercase tracking-[0.35em] text-white/70 md:text-xs lg:mt-2"
             >
               {h.heroKicker}
             </motion.p>
@@ -153,25 +153,28 @@ export function HomePage() {
 
             <motion.div
               variants={heroItemVariants}
-              className="flex flex-col items-center justify-center gap-5 pt-2 sm:flex-row sm:gap-8"
+              className="mx-auto grid w-full max-w-3xl grid-cols-1 gap-5 pt-4 sm:grid-cols-2 sm:items-center sm:gap-x-6 sm:gap-y-0 sm:pt-2 md:gap-x-10"
             >
-              <motion.button
-                type="button"
-                onClick={scrollToSearch}
-                whileHover={reduceMotion ? undefined : { scale: 1.02 }}
-                whileTap={reduceMotion ? undefined : { scale: 0.98 }}
-                transition={{ type: "spring", stiffness: 400, damping: 24 }}
-                className="w-full min-w-[240px] border border-white px-10 py-4 text-xs font-normal uppercase tracking-[0.22em] text-white transition-colors duration-300 hover:bg-white hover:text-brand-navy sm:w-auto"
-              >
-                {h.heroCtaPrimary}
-              </motion.button>
-              <Link
-                to="/venta"
-                className="group inline-flex items-center gap-2 border-b border-white/40 pb-0.5 text-sm font-light tracking-wide text-white transition-colors hover:border-white"
-              >
-                {h.heroCtaSecondary}
-                <ArrowRight className="h-4 w-4 opacity-80 transition-transform group-hover:translate-x-0.5" />
-              </Link>
+              <div className="flex w-full justify-center sm:justify-end">
+                <motion.button
+                  type="button"
+                  onClick={scrollToSearch}
+                  whileTap={reduceMotion ? undefined : { scale: 0.98 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 24 }}
+                  className="flex w-full max-w-sm min-w-0 items-center justify-center border-0 border-b border-white/40 bg-transparent px-2 py-4 text-center text-xs font-normal uppercase tracking-[0.22em] text-white transition-colors hover:border-white sm:w-auto sm:max-w-none sm:shrink-0 sm:px-0"
+                >
+                  {h.heroCtaPrimary}
+                </motion.button>
+              </div>
+              <div className="flex w-full justify-center sm:justify-start">
+                <Link
+                  to="/venta"
+                  className="group flex shrink-0 items-center gap-2 border-b border-white/40 py-4 text-sm font-light leading-snug tracking-wide text-white transition-colors hover:border-white"
+                >
+                  {h.heroCtaSecondary}
+                  <ArrowRight className="h-4 w-4 shrink-0 opacity-80 transition-transform group-hover:translate-x-0.5" />
+                </Link>
+              </div>
             </motion.div>
           </motion.div>
         </div>
