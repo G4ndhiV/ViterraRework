@@ -662,7 +662,7 @@ export function MapSearchPage() {
   return (
     <div className="viterra-page map-search-page flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-white text-slate-900">
       <div data-reveal className="flex min-h-0 flex-1 flex-col lg:flex-row lg:overflow-hidden">
-        <aside className="flex min-h-0 w-full flex-col border-slate-200 bg-white lg:w-1/2 lg:max-w-[50vw] lg:border-r lg:border-slate-200">
+        <aside className="flex h-[50dvh] min-h-0 w-full shrink-0 flex-col overflow-hidden border-slate-200 bg-white lg:h-auto lg:w-1/2 lg:max-w-[50vw] lg:shrink lg:border-r lg:border-slate-200 lg:min-h-0">
           <div className="shrink-0 border-b-2 border-brand-navy/15 bg-gradient-to-b from-[#f4f2ef] to-white px-4 py-4 sm:px-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -762,7 +762,7 @@ export function MapSearchPage() {
 
         <div
           ref={mapShellRef}
-          className="relative isolate flex min-h-[42vh] min-w-0 flex-1 flex-col border-t border-slate-200 bg-slate-100 lg:min-h-0 lg:w-1/2 lg:border-l lg:border-t-0"
+          className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col border-t border-slate-200 bg-slate-100 lg:h-auto lg:min-h-0 lg:w-1/2 lg:border-l lg:border-t-0"
         >
           <MapSearchHeaderBar />
           <div className="relative z-0 min-h-0 w-full flex-1 overflow-hidden lg:min-h-0">
