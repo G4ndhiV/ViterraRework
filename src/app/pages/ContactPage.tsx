@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
-import { MapPin, Phone, Mail, Clock, Send } from "lucide-react";
+import { MapPin, Phone, Mail, Clock, Send, ChevronDown } from "lucide-react";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
 import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
@@ -382,7 +382,7 @@ export function ContactPage() {
                         required
                         value={formData.name}
                         onChange={handleChange}
-                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all text-sm"
+                        className="w-full min-h-[48px] px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all text-sm"
                         placeholder="Tu nombre"
                         style={{ fontWeight: 400 }}
                       />
@@ -403,7 +403,7 @@ export function ContactPage() {
                         required
                         value={formData.email}
                         onChange={handleChange}
-                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all text-sm"
+                        className="w-full min-h-[48px] px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all text-sm"
                         placeholder="tu@email.com"
                         style={{ fontWeight: 400 }}
                       />
@@ -426,7 +426,7 @@ export function ContactPage() {
                         required
                         value={formData.phone}
                         onChange={handleChange}
-                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all text-sm"
+                        className="w-full min-h-[48px] px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all text-sm"
                         placeholder="(123) 456-7890"
                         style={{ fontWeight: 400 }}
                       />
@@ -440,22 +440,33 @@ export function ContactPage() {
                       >
                         Asunto *
                       </label>
-                      <select
-                        id="subject"
-                        name="subject"
-                        required
-                        value={formData.subject}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all text-sm"
-                        style={{ fontWeight: 400 }}
-                      >
-                        <option value="">Selecciona un asunto</option>
-                        <option value="compra">Compra de propiedad</option>
-                        <option value="venta">Venta de propiedad</option>
-                        <option value="alquiler">Alquiler</option>
-                        <option value="asesoria">Asesoría</option>
-                        <option value="otro">Otro</option>
-                      </select>
+                      <div className="relative">
+                        <select
+                          id="subject"
+                          name="subject"
+                          required
+                          value={formData.subject}
+                          onChange={handleChange}
+                          className={cn(
+                            "w-full min-h-[48px] appearance-none border border-slate-300 bg-white px-4 py-3 pr-11 text-sm text-slate-900",
+                            "rounded-lg transition-all focus:border-[#C8102E] focus:outline-none focus:ring-2 focus:ring-[#C8102E]",
+                            "cursor-pointer"
+                          )}
+                          style={{ fontWeight: 400 }}
+                        >
+                          <option value="">Selecciona un asunto</option>
+                          <option value="compra">Compra de propiedad</option>
+                          <option value="venta">Venta de propiedad</option>
+                          <option value="alquiler">Alquiler</option>
+                          <option value="asesoria">Asesoría</option>
+                          <option value="otro">Otro</option>
+                        </select>
+                        <ChevronDown
+                          className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
+                          strokeWidth={2}
+                          aria-hidden
+                        />
+                      </div>
                     </div>
                   </div>
 

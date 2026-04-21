@@ -214,10 +214,10 @@ export function AboutPage() {
       <PreviewSectionChrome blockId="about-mission" label="Misión y visión">
       <section className="bg-brand-canvas py-24">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
-          <div className={cn("grid gap-8", pl.gridCols("grid-cols-1 md:grid-cols-2"))}>
-            <Reveal y={22} delay={0}>
+          <div className={cn("grid items-stretch gap-8", pl.gridCols("grid-cols-1 md:grid-cols-2"))}>
+            <Reveal y={22} delay={0} className="h-full min-h-0">
               <motion.div
-                className="rounded-lg border border-brand-navy/10 bg-white p-10"
+                className="flex h-full min-h-0 flex-col rounded-lg border border-brand-navy/10 bg-white p-10"
                 whileHover={reduceMotion ? undefined : { y: -4 }}
                 transition={{ type: "spring", stiffness: 380, damping: 28 }}
               >
@@ -233,9 +233,9 @@ export function AboutPage() {
               </motion.div>
             </Reveal>
 
-            <Reveal y={22} delay={0.08}>
+            <Reveal y={22} delay={0.08} className="h-full min-h-0">
               <motion.div
-                className="rounded-lg border border-brand-navy/10 bg-white p-10"
+                className="flex h-full min-h-0 flex-col rounded-lg border border-brand-navy/10 bg-white p-10"
                 whileHover={reduceMotion ? undefined : { y: -4 }}
                 transition={{ type: "spring", stiffness: 380, damping: 28 }}
               >

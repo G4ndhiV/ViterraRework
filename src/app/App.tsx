@@ -3,7 +3,6 @@ import { Toaster } from "sonner";
 import { router } from "./router";
 import { AuthProvider } from "./contexts/AuthContext";
 import { SiteContentProvider } from "../contexts/SiteContentContext";
-import "../styles/index.css";
 
 export default function App() {
   return (
