@@ -9,6 +9,8 @@ type LeadPayloadShape = {
   pipelineGroupId?: string;
   activity?: LeadActivityEntry[];
   clientNotes?: LeadClientNote[];
+  relatedPropertyId?: string;
+  relatedDevelopmentId?: string;
 };
 
 function parsePayload(raw: unknown): LeadPayloadShape {
@@ -39,6 +41,10 @@ export function rowToLead(row: Record<string, unknown>): Lead {
     assignedToUserId: String(row.assigned_to_user_id ?? ""),
     pipelineGroupId: payload.pipelineGroupId ?? DEFAULT_PIPELINE_GROUP_ID,
     clientNotes: payload.clientNotes,
+    relatedPropertyId:
+      typeof payload.relatedPropertyId === "string" ? payload.relatedPropertyId : undefined,
+    relatedDevelopmentId:
+      typeof payload.relatedDevelopmentId === "string" ? payload.relatedDevelopmentId : undefined,
     activity: payload.activity,
     createdAt: row.created_at ? String(row.created_at).split("T")[0] : undefined,
     lastContact: row.last_contact ? String(row.last_contact).split("T")[0] : undefined,
@@ -51,6 +57,8 @@ function leadPayloadForDb(lead: Lead): Record<string, unknown> {
     pipelineGroupId: lead.pipelineGroupId,
     activity: lead.activity ?? [],
     clientNotes: lead.clientNotes ?? [],
+    relatedPropertyId: lead.relatedPropertyId ?? null,
+    relatedDevelopmentId: lead.relatedDevelopmentId ?? null,
   };
 }
 

@@ -80,6 +80,9 @@ export interface Lead {
   pipelineGroupId: string;
   /** Historial de notas (cada una con fecha y texto libre). */
   clientNotes: LeadClientNote[];
+  /** Vínculo opcional a inventario existente. */
+  relatedPropertyId?: string;
+  relatedDevelopmentId?: string;
   /** Historial de movimientos/acciones del lead para pestaña de actividad. */
   activity?: LeadActivityEntry[];
   createdAt: string;
@@ -236,6 +239,14 @@ export function normalizeStoredLead(raw: Partial<Lead> & Record<string, unknown>
     assignedToUserId,
     pipelineGroupId,
     clientNotes: migrateClientNotes(raw),
+    relatedPropertyId:
+      typeof raw.relatedPropertyId === "string" && raw.relatedPropertyId.trim().length > 0
+        ? raw.relatedPropertyId
+        : undefined,
+    relatedDevelopmentId:
+      typeof raw.relatedDevelopmentId === "string" && raw.relatedDevelopmentId.trim().length > 0
+        ? raw.relatedDevelopmentId
+        : undefined,
     activity: migrateLeadActivity(raw),
     createdAt: String(raw.createdAt ?? today),
     lastContact: String(raw.lastContact ?? today),

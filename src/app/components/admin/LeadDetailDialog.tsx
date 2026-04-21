@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, History, Mail, MessageCircle, Phone, Plus, Tag, Trash2, UserCircle2 } from "lucide-react";
+import { Calendar, ExternalLink, History, Mail, MessageCircle, Phone, Plus, Search, Tag, Trash2, UserCircle2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,12 +12,15 @@ import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import type { User } from "../../contexts/AuthContext";
 import type { Lead, LeadPriorityStars } from "../../data/leads";
+import type { Property } from "../PropertyCard";
+import type { Development } from "../../data/developments";
 import { isClickableTeamMemberProfile, resolveLeadTeamUser } from "../../lib/crmTeamUser";
 import { labelForLeadStatus, newLeadActivityId, newLeadClientNoteId, sortLeadClientNotesNewestFirst } from "../../data/leads";
 import { CRM_ASSIGNEES, resolveAssigneeName } from "../../data/crmAssignees";
 import { LeadPriorityBadge } from "./LeadPriorityBadge";
 import { LeadPriorityStarsInput } from "./LeadPriorityStarsInput";
 import { cn } from "../ui/utils";
+import { foldSearchText } from "../../lib/searchText";
 
 function formatLeadDate(value: string | undefined) {
   if (!value) return "—";
@@ -53,6 +56,8 @@ type Props = {
   canManageClients?: boolean;
   /** Abre el módulo Clientes y crea o vincula ficha desde este lead */
   onRegisterClientFromLead?: (lead: Lead) => void;
+  properties?: Property[];
+  developments?: Development[];
 };
 
 export function LeadDetailDialog({
@@ -69,6 +74,8 @@ export function LeadDetailDialog({
   onViewTeamMember,
   canManageClients = false,
   onRegisterClientFromLead,
+  properties = [],
+  developments = [],
 }: Props) {
   const assigneeSelectOptions = useMemo(() => {
     const fromTeam = teamUsers.filter((u) => u.isActive).map((u) => ({ id: u.id, name: u.name }));
@@ -78,6 +85,8 @@ export function LeadDetailDialog({
   const [draft, setDraft] = useState<Lead | null>(null);
   const [activeTab, setActiveTab] = useState<"info" | "activity" | "contact">("info");
   const [activityComment, setActivityComment] = useState("");
+  const [propertySearchQuery, setPropertySearchQuery] = useState("");
+  const [developmentSearchQuery, setDevelopmentSearchQuery] = useState("");
 
   useEffect(() => {
     if (open && lead) {
@@ -85,6 +94,8 @@ export function LeadDetailDialog({
       setEditing(defaultMode === "edit");
       setActiveTab("info");
       setActivityComment("");
+      setPropertySearchQuery("");
+      setDevelopmentSearchQuery("");
     }
   }, [open, lead, defaultMode]);
 
@@ -97,18 +108,31 @@ export function LeadDetailDialog({
   }, [editing, draft, displayLead, teamUsers]);
   const assigneeProfileOpen =
     !!onViewTeamMember && isClickableTeamMemberProfile(assigneeTeamUser, currentUserId);
+  const filteredProperties = useMemo(() => {
+    const q = foldSearchText(propertySearchQuery);
+    if (!q) return properties;
+    return properties.filter((p) => foldSearchText(`${p.title} ${p.location} ${p.type}`).includes(q));
+  }, [properties, propertySearchQuery]);
+  const filteredDevelopments = useMemo(() => {
+    const q = foldSearchText(developmentSearchQuery);
+    if (!q) return developments;
+    return developments.filter((dev) => foldSearchText(`${dev.name} ${dev.location} ${dev.type}`).includes(q));
+  }, [developments, developmentSearchQuery]);
 
   if (!lead) {
     return null;
   }
 
   const d = draft ?? lead;
+  const canOpenClientProfile = canManageClients && !!onRegisterClientFromLead;
   const whatsappDigits = d.phone.replace(/\D/g, "");
   const whatsappMessage = `Hola ${d.name}, te contacto de Viterra para dar seguimiento a tu solicitud inmobiliaria.`;
   const whatsappHref = `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(whatsappMessage)}`;
   const sortedActivity = [...(d.activity ?? [])].sort(
     (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)
   );
+  const selectedProperty = properties.find((p) => p.id === d.relatedPropertyId);
+  const selectedDevelopment = developments.find((dev) => dev.id === d.relatedDevelopmentId);
 
   const handleSave = () => {
     if (!draft) return;
@@ -176,12 +200,33 @@ export function LeadDetailDialog({
             </p>
             <div className="mt-3 grid grid-cols-[minmax(0,1fr)_minmax(18rem,32rem)_minmax(0,1fr)] items-center gap-4">
               <div className="min-w-0">
-                <DialogTitle
-                  className="font-heading truncate text-3xl leading-tight tracking-tight text-brand-navy sm:text-4xl"
-                  style={{ fontWeight: 700, textShadow: "0 1px 0 rgba(255,255,255,0.5)" }}
-                >
-                  {d.name}
-                </DialogTitle>
+                {canOpenClientProfile ? (
+                  <button
+                    type="button"
+                    onClick={() => onRegisterClientFromLead(d)}
+                    className="group inline-flex max-w-full items-center gap-2 truncate rounded-lg px-1 py-0.5 text-left text-primary transition-colors hover:text-primary/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                    style={{ fontWeight: 700, textShadow: "0 1px 0 rgba(255,255,255,0.5)" }}
+                    title="Abrir perfil del cliente en modulo Clientes"
+                  >
+                    <span className="font-heading truncate text-3xl leading-tight tracking-tight sm:text-4xl">{d.name}</span>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-primary">
+                      Ver perfil
+                      <ExternalLink className="h-3 w-3" strokeWidth={2} />
+                    </span>
+                  </button>
+                ) : (
+                  <DialogTitle
+                    className="font-heading truncate text-3xl leading-tight tracking-tight text-brand-navy sm:text-4xl"
+                    style={{ fontWeight: 700, textShadow: "0 1px 0 rgba(255,255,255,0.5)" }}
+                  >
+                    {d.name}
+                  </DialogTitle>
+                )}
+                {canOpenClientProfile && (
+                  <p className="mt-1 pl-1 text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                    Click en el nombre para abrir su perfil en Clientes.
+                  </p>
+                )}
               </div>
               <div className="justify-self-center">
                 <div className="inline-flex w-full min-w-[18rem] max-w-[32rem] items-center justify-center gap-1.5 rounded-xl border border-stone-200/90 bg-white/90 p-1 shadow-sm ring-1 ring-white/70">
@@ -271,7 +316,20 @@ export function LeadDetailDialog({
                   Cliente
                 </p>
                 <p className="mt-1 text-lg text-brand-navy" style={{ fontWeight: 700 }}>
-                  {d.name}
+                  {canOpenClientProfile ? (
+                    <button
+                      type="button"
+                      onClick={() => onRegisterClientFromLead(d)}
+                      className="inline-flex items-center gap-1.5 rounded-md px-1 text-left text-primary underline decoration-primary/35 underline-offset-4 transition-colors hover:text-primary/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                      style={{ fontWeight: 700 }}
+                      title="Abrir perfil del cliente en modulo Clientes"
+                    >
+                      {d.name}
+                      <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} />
+                    </button>
+                  ) : (
+                    d.name
+                  )}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
                   Teléfono: <span className="font-semibold text-slate-800">{d.phone}</span>
@@ -476,65 +534,68 @@ export function LeadDetailDialog({
 
                 <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
                   <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
-                    Interés y propiedad
+                    Propiedad o desarrollo relacionado
                   </h3>
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
-                        Interés
+                        Propiedad
                       </Label>
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
+                        <input
+                          type="search"
+                          value={propertySearchQuery}
+                          onChange={(e) => setPropertySearchQuery(e.target.value)}
+                          placeholder="Buscar propiedad…"
+                          className="mb-2 h-9 w-full rounded-lg border border-stone-200 bg-white pl-9 pr-3 text-sm text-brand-navy focus:border-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-300/80"
+                        />
+                      </div>
                       <select
-                        value={draft.interest}
+                        value={draft.relatedPropertyId ?? ""}
                         onChange={(e) =>
-                          setDraft((d) =>
-                            d ? { ...d, interest: e.target.value as Lead["interest"] } : d
-                          )
+                          setDraft((d) => (d ? { ...d, relatedPropertyId: e.target.value || undefined } : d))
                         }
                         className={leadFieldClass}
                         style={{ fontWeight: 500 }}
                       >
-                        <option value="compra">Compra</option>
-                        <option value="venta">Venta</option>
-                        <option value="alquiler">Alquiler</option>
-                        <option value="asesoria">Asesoría</option>
+                        <option value="">Sin propiedad</option>
+                        {filteredProperties.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.title}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
-                        Tipo de propiedad
+                        Desarrollo
                       </Label>
-                      <input
-                        value={draft.propertyType}
-                        onChange={(e) => setDraft((d) => (d ? { ...d, propertyType: e.target.value } : d))}
-                        className={leadFieldClass}
-                        style={{ fontWeight: 500 }}
-                      />
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
-                        Presupuesto (USD)
-                      </Label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={draft.budget}
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
+                        <input
+                          type="search"
+                          value={developmentSearchQuery}
+                          onChange={(e) => setDevelopmentSearchQuery(e.target.value)}
+                          placeholder="Buscar desarrollo…"
+                          className="mb-2 h-9 w-full rounded-lg border border-stone-200 bg-white pl-9 pr-3 text-sm text-brand-navy focus:border-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-300/80"
+                        />
+                      </div>
+                      <select
+                        value={draft.relatedDevelopmentId ?? ""}
                         onChange={(e) =>
-                          setDraft((d) => (d ? { ...d, budget: Number(e.target.value) || 0 } : d))
+                          setDraft((d) => (d ? { ...d, relatedDevelopmentId: e.target.value || undefined } : d))
                         }
-                        className={cn(leadFieldClass, "max-w-xs")}
-                        style={{ fontWeight: 500 }}
-                      />
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
-                        Ubicación deseada
-                      </Label>
-                      <input
-                        value={draft.location}
-                        onChange={(e) => setDraft((d) => (d ? { ...d, location: e.target.value } : d))}
                         className={leadFieldClass}
                         style={{ fontWeight: 500 }}
-                      />
+                      >
+                        <option value="">Sin desarrollo</option>
+                        {filteredDevelopments.map((dev) => (
+                          <option key={dev.id} value={dev.id}>
+                            {dev.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </section>
@@ -775,26 +836,16 @@ export function LeadDetailDialog({
                   <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
                     <div className="flex flex-wrap items-end justify-between gap-2 border-b border-stone-100 pb-3">
                       <h3 className="text-base text-brand-navy" style={{ fontWeight: 700 }}>
-                        Interés y propiedad
+                        Propiedad o desarrollo relacionado
                       </h3>
                       <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                         Resumen
                       </span>
                     </div>
-                    <dl className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+                    <dl className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">
                       {[
-                        { label: "Interés", value: d.interest, capitalize: true },
-                        { label: "Tipo", value: d.propertyType },
-                        {
-                          label: "Presupuesto",
-                          value: (
-                            <>
-                              ${d.budget.toLocaleString()}{" "}
-                              <span className="text-xs font-normal text-slate-500">USD</span>
-                            </>
-                          ),
-                        },
-                        { label: "Ubicación", value: d.location },
+                        { label: "Propiedad", value: selectedProperty?.title ?? "Sin propiedad vinculada" },
+                        { label: "Desarrollo", value: selectedDevelopment?.name ?? "Sin desarrollo vinculado" },
                       ].map((item) => (
                         <div
                           key={item.label}
@@ -804,10 +855,7 @@ export function LeadDetailDialog({
                             {item.label}
                           </dt>
                           <dd
-                            className={cn(
-                              "mt-1.5 text-sm text-brand-navy",
-                              item.capitalize && "capitalize"
-                            )}
+                            className="mt-1.5 text-sm text-brand-navy"
                             style={{ fontWeight: 600 }}
                           >
                             {item.value}
@@ -960,7 +1008,7 @@ export function LeadDetailDialog({
 
         <DialogFooter className="shrink-0 flex-col gap-2 border-t border-stone-200/90 bg-stone-50/90 px-4 py-3 sm:flex-row sm:justify-between sm:px-6">
           <div className="flex flex-wrap gap-2">
-            {canManageClients && onRegisterClientFromLead && (
+            {canOpenClientProfile && (
               <Button
                 type="button"
                 variant="outline"
@@ -968,7 +1016,7 @@ export function LeadDetailDialog({
                 onClick={() => onRegisterClientFromLead(d)}
               >
                 <UserCircle2 className="mr-2 h-4 w-4" strokeWidth={1.75} />
-                Cliente CRM
+                Abrir perfil en Clientes
               </Button>
             )}
             <Button type="button" variant="destructive" onClick={handleDelete}>

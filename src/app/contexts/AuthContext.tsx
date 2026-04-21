@@ -1,7 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseClient } from "../lib/supabaseClient";
-import { fetchAllTokkoUsersForDirectory, fetchTokkoUserRow } from "../lib/supabaseTokkoUsers";
+import { toast } from "sonner";
+import {
+  fetchAllTokkoUsersForDirectory,
+  fetchTokkoUserRow,
+  upsertTokkoUserAccess,
+} from "../lib/supabaseTokkoUsers";
 
 export type UserRole = "admin" | "lider_grupo" | "asesor";
 export type UserPermission =
@@ -340,6 +345,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     };
 
+    const syncDirectoryAccessToTokkoUsers = async (directory: User[]) => {
+      const activeUsers = directory.filter((u) => u.isActive);
+      if (activeUsers.length === 0) return;
+      const results = await Promise.all(
+        activeUsers.map((u) =>
+          upsertTokkoUserAccess(client, {
+            userId: u.id,
+            email: u.email,
+            role: u.role,
+            permissions: u.permissions,
+          })
+        )
+      );
+      const failed = results.filter((r) => r.error);
+      if (failed.length > 0 && import.meta.env.DEV) {
+        console.warn(
+          `[Viterra] Backfill de rol/permisos en tokko_users con fallas: ${failed.length}/${results.length}`
+        );
+      }
+    };
+
     const applySession = async (session: Session | null) => {
       if (!session?.user) {
         setUser(null);
@@ -373,11 +399,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           setUsers(merged);
           localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(merged));
+          void syncDirectoryAccessToTokkoUsers(merged);
         } else {
           if (import.meta.env.DEV && listRes.error) {
             console.warn("[Viterra] No se pudo listar tokko_users (equipo):", listRes.error.message);
           }
           mergeSessionUserIntoDirectory(appUser);
+          void syncDirectoryAccessToTokkoUsers([appUser]);
         }
       } else {
         mergeSessionUserIntoDirectory(appUser);
@@ -504,6 +532,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const updateUserPermissions: AuthContextType["updateUserPermissions"] = (id, role, permissions, actorName = "Admin") => {
+    const target = users.find((u) => u.id === id);
     persistUsers(
       users.map((item) => {
         if (item.id !== id) return item;
@@ -511,6 +540,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return appendHistory(next, newHistoryEntry("permissions_changed", "Permisos o rol actualizados", actorName));
       })
     );
+    if (!target) return;
+    const client = getSupabaseClient();
+    if (!client) return;
+    void upsertTokkoUserAccess(client, {
+      userId: target.id,
+      email: target.email,
+      role,
+      permissions,
+    }).then((res) => {
+      if (res.error) {
+        toast.error("No se pudieron guardar rol/permisos en la base de datos (RLS).");
+        if (import.meta.env.DEV) {
+          console.warn("[Viterra] No se pudo persistir rol/permisos en tokko_users:", res.error.message);
+        }
+        return;
+      }
+      toast.success("Rol y permisos actualizados en base de datos.");
+    });
   };
 
   const archiveUser: AuthContextType["archiveUser"] = (id, actorName = "Admin") => {

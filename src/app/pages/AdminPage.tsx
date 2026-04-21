@@ -56,8 +56,13 @@ import {
 } from "../lib/supabaseLeads";
 import { toast } from "sonner";
 import {
+  appendClientActivity,
   CLIENTS_STORAGE_KEY,
+  newClientId,
   normalizeStoredClient,
+  normalizeEmailKey,
+  normalizePhoneKey,
+  newClientActivityId,
   type CrmClient,
 } from "../data/clients";
 import { LeadsKanbanBoard } from "../components/admin/LeadsKanbanBoard";
@@ -132,6 +137,7 @@ import {
   type GroupPipelineSnapshot,
 } from "../lib/pipelineByGroup";
 import { loadUserGroupsFromStorage, type UserGroup } from "../lib/userGroups";
+import { foldSearchText } from "../lib/searchText";
 
 type TabType =
   | "dashboard"
@@ -192,6 +198,12 @@ export function AdminPage() {
   const [adminHeaderQuery, setAdminHeaderQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
+  const [createdRangeFilter, setCreatedRangeFilter] = useState<
+    "all" | "1m" | "3m" | "6m" | "1y" | "custom"
+  >("all");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [leadsView, setLeadsView] = useState<"kanban" | "table">("kanban");
   /** Vista lista: secciones por estado; true = colapsada */
@@ -732,6 +744,78 @@ export function AdminPage() {
     [activePipelineGroupId, allStageIds]
   );
 
+  const upsertClientFromLead = useCallback(
+    (prev: CrmClient[], lead: Lead): CrmClient[] => {
+      const emailKey = normalizeEmailKey(lead.email);
+      const phoneKey = normalizePhoneKey(lead.phone);
+      if (!emailKey && !phoneKey) return prev;
+
+      const existing = prev.find((c) => {
+        if (emailKey && normalizeEmailKey(c.email) === emailKey) return true;
+        if (phoneKey && normalizePhoneKey(c.phone) === phoneKey) return true;
+        return false;
+      });
+      const actorName = user?.name?.trim() || "Sistema CRM";
+
+      if (existing) {
+        if (existing.linkedLeadIds.includes(lead.id)) return prev;
+        const linked = appendClientActivity(
+          {
+            ...existing,
+            linkedLeadIds: [...existing.linkedLeadIds, lead.id],
+            updatedAt: new Date().toISOString(),
+          },
+          {
+            id: newClientActivityId(),
+            type: "link_lead",
+            description: `Vinculado automáticamente al lead «${lead.name}»`,
+            actorName,
+          }
+        );
+        return prev.map((c) => (c.id === existing.id ? linked : c));
+      }
+
+      const now = new Date().toISOString();
+      const created = appendClientActivity(
+        {
+          id: newClientId(),
+          name: lead.name,
+          email: lead.email,
+          phone: lead.phone,
+          propertyIds: [],
+          developmentIds: [],
+          linkedLeadIds: [lead.id],
+          primaryOwnerUserId: lead.assignedToUserId || user?.id || "",
+          createdAt: now,
+          updatedAt: now,
+          activity: [],
+        },
+        {
+          id: newClientActivityId(),
+          type: "created",
+          description: `Cliente creado automáticamente desde lead «${lead.name}»`,
+          actorName,
+        }
+      );
+
+      return [...prev, created];
+    },
+    [user?.id, user?.name]
+  );
+
+  useEffect(() => {
+    if (!user) return;
+    const visibleLeads = filterLeadsForUser(leads, user);
+    if (visibleLeads.length === 0) return;
+    setClients((prev) => {
+      let next = prev;
+      for (const lead of visibleLeads) {
+        next = upsertClientFromLead(next, lead);
+      }
+      return next;
+    });
+  }, [leads, user, upsertClientFromLead]);
+
   const handleAddLead = useCallback(async (lead: Lead) => {
     const createdAt = new Date().toISOString();
     const withActivity: Lead = {
@@ -758,7 +842,8 @@ export function AdminPage() {
       }
     }
     setLeads((prev) => [...prev, withActivity]);
-  }, []);
+    setClients((prev) => upsertClientFromLead(prev, withActivity));
+  }, [upsertClientFromLead]);
 
   const handleSaveLead = useCallback(async (updated: Lead) => {
     let merged: Lead | null = null;
@@ -823,6 +908,27 @@ export function AdminPage() {
     [leadsForUser, activePipelineGroupId]
   );
 
+  const assigneeFilterOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    for (const u of users) {
+      if (!u.isActive) continue;
+      options.set(u.id, u.name || u.email || "Asesor");
+    }
+    for (const lead of leadsInActivePipeline) {
+      if (lead.assignedToUserId && !options.has(lead.assignedToUserId)) {
+        options.set(lead.assignedToUserId, lead.assignedTo || "Asesor");
+        continue;
+      }
+      const assignedName = lead.assignedTo.trim();
+      if (!lead.assignedToUserId && assignedName) {
+        options.set(`name:${foldSearchText(assignedName)}`, `${assignedName} (sin usuario vinculado)`);
+      }
+    }
+    return [...options.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
+  }, [users, leadsInActivePipeline]);
+
   const openLeadDetail = useCallback(
     (lead: Lead, mode: "view" | "edit") => {
       const full = leads.find((l) => l.id === lead.id) ?? lead;
@@ -886,12 +992,43 @@ export function AdminPage() {
   const propertiesForRent = properties.filter(p => p.status === "alquiler").length;
 
   const filteredLeads = leadsInActivePipeline.filter((lead) => {
+    const createdAtDate = lead.createdAt ? new Date(lead.createdAt) : null;
+    const now = new Date();
+    const fromByRange = (() => {
+      if (createdRangeFilter === "all" || createdRangeFilter === "custom") return null;
+      const d = new Date(now);
+      if (createdRangeFilter === "1m") d.setMonth(d.getMonth() - 1);
+      if (createdRangeFilter === "3m") d.setMonth(d.getMonth() - 3);
+      if (createdRangeFilter === "6m") d.setMonth(d.getMonth() - 6);
+      if (createdRangeFilter === "1y") d.setFullYear(d.getFullYear() - 1);
+      return d;
+    })();
+    const customFromDate = createdRangeFilter === "custom" && createdFrom ? new Date(`${createdFrom}T00:00:00`) : null;
+    const customToDate = createdRangeFilter === "custom" && createdTo ? new Date(`${createdTo}T23:59:59`) : null;
+    const q = foldSearchText(searchQuery);
     const matchesSearch =
-      lead.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.phone.includes(searchQuery);
+      !q ||
+      foldSearchText(lead.name).includes(q) ||
+      foldSearchText(lead.email).includes(q) ||
+      foldSearchText(lead.phone).includes(q);
     const matchesStatus = statusFilter === "all" || lead.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const selectedAssigneeLabel = assigneeFilterOptions.find((opt) => opt.value === assigneeFilter)?.label ?? "";
+    const selectedAssigneeName = selectedAssigneeLabel.replace(/\s+\(sin usuario vinculado\)\s*$/i, "").trim();
+    const matchesAssignee =
+      assigneeFilter === "all" ||
+      (assigneeFilter.startsWith("name:")
+        ? foldSearchText(lead.assignedTo) === assigneeFilter.slice(5)
+        : lead.assignedToUserId === assigneeFilter ||
+          (selectedAssigneeName.length > 0 &&
+            foldSearchText(lead.assignedTo) === foldSearchText(selectedAssigneeName)));
+    const matchesCreatedRange =
+      createdRangeFilter === "all" ||
+      (createdAtDate !== null &&
+        !Number.isNaN(createdAtDate.getTime()) &&
+        ((fromByRange ? createdAtDate >= fromByRange : true) &&
+          (customFromDate ? createdAtDate >= customFromDate : true) &&
+          (customToDate ? createdAtDate <= customToDate : true)));
+    return matchesSearch && matchesStatus && matchesAssignee && matchesCreatedRange;
   });
 
   const normalizeStageToken = useCallback((value: string) => {
@@ -1011,12 +1148,12 @@ export function AdminPage() {
   }, []);
 
   const filteredProperties = properties.filter((property) => {
-    const q = propertySearchQuery.trim().toLowerCase();
+    const q = foldSearchText(propertySearchQuery);
     const matchesSearch = !q || (
-      property.title.toLowerCase().includes(q) ||
-      property.location.toLowerCase().includes(q) ||
-      property.type.toLowerCase().includes(q) ||
-      property.status.toLowerCase().includes(q)
+      foldSearchText(property.title).includes(q) ||
+      foldSearchText(property.location).includes(q) ||
+      foldSearchText(property.type).includes(q) ||
+      foldSearchText(property.status).includes(q)
     );
     const matchesOperation =
       propertyOperationFilter === "all" || property.status === propertyOperationFilter;
@@ -1069,6 +1206,40 @@ export function AdminPage() {
   const conversionRate = totalLeads > 0 ? ((closedDeals / totalLeads) * 100).toFixed(1) : "0";
   const totalValue = properties.reduce((sum, p) => sum + p.price, 0);
   const avgPropertyPrice = properties.length > 0 ? (totalValue / properties.length).toFixed(0) : "0";
+  const [animatedStats, setAnimatedStats] = useState({
+    totalLeads: 0,
+    conversionRate: 0,
+    totalProperties: 0,
+    avgPropertyPrice: 0,
+  });
+
+  useEffect(() => {
+    if (activeTab !== "dashboard") return;
+    const target = {
+      totalLeads,
+      conversionRate: Number(conversionRate) || 0,
+      totalProperties,
+      avgPropertyPrice: parseInt(avgPropertyPrice, 10) || 0,
+    };
+    const durationMs = 900;
+    const start = performance.now();
+    let frameId = 0;
+
+    const tick = (now: number) => {
+      const progress = Math.min((now - start) / durationMs, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setAnimatedStats({
+        totalLeads: target.totalLeads * eased,
+        conversionRate: target.conversionRate * eased,
+        totalProperties: target.totalProperties * eased,
+        avgPropertyPrice: target.avgPropertyPrice * eased,
+      });
+      if (progress < 1) frameId = requestAnimationFrame(tick);
+    };
+
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [activeTab, totalLeads, conversionRate, totalProperties, avgPropertyPrice]);
 
   const adminNavigationRoutes = useMemo(
     () => [
@@ -1583,7 +1754,9 @@ export function AdminPage() {
                   <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Total Leads</p>
                   <TrendingUp className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
-                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>{totalLeads}</p>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
+                  {Math.round(animatedStats.totalLeads)}
+                </p>
                 <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>+{newLeads} este mes</p>
               </div>
 
@@ -1593,7 +1766,9 @@ export function AdminPage() {
                   <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Conversión</p>
                   <Activity className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
-                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>{conversionRate}%</p>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
+                  {animatedStats.conversionRate.toFixed(1)}%
+                </p>
                 <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>{closedDeals} cerrados</p>
               </div>
 
@@ -1603,7 +1778,9 @@ export function AdminPage() {
                   <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Propiedades</p>
                   <Briefcase className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
-                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>{totalProperties}</p>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
+                  {Math.round(animatedStats.totalProperties)}
+                </p>
                 <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>{propertiesForSale} venta · {propertiesForRent} alquiler</p>
               </div>
 
@@ -1613,7 +1790,9 @@ export function AdminPage() {
                   <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Valor Promedio</p>
                   <TrendingUp className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
-                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>${parseInt(avgPropertyPrice).toLocaleString()}</p>
+                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
+                  ${Math.round(animatedStats.avgPropertyPrice).toLocaleString()}
+                </p>
                 <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>por propiedad</p>
               </div>
             </div>
@@ -1847,30 +2026,6 @@ export function AdminPage() {
                 </div>
 
                 <div className="mt-8 flex flex-col gap-3 border-t border-slate-200/80 pt-6">
-                  {allowedPipelineGroupIds.length > 1 && (
-                    <div className="flex flex-col gap-1.5 sm:max-w-md">
-                      <label
-                        htmlFor="crm-pipeline-group"
-                        className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"
-                      >
-                        Pipeline por grupo
-                      </label>
-                      <select
-                        id="crm-pipeline-group"
-                        value={activePipelineGroupId}
-                        onChange={(e) => setActivePipelineGroupId(e.target.value)}
-                        className="h-11 w-full rounded-2xl border border-slate-200/90 bg-white px-4 text-sm text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                        style={{ fontWeight: 500 }}
-                      >
-                        {allowedPipelineGroupIds.map((id) => (
-                          <option key={id} value={id}>
-                            {pipelineGroupLabel(id)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
                   <div className="relative min-h-[2.75rem] flex-1">
                     <Search
                       className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
@@ -1885,6 +2040,75 @@ export function AdminPage() {
                       style={{ fontWeight: 500 }}
                       autoComplete="off"
                     />
+                  </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-stretch">
+                  <div className="relative sm:w-[min(100%,260px)]">
+                    <Users
+                      className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
+                      strokeWidth={1.75}
+                    />
+                    <select
+                      id="crm-pipeline-group"
+                      value={activePipelineGroupId}
+                      onChange={(e) => setActivePipelineGroupId(e.target.value)}
+                      className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                      style={{ fontWeight: 500 }}
+                    >
+                      {allowedPipelineGroupIds.map((id) => (
+                        <option key={id} value={id}>
+                          Grupo: {pipelineGroupLabel(id)}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
+                      <ChevronDown className="h-4 w-4" strokeWidth={2} />
+                    </span>
+                  </div>
+                  <div className="relative sm:w-[min(100%,220px)]">
+                    <UserIcon
+                      className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-400"
+                      strokeWidth={1.75}
+                    />
+                    <select
+                      value={assigneeFilter}
+                      onChange={(e) => setAssigneeFilter(e.target.value)}
+                      className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-10 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                      style={{ fontWeight: 500 }}
+                    >
+                      <option value="all">Todos los asesores</option>
+                      {assigneeFilterOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
+                      <ChevronDown className="h-4 w-4" strokeWidth={2} />
+                    </span>
+                  </div>
+                  <div className="relative sm:w-[min(100%,230px)]">
+                    <Calendar
+                      className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-400"
+                      strokeWidth={1.75}
+                    />
+                    <select
+                      value={createdRangeFilter}
+                      onChange={(e) =>
+                        setCreatedRangeFilter(e.target.value as "all" | "1m" | "3m" | "6m" | "1y" | "custom")
+                      }
+                      className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-10 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                      style={{ fontWeight: 500 }}
+                    >
+                      <option value="all">Cualquier fecha</option>
+                      <option value="1m">Ultimo mes</option>
+                      <option value="3m">Ultimos 3 meses</option>
+                      <option value="6m">Ultimos 6 meses</option>
+                      <option value="1y">Ultimo ano</option>
+                      <option value="custom">Fecha personalizada</option>
+                    </select>
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
+                      <ChevronDown className="h-4 w-4" strokeWidth={2} />
+                    </span>
                   </div>
                   <div className="relative sm:w-[min(100%,220px)]">
                     <Filter
@@ -1909,6 +2133,34 @@ export function AdminPage() {
                     </span>
                   </div>
                   </div>
+                  {createdRangeFilter === "custom" && (
+                    <div className="grid gap-3 sm:max-w-[460px] sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          Desde
+                        </label>
+                        <input
+                          type="date"
+                          value={createdFrom}
+                          onChange={(e) => setCreatedFrom(e.target.value)}
+                          className="h-11 w-full rounded-2xl border border-slate-200/90 bg-white px-4 text-sm text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                          style={{ fontWeight: 500 }}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          Hasta
+                        </label>
+                        <input
+                          type="date"
+                          value={createdTo}
+                          onChange={(e) => setCreatedTo(e.target.value)}
+                          className="h-11 w-full rounded-2xl border border-slate-200/90 bg-white px-4 text-sm text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                          style={{ fontWeight: 500 }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1922,6 +2174,8 @@ export function AdminPage() {
               customKanbanStages={customKanbanStages}
               pipelineGroupId={activePipelineGroupId}
           defaultStageId={defaultLeadStageId}
+              properties={properties}
+              developments={developments}
             />
 
             {leadsError && (
@@ -2835,6 +3089,12 @@ export function AdminPage() {
                   <AdminUsersManager
                     currentUser={user}
                     users={users}
+                    leads={leads}
+                    userGroups={userGroups}
+                    onViewLead={(lead) => {
+                      setActiveTab("leads");
+                      openLeadDetail(lead, "view");
+                    }}
                     onCreateUser={(input) => createUser(input, user.name)}
                     onUpdateUser={(id, input) => updateUser(id, input, user.name)}
                     onUpdatePassword={(id, password) => updateUserPassword(id, password, user.name)}
@@ -3177,6 +3437,8 @@ export function AdminPage() {
           onViewTeamMember={handleViewTeamMember}
           canManageClients={canAccessClients}
           onRegisterClientFromLead={handleRegisterClientFromLead}
+          properties={properties}
+          developments={developments}
         />
 
         <AlertDialog

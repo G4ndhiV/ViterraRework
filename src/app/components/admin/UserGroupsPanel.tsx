@@ -125,6 +125,14 @@ export function UserGroupsPanel({ users, canManageGroups }: Props) {
     return list.sort((a, b) => a.name.localeCompare(b.name, "es"));
   }, [activeUsers, memberSearch, memberRoleFilter]);
 
+  const selectedMembersPreview = useMemo(() => {
+    const byId = new Map(users.map((u) => [u.id, u]));
+    return Array.from(new Set(form.memberIds))
+      .map((id) => byId.get(id))
+      .filter((u): u is User => Boolean(u))
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [users, form.memberIds]);
+
   const filteredGroups = useMemo(() => {
     const q = groupListQuery.trim().toLowerCase();
     if (!q) return groups;
@@ -223,9 +231,9 @@ export function UserGroupsPanel({ users, canManageGroups }: Props) {
     <div className="rounded-lg border border-slate-200 bg-white p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
         <div className="min-w-0">
-          <h2 className="text-xl font-semibold text-slate-900">Grupos de trabajo</h2>
+          <h2 className="text-xl font-semibold text-slate-900">Equipos de trabajo</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Crea grupos, asigna miembros y define un único líder por grupo (rol «Líder de grupo»).
+            Crea equipos, asigna miembros y define un único líder por grupo (rol «Líder de grupo»).
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -263,7 +271,7 @@ export function UserGroupsPanel({ users, canManageGroups }: Props) {
             className="h-full min-h-[2.75rem] w-full rounded-xl border border-slate-200/90 bg-white py-2.5 pl-11 pr-4 text-sm text-brand-navy shadow-sm transition-all placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
             style={{ fontWeight: 500 }}
             autoComplete="off"
-            aria-label="Buscar grupos"
+            aria-label="Buscar equipos"
           />
         </div>
       </div>
@@ -297,8 +305,8 @@ export function UserGroupsPanel({ users, canManageGroups }: Props) {
                   style={{ fontWeight: 500 }}
                 >
                   {groups.length === 0
-                    ? "Aún no hay grupos. Crea uno para organizar a tu equipo."
-                    : "No hay grupos que coincidan con la búsqueda."}
+                    ? "Aún no hay equipos. Crea uno para organizar a tu equipo."
+                    : "No hay equipos que coincidan con la búsqueda."}
                 </td>
               </tr>
             ) : (
@@ -423,6 +431,30 @@ export function UserGroupsPanel({ users, canManageGroups }: Props) {
                       )}
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Usuarios en este grupo</Label>
+                  <p className="text-[11px] leading-snug text-slate-500">
+                    Miembros ya asignados actualmente.
+                  </p>
+                  <div className="max-h-[19rem] overflow-y-auto rounded-lg border border-slate-200/90 bg-slate-50/50">
+                    {selectedMembersPreview.length === 0 ? (
+                      <p className="px-3 py-3 text-sm text-slate-500">Aun no hay usuarios asignados.</p>
+                    ) : (
+                      <ul className="divide-y divide-slate-100">
+                        {selectedMembersPreview.map((u) => (
+                          <li key={u.id} className="px-3 py-2">
+                            <p className="text-sm text-slate-900" style={{ fontWeight: 600 }}>
+                              {u.name}
+                              {u.id === form.leaderId ? " · Lider" : ""}
+                            </p>
+                            <p className="text-xs text-slate-500">{u.email}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </div>
               </div>
 

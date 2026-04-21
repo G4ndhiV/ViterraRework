@@ -40,6 +40,7 @@ import { Label } from "../ui/label";
 import { Checkbox } from "../ui/checkbox";
 import { ScrollArea } from "../ui/scroll-area";
 import { cn } from "../ui/utils";
+import { foldSearchText } from "../../lib/searchText";
 
 const userReadonlyFieldClass =
   "w-full rounded-lg border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-sm text-brand-navy";
@@ -154,6 +155,12 @@ export function AdminClientsManager({
   const [selected, setSelected] = useState<CrmClient | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
+  const [ownerSearchQuery, setOwnerSearchQuery] = useState("");
+  const [propertySearchQuery, setPropertySearchQuery] = useState("");
+  const [propertyAssignmentFilter, setPropertyAssignmentFilter] = useState<"all" | "selected" | "unselected">("all");
+  const [developmentSearchQuery, setDevelopmentSearchQuery] = useState("");
+  const [developmentAssignmentFilter, setDevelopmentAssignmentFilter] =
+    useState<"all" | "selected" | "unselected">("all");
 
   const scopeClients = useMemo(() => {
     if (canManageAllClients(currentUser)) return clients;
@@ -162,10 +169,10 @@ export function AdminClientsManager({
 
   const filteredList = useMemo(() => {
     let list = scopeClients;
-    const q = searchQuery.trim().toLowerCase();
+    const q = foldSearchText(searchQuery);
     if (q) {
       list = list.filter((c) => {
-        const blob = [c.name, c.email, c.phone].join(" ").toLowerCase();
+        const blob = foldSearchText([c.name, c.email, c.phone].join(" "));
         return blob.includes(q);
       });
     }
@@ -312,17 +319,36 @@ export function AdminClientsManager({
     setNoteDraft("");
   };
 
+  useEffect(() => {
+    if (!selected) return;
+    setOwnerSearchQuery("");
+    setPropertySearchQuery("");
+    setPropertyAssignmentFilter("all");
+    setDevelopmentSearchQuery("");
+    setDevelopmentAssignmentFilter("all");
+  }, [selected?.id]);
+
   const saveClient = () => {
     if (!selected) return;
     const name = selected.name.trim();
     const email = selected.email.trim();
-    if (!name || !email) return;
+    const phone = selected.phone.trim();
+    if (!name) {
+      window.alert("El nombre del cliente es obligatorio.");
+      return;
+    }
 
     if (isNew) {
-      const dup = findClientByEmailNormalized(clients, email);
-      if (dup) {
-        window.alert("Ya existe un cliente con este correo. Abre su ficha para vincular leads.");
+      if (!email && !phone) {
+        window.alert("Para crear el cliente, captura al menos correo o teléfono.");
         return;
+      }
+      if (email) {
+        const dup = findClientByEmailNormalized(clients, email);
+        if (dup) {
+          window.alert("Ya existe un cliente con este correo. Abre su ficha para vincular leads.");
+          return;
+        }
       }
       onSetClients((prev) => [...prev, selected]);
     } else {
@@ -382,10 +408,58 @@ export function AdminClientsManager({
     return [...selected.activity].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }, [selected]);
 
-  const ownerName = (userId: string) => users.find((u) => u.id === userId)?.name ?? userId;
+  const ownerName = (client: CrmClient) => {
+    const userId = client.primaryOwnerUserId?.trim() ?? "";
+    if (userId) {
+      const fromUsers = users.find((u) => u.id === userId)?.name;
+      if (fromUsers) return fromUsers;
+    }
+
+    const linkedLeadWithAssignee = client.linkedLeadIds
+      .map((id) => leads.find((l) => l.id === id))
+      .find((l): l is Lead => !!l && !!l.assignedTo?.trim());
+    if (linkedLeadWithAssignee) return linkedLeadWithAssignee.assignedTo;
+
+    if (!userId) return "Sin asignar";
+    return "Asesor no encontrado";
+  };
 
   const canEdit = selected ? clientIsEditableBy(currentUser, selected) : false;
   const canSetOwner = canManageAllClients(currentUser);
+  const ownerOptionsForDetail = useMemo(() => {
+    const q = foldSearchText(ownerSearchQuery);
+    return users
+      .filter((u) => u.isActive)
+      .filter((u) => {
+        if (!q) return true;
+        const blob = foldSearchText(`${u.name} ${u.email} ${u.role}`);
+        return blob.includes(q);
+      });
+  }, [users, ownerSearchQuery]);
+  const propertyOptionsForDetail = useMemo(() => {
+    if (!selected) return [];
+    const q = foldSearchText(propertySearchQuery);
+    return properties.filter((p) => {
+      const isSelected = selected.propertyIds.includes(p.id);
+      if (propertyAssignmentFilter === "selected" && !isSelected) return false;
+      if (propertyAssignmentFilter === "unselected" && isSelected) return false;
+      if (!q) return true;
+      const blob = foldSearchText(`${p.title} ${p.location} ${p.type} ${p.status}`);
+      return blob.includes(q);
+    });
+  }, [properties, propertySearchQuery, propertyAssignmentFilter, selected]);
+  const developmentOptionsForDetail = useMemo(() => {
+    if (!selected) return [];
+    const q = foldSearchText(developmentSearchQuery);
+    return developments.filter((d) => {
+      const isSelected = selected.developmentIds.includes(d.id);
+      if (developmentAssignmentFilter === "selected" && !isSelected) return false;
+      if (developmentAssignmentFilter === "unselected" && isSelected) return false;
+      if (!q) return true;
+      const blob = foldSearchText(`${d.name} ${d.location} ${d.type} ${d.status}`);
+      return blob.includes(q);
+    });
+  }, [developments, developmentSearchQuery, developmentAssignmentFilter, selected]);
 
   return (
     <div className="space-y-6">
@@ -546,7 +620,7 @@ export function AdminClientsManager({
                     <p>{c.email}</p>
                     <p className="text-xs text-slate-500">{c.phone || "—"}</p>
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-700">{ownerName(c.primaryOwnerUserId)}</td>
+                  <td className="px-4 py-3 text-sm text-slate-700">{ownerName(c)}</td>
                   <td className="px-4 py-3 text-xs text-slate-600">
                     {c.propertyIds.length} prop. · {c.developmentIds.length} desv.
                   </td>
@@ -602,7 +676,7 @@ export function AdminClientsManager({
                       )}
                       <p className="mt-1.5 text-sm text-slate-600" style={{ fontWeight: 500 }}>
                         <UserCircle2 className="mr-1 inline h-4 w-4 text-slate-400" />
-                        Asesor: {ownerName(selected.primaryOwnerUserId)}
+                        Asesor: {ownerName(selected)}
                       </p>
                     </div>
                     <div className="flex w-full shrink-0 flex-col gap-2 min-[1100px]:w-auto min-[1100px]:flex-row min-[1100px]:justify-end">
@@ -709,6 +783,18 @@ export function AdminClientsManager({
                           {canSetOwner && canEdit && (
                             <div className="mt-6 border-t border-stone-200/80 pt-6">
                               <Label className="text-xs text-slate-500">Asesor (asesor / líder)</Label>
+                              <div className="relative mt-2 w-full max-w-md">
+                                <Search
+                                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                                  strokeWidth={1.75}
+                                />
+                                <input
+                                  value={ownerSearchQuery}
+                                  onChange={(e) => setOwnerSearchQuery(e.target.value)}
+                                  placeholder="Buscar asesor por nombre, correo o rol…"
+                                  className="h-10 w-full rounded-lg border border-stone-200 bg-white pl-9 pr-3 text-sm text-brand-navy focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                                />
+                              </div>
                               <select
                                 value={selected.primaryOwnerUserId}
                                 onChange={(e) =>
@@ -716,9 +802,7 @@ export function AdminClientsManager({
                                 }
                                 className="mt-2 h-10 w-full max-w-md rounded-lg border border-stone-200 bg-white px-3 text-sm text-brand-navy"
                               >
-                                {users
-                                  .filter((u) => u.isActive)
-                                  .map((u) => (
+                                {ownerOptionsForDetail.map((u) => (
                                     <option key={u.id} value={u.id}>
                                       {u.name} ({u.role})
                                     </option>
@@ -741,8 +825,35 @@ export function AdminClientsManager({
                                 <p className="mb-2 text-[11px] font-semibold uppercase text-slate-500">
                                   Propiedades
                                 </p>
+                                <div className="mb-2 space-y-2">
+                                  <div className="relative">
+                                    <Search
+                                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                                      strokeWidth={1.75}
+                                    />
+                                    <input
+                                      value={propertySearchQuery}
+                                      onChange={(e) => setPropertySearchQuery(e.target.value)}
+                                      placeholder="Buscar propiedad…"
+                                      className="h-9 w-full rounded-lg border border-stone-200 bg-white pl-9 pr-3 text-sm text-brand-navy focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                                    />
+                                  </div>
+                                  <select
+                                    value={propertyAssignmentFilter}
+                                    onChange={(e) =>
+                                      setPropertyAssignmentFilter(
+                                        e.target.value as "all" | "selected" | "unselected"
+                                      )
+                                    }
+                                    className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-brand-navy"
+                                  >
+                                    <option value="all">Todas</option>
+                                    <option value="selected">Solo vinculadas</option>
+                                    <option value="unselected">No vinculadas</option>
+                                  </select>
+                                </div>
                                 <ScrollArea className="h-40 rounded-lg border border-stone-200 p-2">
-                                  {properties.map((p) => (
+                                  {propertyOptionsForDetail.map((p) => (
                                     <label
                                       key={p.id}
                                       className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-stone-50"
@@ -762,14 +873,44 @@ export function AdminClientsManager({
                                       <span className="text-sm text-brand-navy">{p.title}</span>
                                     </label>
                                   ))}
+                                  {propertyOptionsForDetail.length === 0 && (
+                                    <p className="px-2 py-3 text-sm text-slate-500">Sin resultados.</p>
+                                  )}
                                 </ScrollArea>
                               </div>
                               <div>
                                 <p className="mb-2 text-[11px] font-semibold uppercase text-slate-500">
                                   Desarrollos
                                 </p>
+                                <div className="mb-2 space-y-2">
+                                  <div className="relative">
+                                    <Search
+                                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                                      strokeWidth={1.75}
+                                    />
+                                    <input
+                                      value={developmentSearchQuery}
+                                      onChange={(e) => setDevelopmentSearchQuery(e.target.value)}
+                                      placeholder="Buscar desarrollo…"
+                                      className="h-9 w-full rounded-lg border border-stone-200 bg-white pl-9 pr-3 text-sm text-brand-navy focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                                    />
+                                  </div>
+                                  <select
+                                    value={developmentAssignmentFilter}
+                                    onChange={(e) =>
+                                      setDevelopmentAssignmentFilter(
+                                        e.target.value as "all" | "selected" | "unselected"
+                                      )
+                                    }
+                                    className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-brand-navy"
+                                  >
+                                    <option value="all">Todos</option>
+                                    <option value="selected">Solo vinculados</option>
+                                    <option value="unselected">No vinculados</option>
+                                  </select>
+                                </div>
                                 <ScrollArea className="h-40 rounded-lg border border-stone-200 p-2">
-                                  {developments.map((d) => (
+                                  {developmentOptionsForDetail.map((d) => (
                                     <label
                                       key={d.id}
                                       className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-stone-50"
@@ -789,6 +930,9 @@ export function AdminClientsManager({
                                       <span className="text-sm text-brand-navy">{d.name}</span>
                                     </label>
                                   ))}
+                                  {developmentOptionsForDetail.length === 0 && (
+                                    <p className="px-2 py-3 text-sm text-slate-500">Sin resultados.</p>
+                                  )}
                                 </ScrollArea>
                               </div>
                             </div>
