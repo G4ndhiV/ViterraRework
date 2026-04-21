@@ -132,9 +132,12 @@ export function Header() {
   const isRentPage = location.pathname === "/renta";
   const isSalePage = location.pathname === "/venta";
   const isDevelopmentsPage = location.pathname === "/desarrollos";
+  const isDevelopmentsSection = location.pathname.startsWith("/desarrollos");
+  const isPropertiesSection = location.pathname.startsWith("/propiedades");
   const isServicesPage = location.pathname === "/servicios";
   const isContactPage = location.pathname === "/contacto";
   const isAboutPage = location.pathname === "/nosotros";
+  const lockHeaderInMode2 = isDevelopmentsSection || isPropertiesSection;
   const useOverlayHeader =
     isHome || isRentPage || isSalePage || isDevelopmentsPage || isServicesPage || isContactPage || isAboutPage;
   const rafRef = useRef<number | null>(null);
@@ -163,7 +166,7 @@ export function Header() {
     readScroll();
   }, [location.pathname, readScroll]);
 
-  const p = scrollP;
+  const p = lockHeaderInMode2 ? 1 : scrollP;
 
   /** 1 en la parte superior, 0 tras un poco de scroll — refuerzo del velo solo al inicio */
   const firstModeHero = 1 - smoothstep01(p, 0.02, 0.16);
