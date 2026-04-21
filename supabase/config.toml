@@ -1,0 +1,21 @@
+# ViterraRework — Supabase local / deploy config.
+# Run `supabase link` after installing the CLI to attach a remote project.
+
+project_id = "viterra-rework"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+major_version = 17
+
+# Cron / manual sync: validate Authorization bearer in the function (SYNC_HTTP_SECRET).
+[functions.tokko-sync]
+verify_jwt = false
+
+[functions.mirror-listing-media]
+verify_jwt = false
