@@ -3,7 +3,7 @@ import { useParams, Link } from "react-router";
 import type { Map as LeafletMap } from "leaflet";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
-import { mockProperties } from "../data/properties";
+import { useCatalogProperties } from "../hooks/useCatalogProperties";
 import {
   Bed,
   Bath,
@@ -22,7 +22,8 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 export function PropertyDetailPage() {
   const { id } = useParams();
-  const property = mockProperties.find((p) => p.id === id);
+  const { properties, loading } = useCatalogProperties();
+  const property = useMemo(() => properties.find((p) => p.id === id), [properties, id]);
   const [isFavorite, setIsFavorite] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [activeTab, setActiveTab] = useState("descripcion");
@@ -32,12 +33,12 @@ export function PropertyDetailPage() {
 
   const propertyImages = useMemo(() => {
     if (!property) return [];
-    const alternatives = mockProperties
+    const alternatives = properties
       .filter((p) => p.id !== property.id)
       .slice(0, 3)
       .map((p) => p.image);
     return [property.image, ...alternatives];
-  }, [property]);
+  }, [property, properties]);
 
   const features = useMemo(() => {
     const base = [
@@ -128,6 +129,20 @@ export function PropertyDetailPage() {
       mapInstanceRef.current = null;
     };
   }, []);
+
+  if (loading) {
+    return (
+      <div className="viterra-page flex min-h-screen flex-col">
+        <Header />
+        <div data-reveal className="flex flex-1 items-center justify-center">
+          <p className="text-slate-600" style={{ fontWeight: 500 }}>
+            Cargando…
+          </p>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!property) {
     return (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Search } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -19,8 +19,13 @@ import {
   type LeadPriorityStars,
 } from "../../data/leads";
 import { LeadPriorityStarsInput } from "./LeadPriorityStarsInput";
-import { CRM_ASSIGNEES, getAssigneeNameById } from "../../data/crmAssignees";
-import { findDuplicateLeads, nextLeadId } from "../../lib/leadDuplicates";
+import { CRM_ASSIGNEES, resolveAssigneeName } from "../../data/crmAssignees";
+import { useAuth } from "../../contexts/AuthContext";
+import { findDuplicateLeads, newLeadId } from "../../lib/leadDuplicates";
+import { DEFAULT_PIPELINE_GROUP_ID } from "../../lib/pipelineByGroup";
+import { foldSearchText } from "../../lib/searchText";
+import type { Property } from "../PropertyCard";
+import type { Development } from "../../data/developments";
 
 type Props = {
   open: boolean;
@@ -29,16 +34,20 @@ type Props = {
   onAddLead: (lead: Lead) => void;
   user: User;
   customKanbanStages?: CustomKanbanStage[];
+  /** Grupo de trabajo cuyo pipeline Kanban aplica a este lead */
+  pipelineGroupId?: string;
+  /** Primera columna activa del pipeline; obligatoria para crear leads. */
+  defaultStageId?: string | null;
+  properties: Property[];
+  developments: Development[];
 };
 
 const emptyForm = {
   name: "",
   email: "",
   phone: "",
-  interest: "compra" as Lead["interest"],
-  propertyType: "",
-  budget: "",
-  location: "",
+  relatedPropertyId: "",
+  relatedDevelopmentId: "",
   priorityStars: 3 as LeadPriorityStars,
   source: "CRM",
   notes: "",
@@ -51,23 +60,36 @@ export function AddLeadDialog({
   onAddLead,
   user,
   customKanbanStages = [],
+  pipelineGroupId = DEFAULT_PIPELINE_GROUP_ID,
+  defaultStageId = null,
+  properties,
+  developments,
 }: Props) {
+  const { users: teamUsers } = useAuth();
   const [form, setForm] = useState(emptyForm);
   const [assigneeId, setAssigneeId] = useState(user.id);
+  const [assigneeSearch, setAssigneeSearch] = useState("");
+  const [propertySearch, setPropertySearch] = useState("");
+  const [developmentSearch, setDevelopmentSearch] = useState("");
 
   useEffect(() => {
     if (open) {
       setForm(emptyForm);
       setAssigneeId(user.id);
+      setAssigneeSearch("");
+      setPropertySearch("");
+      setDevelopmentSearch("");
     }
   }, [open, user.id]);
 
   const assigneeOptions = useMemo(() => {
+    const fromTeam = teamUsers.filter((u) => u.isActive).map((u) => ({ id: u.id, name: u.name }));
+    const list = fromTeam.length > 0 ? fromTeam : CRM_ASSIGNEES;
     if (user.role === "asesor") {
-      return CRM_ASSIGNEES.filter((a) => a.id === user.id);
+      return list.filter((a) => a.id === user.id);
     }
-    return CRM_ASSIGNEES;
-  }, [user.role, user.id]);
+    return list;
+  }, [teamUsers, user.role, user.id]);
 
   useEffect(() => {
     if (user.role === "asesor") {
@@ -79,34 +101,64 @@ export function AddLeadDialog({
     () => findDuplicateLeads(allLeads, form.email, form.phone),
     [allLeads, form.email, form.phone]
   );
+  const filteredAssigneeOptions = useMemo(() => {
+    const q = foldSearchText(assigneeSearch);
+    if (!q) return assigneeOptions;
+    return assigneeOptions.filter((a) => foldSearchText(a.name).includes(q));
+  }, [assigneeOptions, assigneeSearch]);
+  const filteredPropertyOptions = useMemo(() => {
+    const q = foldSearchText(propertySearch);
+    if (!q) return properties;
+    return properties.filter((p) =>
+      foldSearchText(`${p.title} ${p.location} ${p.type}`).includes(q)
+    );
+  }, [properties, propertySearch]);
+  const filteredDevelopmentOptions = useMemo(() => {
+    const q = foldSearchText(developmentSearch);
+    if (!q) return developments;
+    return developments.filter((d) =>
+      foldSearchText(`${d.name} ${d.location} ${d.type}`).includes(q)
+    );
+  }, [developments, developmentSearch]);
 
   const hasDuplicate = duplicates.length > 0;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!defaultStageId) return;
     const name = form.name.trim();
     const email = form.email.trim();
     const phone = form.phone.trim();
     if (!name || !email || !phone) return;
 
-    const budgetNum = Number(form.budget.replace(/[^\d.]/g, "")) || 0;
     const today = new Date().toISOString().slice(0, 10);
+    const relatedProperty =
+      form.relatedPropertyId.trim().length > 0
+        ? properties.find((p) => p.id === form.relatedPropertyId)
+        : undefined;
+    const relatedDevelopment =
+      form.relatedDevelopmentId.trim().length > 0
+        ? developments.find((d) => d.id === form.relatedDevelopmentId)
+        : undefined;
 
     const noteText = form.notes.trim();
     const newLead: Lead = {
-      id: nextLeadId(allLeads),
+      id: newLeadId(),
       name,
       email,
       phone,
-      interest: form.interest,
-      propertyType: form.propertyType.trim() || "—",
-      budget: budgetNum,
-      location: form.location.trim() || "—",
-      status: "nuevo",
+      interest: relatedProperty?.status === "alquiler" ? "alquiler" : "compra",
+      propertyType: relatedProperty?.type || relatedDevelopment?.type || "—",
+      budget: relatedProperty?.price ?? 0,
+      location: relatedProperty?.location || relatedDevelopment?.location || "—",
+      relatedPropertyId: relatedProperty?.id,
+      relatedDevelopmentId: relatedDevelopment?.id,
+      status: defaultStageId,
       priorityStars: form.priorityStars,
       source: form.source.trim() || "CRM",
-      assignedTo: getAssigneeNameById(assigneeId),
+      assignedTo: resolveAssigneeName(assigneeId, assigneeOptions),
       assignedToUserId: assigneeId,
+      pipelineGroupId,
       clientNotes: noteText
         ? [{ id: newLeadClientNoteId(), date: today, body: noteText }]
         : [],
@@ -121,9 +173,9 @@ export function AddLeadDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[min(90vh,720px)] gap-0 overflow-y-auto border-slate-200/80 p-0 shadow-[0_24px_64px_-12px_rgba(20,28,46,0.28)] sm:max-w-lg">
+      <DialogContent className="max-h-[92vh] gap-0 overflow-hidden border-slate-200/80 p-0 shadow-[0_24px_64px_-12px_rgba(20,28,46,0.28)] sm:max-w-5xl">
         <div className="h-1.5 bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy" aria-hidden />
-        <div className="border-b border-slate-100/90 bg-white px-6 pb-4 pt-5">
+        <div className="border-b border-slate-100/90 bg-white px-5 pb-2.5 pt-3">
           <DialogHeader className="space-y-2 text-left">
             <DialogTitle className="font-heading text-xl tracking-tight text-brand-navy" style={{ fontWeight: 600 }}>
               Nuevo lead
@@ -134,7 +186,23 @@ export function AddLeadDialog({
           </DialogHeader>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-2.5 px-5 py-2.5">
+          {!defaultStageId && (
+            <div
+              className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950"
+              role="alert"
+            >
+              <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" strokeWidth={2} aria-hidden />
+              <div className="min-w-0 space-y-1">
+                <p className="font-semibold" style={{ fontWeight: 600 }}>
+                  No hay columnas configuradas
+                </p>
+                <p className="text-amber-900/90" style={{ fontWeight: 500 }}>
+                  Crea al menos una columna en <strong>Mi empresa → Pipeline de ventas</strong> para poder registrar leads.
+                </p>
+              </div>
+            </div>
+          )}
           {hasDuplicate && (
             <div
               className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950"
@@ -160,180 +228,233 @@ export function AddLeadDialog({
             </div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2 space-y-1.5">
-              <Label htmlFor="lead-name" className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
-                Nombre completo
-              </Label>
-              <input
-                id="lead-name"
-                required
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200/90 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
-                style={{ fontWeight: 500 }}
-                placeholder="Ej. María García"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="lead-email" className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
-                Correo
-              </Label>
-              <input
-                id="lead-email"
-                type="email"
-                required
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200/90 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
-                style={{ fontWeight: 500 }}
-                placeholder="correo@ejemplo.com"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="lead-phone" className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
-                Teléfono
-              </Label>
-              <input
-                id="lead-phone"
-                type="tel"
-                required
-                value={form.phone}
-                onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200/90 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
-                style={{ fontWeight: 500 }}
-                placeholder="+52 …"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="lead-interest" className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
-                Interés
-              </Label>
-              <select
-                id="lead-interest"
-                value={form.interest}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, interest: e.target.value as Lead["interest"] }))
-                }
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
-                style={{ fontWeight: 500 }}
-              >
-                <option value="compra">Compra</option>
-                <option value="venta">Venta</option>
-                <option value="alquiler">Alquiler</option>
-                <option value="asesoria">Asesoría</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="lead-type" className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
-                Tipo de propiedad
-              </Label>
-              <input
-                id="lead-type"
-                value={form.propertyType}
-                onChange={(e) => setForm((f) => ({ ...f, propertyType: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200/90 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
-                style={{ fontWeight: 500 }}
-                placeholder="Casa, depto…"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="lead-budget" className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
-                Presupuesto (USD)
-              </Label>
-              <input
-                id="lead-budget"
-                inputMode="numeric"
-                value={form.budget}
-                onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200/90 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
-                style={{ fontWeight: 500 }}
-                placeholder="250000"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="lead-loc" className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
-                Zona / ubicación
-              </Label>
-              <input
-                id="lead-loc"
-                value={form.location}
-                onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200/90 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
-                style={{ fontWeight: 500 }}
-                placeholder="Centro, norte…"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
-                Prioridad (1–6 estrellas)
-              </Label>
-              <LeadPriorityStarsInput
-                value={form.priorityStars}
-                onChange={(v) => setForm((f) => ({ ...f, priorityStars: v }))}
-                size="md"
-              />
-              <p className="text-[11px] leading-relaxed text-slate-500" style={{ fontWeight: 500 }}>
-                Más estrellas indican mayor prioridad para el seguimiento.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="lead-source" className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
-                Origen
-              </Label>
-              <input
-                id="lead-source"
-                value={form.source}
-                onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200/90 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
-                style={{ fontWeight: 500 }}
-                placeholder="CRM, referido…"
-              />
-            </div>
-            <div className="sm:col-span-2 space-y-1.5">
-              <Label
-                htmlFor="lead-assignee"
-                className={`text-xs uppercase tracking-wide ${hasDuplicate ? "text-amber-800" : "text-slate-600"}`}
-                style={{ fontWeight: 600 }}
-              >
-                Asignar a {hasDuplicate ? "(confirma por el posible duplicado)" : ""}
-              </Label>
-              <select
-                id="lead-assignee"
-                value={assigneeId}
-                disabled={user.role === "asesor"}
-                onChange={(e) => setAssigneeId(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-600"
-                style={{ fontWeight: 500 }}
-              >
-                {assigneeOptions.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="sm:col-span-2 space-y-1.5">
-              <Label htmlFor="lead-notes" className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
-                Notas
-              </Label>
-              <textarea
-                id="lead-notes"
-                rows={3}
-                value={form.notes}
-                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                className="w-full resize-y rounded-xl border border-slate-200/90 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
-                style={{ fontWeight: 500 }}
-                placeholder="Detalle del interés del cliente…"
-              />
-            </div>
+          <div className="grid gap-2.5 lg:grid-cols-2">
+            <section className="space-y-2.5 rounded-2xl border border-slate-200/90 bg-slate-50/40 p-3.5">
+              <div className="space-y-0.5">
+                <h3 className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
+                  1. Datos de contacto
+                </h3>
+                <p className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                  Información principal del cliente potencial.
+                </p>
+              </div>
+              <div className="grid gap-2.5 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="lead-name" className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
+                    Nombre completo
+                  </Label>
+                  <input
+                    id="lead-name"
+                    required
+                    value={form.name}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200/90 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    style={{ fontWeight: 500 }}
+                    placeholder="Ej. María García"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lead-email" className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
+                    Correo
+                  </Label>
+                  <input
+                    id="lead-email"
+                    type="email"
+                    required
+                    value={form.email}
+                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200/90 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    style={{ fontWeight: 500 }}
+                    placeholder="correo@ejemplo.com"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lead-phone" className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
+                    Teléfono
+                  </Label>
+                  <input
+                    id="lead-phone"
+                    type="tel"
+                    required
+                    value={form.phone}
+                    onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200/90 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    style={{ fontWeight: 500 }}
+                    placeholder="+52 …"
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-2.5 rounded-2xl border border-slate-200/90 bg-white p-3.5">
+              <div className="space-y-0.5">
+                <h3 className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
+                  2. Seguimiento comercial
+                </h3>
+                <p className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                  Define prioridad, origen y responsable del lead.
+                </p>
+              </div>
+              <div className="grid gap-2.5 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
+                    Prioridad (1–6 estrellas)
+                  </Label>
+                  <LeadPriorityStarsInput
+                    value={form.priorityStars}
+                    onChange={(v) => setForm((f) => ({ ...f, priorityStars: v }))}
+                    size="md"
+                  />
+                  <p className="text-[11px] leading-relaxed text-slate-500" style={{ fontWeight: 500 }}>
+                    Más estrellas indican mayor prioridad para el seguimiento.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lead-source" className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
+                    Origen
+                  </Label>
+                  <input
+                    id="lead-source"
+                    value={form.source}
+                    onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200/90 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    style={{ fontWeight: 500 }}
+                    placeholder="CRM, referido…"
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label
+                    htmlFor="lead-assignee"
+                    className={`text-xs uppercase tracking-wide ${hasDuplicate ? "text-amber-800" : "text-slate-600"}`}
+                    style={{ fontWeight: 600 }}
+                  >
+                    Asignar a {hasDuplicate ? "(confirma por el posible duplicado)" : ""}
+                  </Label>
+                  <div className="relative">
+                    <Search
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                      strokeWidth={1.75}
+                    />
+                    <input
+                      type="search"
+                      value={assigneeSearch}
+                      onChange={(e) => setAssigneeSearch(e.target.value)}
+                      placeholder="Buscar asesor…"
+                      className="mb-2 h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-ring/30"
+                    />
+                  </div>
+                  <select
+                    id="lead-assignee"
+                    value={assigneeId}
+                    disabled={user.role === "asesor"}
+                    onChange={(e) => setAssigneeId(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-600"
+                    style={{ fontWeight: 500 }}
+                  >
+                    {filteredAssigneeOptions.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                  {filteredAssigneeOptions.length === 0 && (
+                    <p className="mt-2 text-xs text-slate-500">No se encontraron asesores para esa búsqueda.</p>
+                  )}
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="lead-notes" className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
+                    Notas
+                  </Label>
+                  <textarea
+                    id="lead-notes"
+                    rows={2}
+                    value={form.notes}
+                    onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                    className="w-full resize-y rounded-xl border border-slate-200/90 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    style={{ fontWeight: 500 }}
+                    placeholder="Detalle del interés del cliente…"
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-2.5 rounded-2xl border border-slate-200/90 bg-white p-3.5 lg:col-span-2">
+              <div className="space-y-0.5">
+                <h3 className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
+                  3. Vinculación con inventario
+                </h3>
+                <p className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                  Relaciona el lead con una propiedad o desarrollo existente.
+                </p>
+              </div>
+              <div className="grid gap-2.5 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="lead-property" className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
+                    Asignar propiedad
+                  </Label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
+                    <input
+                      type="search"
+                      value={propertySearch}
+                      onChange={(e) => setPropertySearch(e.target.value)}
+                      placeholder="Buscar propiedad…"
+                    className="mb-1.5 h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-ring/30"
+                    />
+                  </div>
+                  <select
+                    id="lead-property"
+                    value={form.relatedPropertyId}
+                    onChange={(e) => setForm((f) => ({ ...f, relatedPropertyId: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    style={{ fontWeight: 500 }}
+                  >
+                    <option value="">Sin propiedad</option>
+                    {filteredPropertyOptions.map((p) => (
+                      <option key={p.id} value={p.id}>{p.title}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lead-development" className="text-xs uppercase tracking-wide text-slate-600" style={{ fontWeight: 600 }}>
+                    Asignar desarrollo
+                  </Label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
+                    <input
+                      type="search"
+                      value={developmentSearch}
+                      onChange={(e) => setDevelopmentSearch(e.target.value)}
+                      placeholder="Buscar desarrollo…"
+                    className="mb-1.5 h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-ring/30"
+                    />
+                  </div>
+                  <select
+                    id="lead-development"
+                    value={form.relatedDevelopmentId}
+                    onChange={(e) => setForm((f) => ({ ...f, relatedDevelopmentId: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    style={{ fontWeight: 500 }}
+                  >
+                    <option value="">Sin desarrollo</option>
+                    {filteredDevelopmentOptions.map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </section>
           </div>
 
-          <DialogFooter className="gap-2 border-t border-slate-100 pt-4 mt-2 sm:justify-end">
+          <DialogFooter className="mt-1 gap-2 border-t border-slate-100 pt-3 sm:justify-end">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" className="bg-primary hover:bg-brand-red-hover text-primary-foreground">
+            <Button
+              type="submit"
+              disabled={!defaultStageId}
+              className="bg-primary hover:bg-brand-red-hover text-primary-foreground"
+            >
               Guardar lead
             </Button>
           </DialogFooter>

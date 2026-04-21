@@ -3,7 +3,6 @@ import {
   ArrowRight,
   Calendar,
   Database,
-  Download,
   Globe2,
   Home,
   LayoutGrid,
@@ -14,7 +13,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../../contexts/AuthContext";
-import { AGENDA_STORAGE_KEY } from "../../data/agenda";
 import {
   CRM_LOCAL_STORAGE_KEYS,
   DEFAULT_WORKSPACE_ADMIN_SETTINGS,
@@ -22,9 +20,7 @@ import {
   loadWorkspaceAdminSettings,
   saveWorkspaceAdminSettings,
 } from "../../data/workspaceSettings";
-import { SITE_CONTENT_KEY } from "../../../data/siteContent";
 import { Button } from "../ui/button";
-import { Checkbox } from "../ui/checkbox";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import {
@@ -50,22 +46,9 @@ interface Props {
   onNavigate: (spec: CompanyNavigateSpec) => void;
 }
 
-const BACKUP_KEYS = [
-  "viterra_leads",
-  "viterra_properties",
-  "viterra_admin_developments",
-  "viterra_kanban_custom_stages",
-  "viterra_kanban_stage_order",
-  AGENDA_STORAGE_KEY,
-  SITE_CONTENT_KEY,
-  "viterra_admin_users",
-  "viterra_workspace_admin_settings",
-] as const;
-
 export function AdminCompanySettings({ counts, onNavigate }: Props) {
   const { user, logout } = useAuth();
   const [settings, setSettings] = useState<WorkspaceAdminSettings>(() => loadWorkspaceAdminSettings());
-  const [includePasswordsInExport, setIncludePasswordsInExport] = useState(false);
 
   const saveWorkspaceFields = useCallback(() => {
     saveWorkspaceAdminSettings(settings);
@@ -84,29 +67,6 @@ export function AdminCompanySettings({ counts, onNavigate }: Props) {
     }
     return total;
   }, [settings]);
-
-  const exportBackup = () => {
-    try {
-      const payload: Record<string, string | null> = {};
-      for (const key of BACKUP_KEYS) {
-        payload[key] = localStorage.getItem(key);
-      }
-      if (includePasswordsInExport) {
-        payload["viterra_admin_passwords"] = localStorage.getItem("viterra_admin_passwords");
-      }
-      const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), workspace: settings.workspaceName, data: payload }, null, 2)], {
-        type: "application/json",
-      });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `viterra-crm-respaldo-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      toast.success("Archivo de respaldo descargado");
-    } catch {
-      toast.error("No se pudo generar el archivo");
-    }
-  };
 
   const quickLinks: Array<{
     label: string;
@@ -132,7 +92,7 @@ export function AdminCompanySettings({ counts, onNavigate }: Props) {
           Configuración
         </h3>
         <p className="mt-2 max-w-2xl text-sm text-slate-600" style={{ fontWeight: 500 }}>
-          Ajustes del espacio de trabajo, resumen de datos locales y copias de seguridad. Todo se guarda en este navegador (localStorage).
+          Ajustes del espacio de trabajo y resumen de datos locales. Todo se guarda en este navegador (localStorage).
         </p>
       </div>
 
@@ -262,30 +222,6 @@ export function AdminCompanySettings({ counts, onNavigate }: Props) {
             Dashboard
           </Button>
         </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200/80 bg-white p-5 md:p-6">
-        <h4 className="flex items-center gap-2 text-base text-brand-navy" style={{ fontWeight: 600 }}>
-          <Download className="h-4 w-4 text-primary" strokeWidth={1.75} />
-          Copia de seguridad
-        </h4>
-        <p className="mt-1 text-sm text-slate-600" style={{ fontWeight: 500 }}>
-          Descarga un JSON con los datos del CRM guardados en este equipo. Las contraseñas solo se incluyen si lo indicas explícitamente.
-        </p>
-        <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200/80 bg-amber-50/80 px-4 py-3">
-          <Checkbox
-            id="export-pw"
-            checked={includePasswordsInExport}
-            onCheckedChange={(c) => setIncludePasswordsInExport(c === true)}
-          />
-          <label htmlFor="export-pw" className="text-sm leading-snug text-amber-950/90" style={{ fontWeight: 500 }}>
-            Incluir <code className="rounded bg-amber-100/80 px-1 text-xs">viterra_admin_passwords</code> en el archivo (solo si necesitas restaurar accesos en otro navegador; trata el archivo como confidencial).
-          </label>
-        </div>
-        <Button type="button" className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90" onClick={exportBackup}>
-          <Download className="h-4 w-4" strokeWidth={2} />
-          Descargar respaldo JSON
-        </Button>
       </section>
 
       <section className="rounded-2xl border border-slate-200/80 bg-white p-5 md:p-6">

@@ -2,7 +2,6 @@ import { Link } from "react-router";
 import { Mail, Phone, MapPin } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { usePreviewCanvas, usePreviewLayout } from "../../contexts/PreviewCanvasContext";
-import { SocialFollowStrip } from "./SocialFollowStrip";
 import { cn } from "./ui/utils";
 
 export function Footer() {
@@ -19,8 +18,6 @@ export function Footer() {
       className="bg-brand-navy pb-[env(safe-area-inset-bottom,0px)] text-slate-300"
     >
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
-        <SocialFollowStrip theme="dark" flush />
-
         <div className={cn("grid gap-12", pl.gridCols("grid-cols-1 md:grid-cols-2 lg:grid-cols-4"))}>
           {/* Company Info */}
           <div>

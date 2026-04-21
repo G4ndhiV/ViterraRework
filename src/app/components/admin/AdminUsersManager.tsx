@@ -16,9 +16,11 @@ import {
   Search,
   Shield,
   UserPlus,
+  UserCircle2,
   Users,
 } from "lucide-react";
 import { User, UserHistoryEntry, UserPermission, UserRole } from "../../contexts/AuthContext";
+import type { Lead } from "../../data/leads";
 import {
   Dialog,
   DialogClose,
@@ -38,6 +40,9 @@ import {
   SelectValue,
 } from "../ui/select";
 import { cn } from "../ui/utils";
+import { foldSearchText } from "../../lib/searchText";
+import type { UserGroup } from "../../lib/userGroups";
+import { UserGroupsPanel } from "./UserGroupsPanel";
 
 const userReadonlyFieldClass =
   "w-full rounded-lg border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-sm text-brand-navy";
@@ -71,6 +76,12 @@ const permissionCards: Array<{
     label: "Usuarios",
     description: "Alta, permisos y equipo",
     Icon: Shield,
+  },
+  {
+    value: "manage_clients",
+    label: "Clientes",
+    description: "Fichas de clientes y relación con inventario",
+    Icon: UserCircle2,
   },
   {
     value: "edit_site",
@@ -149,6 +160,10 @@ const historyTypeBadgeLabel: Record<UserHistoryEntry["type"], string> = {
 interface Props {
   currentUser: User;
   users: User[];
+  leads: Lead[];
+  userGroups?: UserGroup[];
+  onViewLead?: (lead: Lead) => void;
+  onUserGroupsChange?: (groups: UserGroup[]) => void;
   onCreateUser: (input: {
     name: string;
     email: string;
@@ -180,6 +195,10 @@ const roleOptions: Array<{ value: RoleOption; label: string }> = [
 export function AdminUsersManager({
   currentUser,
   users,
+  leads,
+  userGroups = [],
+  onViewLead,
+  onUserGroupsChange,
   onCreateUser,
   onUpdateUser,
   onUpdatePassword,
@@ -190,6 +209,7 @@ export function AdminUsersManager({
   onFocusUserConsumed,
   onUserDetailClosed,
 }: Props) {
+  const [managementTab, setManagementTab] = useState<"users" | "groups">("users");
   const [showArchived, setShowArchived] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
@@ -208,7 +228,7 @@ export function AdminUsersManager({
     workHistory: "",
     password: "",
     role: "asesor" as UserRole,
-    permissions: ["manage_leads"] as UserPermission[],
+    permissions: ["manage_leads", "manage_clients"] as UserPermission[],
   });
 
   const filteredUsers = useMemo(() => {
@@ -251,6 +271,44 @@ export function AdminUsersManager({
     return [...selectedUser.history].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }, [selectedUser]);
 
+  const selectedUserAssignedLeads = useMemo(() => {
+    if (!selectedUser) return [];
+    const selectedId = selectedUser.id.trim().toLowerCase();
+    const aliases = new Set<string>();
+    const selectedName = foldSearchText(selectedUser.name);
+    const selectedEmail = foldSearchText(selectedUser.email);
+    const selectedEmailUser = foldSearchText(selectedUser.email.split("@")[0] ?? "");
+    if (selectedName) aliases.add(selectedName);
+    if (selectedEmail) aliases.add(selectedEmail);
+    if (selectedEmailUser) aliases.add(selectedEmailUser);
+    return leads
+      .filter((lead) => {
+        const leadAssignedId = lead.assignedToUserId?.trim().toLowerCase();
+        if (leadAssignedId && leadAssignedId === selectedId) return true;
+
+        const assignedByName = foldSearchText(lead.assignedTo);
+        if (!assignedByName) return false;
+        if (aliases.has(assignedByName)) return true;
+        // Fallback flexible para datos históricos con nombre incompleto o variaciones.
+        for (const alias of aliases) {
+          if (assignedByName.includes(alias) || alias.includes(assignedByName)) return true;
+        }
+        return false;
+      })
+      .sort((a, b) => Date.parse(b.updatedAt || b.createdAt) - Date.parse(a.updatedAt || a.createdAt));
+  }, [selectedUser, leads]);
+
+  const selectedUserGroups = useMemo(() => {
+    if (!selectedUser) return [];
+    return userGroups
+      .filter((group) => group.memberIds.includes(selectedUser.id))
+      .map((group) => ({
+        ...group,
+        isLeader: group.leaderId === selectedUser.id,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [selectedUser, userGroups]);
+
   const submitCreate = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -284,7 +342,7 @@ export function AdminUsersManager({
       workHistory: "",
       password: "",
       role: "asesor",
-      permissions: ["manage_leads"],
+      permissions: ["manage_leads", "manage_clients"],
     });
   };
 
@@ -293,140 +351,194 @@ export function AdminUsersManager({
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-slate-200 bg-white p-6">
+        <div
+          className="mb-5 inline-flex max-w-full flex-wrap gap-0.5 rounded-2xl bg-slate-100/95 p-1 ring-1 ring-slate-200/80 ring-inset"
+          role="tablist"
+          aria-label="Secciones de equipo y accesos"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={managementTab === "users"}
+            onClick={() => setManagementTab("users")}
+            className={cn(
+              "inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-all duration-200 sm:px-4 sm:py-2.5",
+              managementTab === "users"
+                ? "bg-white text-brand-navy shadow-[0_1px_3px_rgba(15,23,42,0.12)] ring-1 ring-slate-200/90"
+                : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
+            )}
+          >
+            <Users className="h-4 w-4" strokeWidth={managementTab === "users" ? 2 : 1.75} />
+            Usuarios
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={managementTab === "groups"}
+            onClick={() => setManagementTab("groups")}
+            className={cn(
+              "inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-all duration-200 sm:px-4 sm:py-2.5",
+              managementTab === "groups"
+                ? "bg-white text-brand-navy shadow-[0_1px_3px_rgba(15,23,42,0.12)] ring-1 ring-slate-200/90"
+                : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
+            )}
+          >
+            <Building2 className="h-4 w-4" strokeWidth={managementTab === "groups" ? 2 : 1.75} />
+            Equipos
+          </button>
+        </div>
+
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
           <div className="min-w-0">
-            <h2 className="text-xl font-semibold text-slate-900">Mi empresa · Usuarios</h2>
+            <h2 className="text-xl font-semibold text-slate-900">
+              {managementTab === "users" ? "Mi empresa · Usuarios" : "Mi empresa · Equipos"}
+            </h2>
             <p className="mt-1 text-sm text-slate-600">
-              Gestiona usuarios, permisos y consulta historial de usuarios archivados.
+              {managementTab === "users"
+                ? "Gestiona usuarios, permisos y consulta historial de usuarios archivados."
+                : "Organiza equipos, líderes y miembros para controlar accesos por grupo."}
             </p>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowArchived((p) => !p)}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              {showArchived ? "Ver activos" : "Ver archivados"}
-            </button>
-            {canManageUsers && (
+          {managementTab === "users" && (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => setCreatingOpen(true)}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-hover"
+                onClick={() => setShowArchived((p) => !p)}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
-                <UserPlus className="h-4 w-4" />
-                Crear usuario
+                {showArchived ? "Ver activos" : "Ver archivados"}
               </button>
-            )}
-          </div>
+              {canManageUsers && (
+                <button
+                  type="button"
+                  onClick={() => setCreatingOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-hover"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Crear usuario
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="mt-6 flex flex-col gap-3 border-t border-slate-200/80 pt-6 sm:flex-row sm:items-stretch">
-          <div className="relative min-h-[2.75rem] flex-1">
-            <Search
-              className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
-              strokeWidth={1.75}
-              aria-hidden
-            />
-            <input
-              type="search"
-              value={userSearchQuery}
-              onChange={(e) => setUserSearchQuery(e.target.value)}
-              placeholder="Buscar por nombre, correo, teléfono o rol…"
-              className="h-full min-h-[2.75rem] w-full rounded-xl border border-slate-200/90 bg-white py-2.5 pl-11 pr-4 text-sm text-brand-navy shadow-sm transition-all placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-              style={{ fontWeight: 500 }}
-              autoComplete="off"
-              aria-label="Buscar usuarios"
-            />
+        {managementTab === "users" && (
+          <div className="mt-6 flex flex-col gap-3 border-t border-slate-200/80 pt-6 sm:flex-row sm:items-stretch">
+            <div className="relative min-h-[2.75rem] flex-1">
+              <Search
+                className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
+                strokeWidth={1.75}
+                aria-hidden
+              />
+              <input
+                type="search"
+                value={userSearchQuery}
+                onChange={(e) => setUserSearchQuery(e.target.value)}
+                placeholder="Buscar por nombre, correo, teléfono o rol…"
+                className="h-full min-h-[2.75rem] w-full rounded-xl border border-slate-200/90 bg-white py-2.5 pl-11 pr-4 text-sm text-brand-navy shadow-sm transition-all placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                style={{ fontWeight: 500 }}
+                autoComplete="off"
+                aria-label="Buscar usuarios"
+              />
+            </div>
+            <Select
+              value={roleFilter}
+              onValueChange={(v) => setRoleFilter(v as "all" | UserRole)}
+            >
+              <SelectTrigger className="h-[2.75rem] w-full rounded-xl border-slate-200/90 bg-white shadow-sm sm:w-[min(100%,220px)]">
+                <SelectValue placeholder="Rol" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los roles</SelectItem>
+                {roleOptions.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>
+                    {r.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <Select
-            value={roleFilter}
-            onValueChange={(v) => setRoleFilter(v as "all" | UserRole)}
-          >
-            <SelectTrigger className="h-[2.75rem] w-full rounded-xl border-slate-200/90 bg-white shadow-sm sm:w-[min(100%,220px)]">
-              <SelectValue placeholder="Rol" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los roles</SelectItem>
-              {roleOptions.map((r) => (
-                <SelectItem key={r.value} value={r.value}>
-                  {r.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        )}
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <table className="w-full">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Usuario</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Contacto</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Rol</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Permisos</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredUsers.length === 0 ? (
+      {managementTab === "users" ? (
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <table className="w-full">
+            <thead className="bg-slate-50">
               <tr>
-                <td colSpan={5} className="border-t border-slate-100 px-4 py-14 text-center text-sm text-slate-500" style={{ fontWeight: 500 }}>
-                  No hay usuarios que coincidan con la búsqueda o el filtro de rol.
-                </td>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Usuario</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Contacto</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Rol</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Permisos</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Acciones</th>
               </tr>
-            ) : (
-            filteredUsers.map((user) => (
-              <tr key={user.id} className="border-t border-slate-100">
-                <td className="px-4 py-3">
-                  <button type="button" onClick={() => setSelectedUser(user)} className="text-left">
-                    <p className="text-sm font-semibold text-slate-900">{user.name}</p>
-                    <p className="text-xs text-slate-500">
-                      {user.isActive ? "Activo" : `Archivado ${new Date(user.archivedAt || "").toLocaleDateString()}`}
-                    </p>
-                  </button>
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  <p>{user.email}</p>
-                  <p className="text-xs text-slate-500">{user.profile.phone || "Sin teléfono"}</p>
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-700">{roleOptions.find((r) => r.value === user.role)?.label}</td>
-                <td className="px-4 py-3 text-xs text-slate-700">{user.permissions.join(", ")}</td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end gap-1">
-                    <button type="button" onClick={() => setSelectedUser(user)} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" title="Detalle">
-                      <Edit className="h-4 w-4" />
+            </thead>
+            <tbody>
+              {filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="border-t border-slate-100 px-4 py-14 text-center text-sm text-slate-500" style={{ fontWeight: 500 }}>
+                    No hay usuarios que coincidan con la búsqueda o el filtro de rol.
+                  </td>
+                </tr>
+              ) : (
+              filteredUsers.map((user) => (
+                <tr key={user.id} className="border-t border-slate-100">
+                  <td className="px-4 py-3">
+                    <button type="button" onClick={() => setSelectedUser(user)} className="text-left">
+                      <p className="text-sm font-semibold text-slate-900">{user.name}</p>
+                      <p className="text-xs text-slate-500">
+                        {user.isActive ? "Activo" : `Archivado ${new Date(user.archivedAt || "").toLocaleDateString()}`}
+                      </p>
                     </button>
-                    {canManageUsers && (
-                      <button type="button" onClick={() => setPasswordModal(user)} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" title="Cambiar contraseña">
-                        <KeyRound className="h-4 w-4" />
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    <p>{user.email}</p>
+                    <p className="text-xs text-slate-500">{user.profile.phone || "Sin teléfono"}</p>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-700">{roleOptions.find((r) => r.value === user.role)?.label}</td>
+                  <td className="px-4 py-3 text-xs text-slate-700">{user.permissions.join(", ")}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-1">
+                      <button type="button" onClick={() => setSelectedUser(user)} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" title="Detalle">
+                        <Edit className="h-4 w-4" />
                       </button>
-                    )}
-                    {canManageUsers && user.id !== currentUser.id && (
-                      user.isActive ? (
-                        <button
-                          type="button"
-                          onClick={() => setArchiveCandidate(user)}
-                          className="rounded-md p-2 text-slate-500 hover:bg-amber-50 hover:text-amber-700"
-                          title="Archivar"
-                        >
-                          <ArchiveRestore className="h-4 w-4" />
+                      {canManageUsers && (
+                        <button type="button" onClick={() => setPasswordModal(user)} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" title="Cambiar contraseña">
+                          <KeyRound className="h-4 w-4" />
                         </button>
-                      ) : (
-                        <button type="button" onClick={() => onReactivate(user.id)} className="rounded-md p-2 text-slate-500 hover:bg-green-50 hover:text-green-700" title="Reactivar">
-                          <ArchiveRestore className="h-4 w-4" />
-                        </button>
-                      )
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                      )}
+                      {canManageUsers && user.id !== currentUser.id && (
+                        user.isActive ? (
+                          <button
+                            type="button"
+                            onClick={() => setArchiveCandidate(user)}
+                            className="rounded-md p-2 text-slate-500 hover:bg-amber-50 hover:text-amber-700"
+                            title="Archivar"
+                          >
+                            <ArchiveRestore className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => onReactivate(user.id)} className="rounded-md p-2 text-slate-500 hover:bg-green-50 hover:text-green-700" title="Reactivar">
+                            <ArchiveRestore className="h-4 w-4" />
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <UserGroupsPanel
+          users={users}
+          canManageGroups={canManageUsers}
+          groups={userGroups}
+          onGroupsChange={onUserGroupsChange}
+        />
+      )}
 
       <Dialog open={creatingOpen} onOpenChange={setCreatingOpen}>
         <DialogContent className="w-full max-w-2xl border-slate-200 bg-white p-6">
@@ -823,81 +935,78 @@ export function AdminUsersManager({
 
                         <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
                           <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
-                            Trayectoria laboral
+                            Equipos del usuario
                           </h3>
-                          {selectedUser.profile.workHistory.length === 0 ? (
+                          <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                            {selectedUserGroups.length === 0
+                              ? "No pertenece a ningun grupo."
+                              : `Pertenece a ${selectedUserGroups.length} grupo${selectedUserGroups.length === 1 ? "" : "s"}.`}
+                          </p>
+                          {selectedUserGroups.length === 0 ? (
                             <p className="mt-4 rounded-xl border border-dashed border-stone-200 bg-stone-50/50 px-4 py-8 text-center text-sm text-slate-500">
-                              Sin puestos registrados.
+                              Sin equipos asignados.
                             </p>
                           ) : (
                             <ul className="mt-4 space-y-2">
-                              {selectedUser.profile.workHistory.map((item, idx) => (
+                              {selectedUserGroups.map((group) => (
                                 <li
-                                  key={`${item}-${idx}`}
+                                  key={group.id}
                                   className="rounded-xl border border-stone-200/90 bg-stone-50/40 px-4 py-3 text-sm text-slate-800 ring-1 ring-stone-100"
-                                  style={{ fontWeight: 500 }}
                                 >
-                                  {item}
+                                  <p className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
+                                    {group.name}
+                                  </p>
+                                  <p className="text-xs text-slate-500">
+                                    {group.isLeader ? "Lider del grupo" : "Miembro"}
+                                  </p>
                                 </li>
                               ))}
                             </ul>
                           )}
                         </section>
+
                       </div>
 
                       <aside className="lg:sticky lg:top-2 lg:col-span-5 lg:self-start">
                         <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
                           <h3 className="flex items-center gap-2 text-sm text-slate-700" style={{ fontWeight: 600 }}>
-                            <History className="h-4 w-4 text-primary" strokeWidth={1.9} aria-hidden />
-                            Actividad
+                            <Users className="h-4 w-4 text-primary" strokeWidth={1.9} aria-hidden />
+                            Leads asignados
                           </h3>
+                          <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                            Total: {selectedUserAssignedLeads.length} lead{selectedUserAssignedLeads.length === 1 ? "" : "s"}.
+                          </p>
                           <div className="mt-4 space-y-3">
-                            {sortedUserHistory.length === 0 ? (
+                            {selectedUserAssignedLeads.length === 0 ? (
                               <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50/50 px-4 py-8 text-center text-sm text-slate-500">
-                                Sin actividad registrada.
+                                Este usuario no tiene leads asignados.
                               </p>
                             ) : (
-                              <div className="relative pl-8">
-                                <div className="absolute bottom-3 left-[15px] top-3 w-px bg-gradient-to-b from-primary/40 via-primary/20 to-transparent" />
-                                <div className="space-y-4">
-                                  {sortedUserHistory.map((entry) => {
-                                    const meta = historyEventMeta(entry.type);
-                                    const Icon = meta.Icon;
-                                    return (
-                                      <article
-                                        key={entry.id}
-                                        className="relative rounded-xl border border-stone-200/90 bg-stone-50/40 p-4 shadow-sm"
+                              <ul className="space-y-2">
+                                {selectedUserAssignedLeads.map((lead) => (
+                                  <li
+                                    key={lead.id}
+                                    className="rounded-xl border border-stone-200/90 bg-stone-50/40 px-4 py-3 text-sm text-slate-800 ring-1 ring-stone-100"
+                                  >
+                                    {onViewLead ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => onViewLead(lead)}
+                                        className="text-left text-sm text-primary underline decoration-primary/35 underline-offset-4 transition-colors hover:text-primary/85"
+                                        style={{ fontWeight: 700 }}
+                                        title="Abrir detalle del lead"
                                       >
-                                        <span className="absolute -left-8 top-4 inline-flex h-7 w-7 items-center justify-center rounded-full border border-stone-200 bg-white shadow-sm">
-                                          <Icon className={cn("h-3.5 w-3.5", meta.iconClass)} strokeWidth={2} />
-                                        </span>
-                                        <div className="flex flex-wrap items-center gap-2">
-                                          <p className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
-                                            {meta.title}
-                                          </p>
-                                          <span
-                                            className={cn(
-                                              "rounded-full px-2 py-0.5 text-[11px]",
-                                              meta.badgeClass
-                                            )}
-                                          >
-                                            {historyTypeBadgeLabel[entry.type]}
-                                          </span>
-                                        </div>
-                                        <p className="mt-1.5 text-sm text-slate-700">{entry.description}</p>
-                                        <p className="mt-2 inline-flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                                          <span className="inline-flex items-center gap-1">
-                                            <Calendar className="h-3.5 w-3.5" />
-                                            {formatUserHistoryDate(entry.createdAt)}
-                                          </span>
-                                          <span className="text-slate-400">·</span>
-                                          <span>{entry.actorName}</span>
-                                        </p>
-                                      </article>
-                                    );
-                                  })}
-                                </div>
-                              </div>
+                                        {lead.name}
+                                      </button>
+                                    ) : (
+                                      <p className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
+                                        {lead.name}
+                                      </p>
+                                    )}
+                                    <p className="text-xs text-slate-500">{lead.email}</p>
+                                  </li>
+                                ))}
+                              </ul>
                             )}
                           </div>
                         </section>

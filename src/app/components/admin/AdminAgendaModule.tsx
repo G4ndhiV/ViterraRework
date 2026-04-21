@@ -24,13 +24,11 @@ import {
   type AgendaAppointment,
   type AgendaStatus,
   createDefaultAgendaAppointments,
-  filterAppointmentsForDay,
   filterAppointmentsForWeek,
   newAgendaId,
   normalizeStoredAgenda,
   parseAppointment,
 } from "../../data/agenda";
-import { Calendar } from "../ui/calendar";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -42,7 +40,6 @@ import {
 } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { Badge } from "../ui/badge";
 import {
   Select,
   SelectContent,
@@ -56,21 +53,6 @@ const START_HOUR = 8;
 const END_HOUR_EXCLUSIVE = 20;
 const PX_PER_HOUR = 52;
 const HOUR_COUNT = END_HOUR_EXCLUSIVE - START_HOUR;
-
-function statusBadgeClassName(status: AgendaStatus): string {
-  switch (status) {
-    case "pending":
-      return "border-amber-200 bg-amber-50 text-amber-800";
-    case "confirmed":
-      return "border-emerald-200 bg-emerald-50 text-emerald-800";
-    case "completed":
-      return "border-sky-200 bg-sky-50 text-sky-800";
-    case "cancelled":
-      return "border-rose-200 bg-rose-50 text-rose-800";
-    default:
-      return "";
-  }
-}
 
 function layoutBlock(
   apt: AgendaAppointment,
@@ -115,11 +97,9 @@ export function AdminAgendaModule() {
     }
   }, [appointments]);
 
-  const [view, setView] = useState<"week" | "month">("week");
   const [weekStart, setWeekStart] = useState(() =>
     startOfWeek(new Date(), { weekStartsOn: 1 }),
   );
-  const [monthSelectedDay, setMonthSelectedDay] = useState(() => new Date());
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [selected, setSelected] = useState<AgendaAppointment | null>(null);
@@ -160,29 +140,10 @@ export function AdminAgendaModule() {
     [appointments, rangeStart, weekEndExclusive],
   );
 
-  const monthDayAppointments = useMemo(
-    () => filterAppointmentsForDay(appointments, monthSelectedDay),
-    [appointments, monthSelectedDay],
-  );
-
   const titleWeek = format(weekStart, "MMMM yyyy", { locale: es });
-  const titleMonth = format(monthSelectedDay, "MMMM yyyy", { locale: es });
 
   const goPrevWeek = () => setWeekStart((w) => addDays(w, -7));
   const goNextWeek = () => setWeekStart((w) => addDays(w, 7));
-
-  const handleMonthSelect = (d: Date | undefined) => {
-    if (!d) return;
-    setMonthSelectedDay(d);
-    setWeekStart(startOfWeek(d, { weekStartsOn: 1 }));
-  };
-
-  const handleViewChange = (next: "week" | "month") => {
-    setView(next);
-    if (next === "week") {
-      setWeekStart(startOfWeek(monthSelectedDay, { weekStartsOn: 1 }));
-    }
-  };
 
   const openDetail = (a: AgendaAppointment) => {
     setSelected(a);
@@ -241,42 +202,10 @@ export function AdminAgendaModule() {
               Agenda
             </h1>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
-              Citas y seguimientos en vista semanal o mensual. Crea una cita nueva cuando la necesites.
+              Citas y seguimientos en vista semanal. Crea una cita nueva cuando la necesites.
             </p>
           </div>
           <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
-            <div
-              className="inline-flex w-full rounded-full border border-slate-200/80 bg-slate-100/90 p-0.5 shadow-inner sm:w-auto"
-              role="group"
-              aria-label="Vista de calendario"
-            >
-              <button
-                type="button"
-                onClick={() => handleViewChange("week")}
-                className={cn(
-                  "flex-1 rounded-full px-4 py-2 text-sm font-medium transition-all sm:flex-none sm:py-1.5",
-                  view === "week"
-                    ? "bg-white text-brand-navy shadow-sm"
-                    : "text-slate-600 hover:text-slate-900",
-                )}
-                style={{ fontWeight: view === "week" ? 600 : 500 }}
-              >
-                Semana
-              </button>
-              <button
-                type="button"
-                onClick={() => handleViewChange("month")}
-                className={cn(
-                  "flex-1 rounded-full px-4 py-2 text-sm font-medium transition-all sm:flex-none sm:py-1.5",
-                  view === "month"
-                    ? "bg-white text-brand-navy shadow-sm"
-                    : "text-slate-600 hover:text-slate-900",
-                )}
-                style={{ fontWeight: view === "month" ? 600 : 500 }}
-              >
-                Mes
-              </button>
-            </div>
             <Button
               type="button"
               className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto"
@@ -290,50 +219,36 @@ export function AdminAgendaModule() {
         </div>
       </header>
 
-      {view === "week" && (
-        <div className="flex flex-wrap items-center justify-center gap-2 border-b border-slate-200/80 pb-4 sm:justify-start">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="shrink-0 border-slate-200"
-            onClick={goPrevWeek}
-            aria-label="Semana anterior"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <p
-            className="min-w-0 flex-1 text-center font-heading text-lg capitalize text-brand-navy sm:flex-none sm:text-xl"
-            style={{ fontWeight: 700 }}
-          >
-            {titleWeek}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="shrink-0 border-slate-200"
-            onClick={goNextWeek}
-            aria-label="Semana siguiente"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
+      <div className="flex flex-wrap items-center justify-center gap-2 border-b border-slate-200/80 pb-4 sm:justify-start">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="shrink-0 border-slate-200"
+          onClick={goPrevWeek}
+          aria-label="Semana anterior"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <p
+          className="min-w-0 flex-1 text-center font-heading text-lg capitalize text-brand-navy sm:flex-none sm:text-xl"
+          style={{ fontWeight: 700 }}
+        >
+          {titleWeek}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="shrink-0 border-slate-200"
+          onClick={goNextWeek}
+          aria-label="Semana siguiente"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
 
-      {view === "month" && (
-        <div className="border-b border-slate-200/80 pb-4">
-          <p className="font-heading text-lg capitalize text-brand-navy sm:text-xl" style={{ fontWeight: 700 }}>
-            {titleMonth}
-          </p>
-          <p className="mt-1 text-sm text-slate-500" style={{ fontWeight: 500 }}>
-            Selecciona un día en el calendario para ver las citas.
-          </p>
-        </div>
-      )}
-
-      {view === "week" && (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex min-w-[720px]">
             <div className="flex w-[3.25rem] shrink-0 flex-col border-r border-slate-200 bg-slate-50/80 sm:w-14">
               <div className="flex min-h-[4.5rem] items-center justify-center border-b border-slate-200 px-0.5">
@@ -463,65 +378,6 @@ export function AdminAgendaModule() {
             </div>
           </div>
         </div>
-      )}
-
-      {view === "month" && (
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,340px)_1fr]">
-          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-            <Calendar
-              mode="single"
-              selected={monthSelectedDay}
-              onSelect={(d) => handleMonthSelect(d)}
-              locale={es}
-              weekStartsOn={1}
-              className="w-full rounded-lg"
-            />
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h3
-              className="font-heading mb-4 text-lg text-brand-navy capitalize"
-              style={{ fontWeight: 600 }}
-            >
-              {format(monthSelectedDay, "EEEE d MMMM", { locale: es })}
-            </h3>
-            {monthDayAppointments.length === 0 ? (
-              <p className="text-sm text-slate-500" style={{ fontWeight: 500 }}>
-                No hay citas este día.
-              </p>
-            ) : (
-              <ul className="space-y-3">
-                {monthDayAppointments.map((a) => {
-                  const { start, end } = parseAppointment(a);
-                  return (
-                    <li key={a.id}>
-                      <button
-                        type="button"
-                        onClick={() => openDetail(a)}
-                        className="flex w-full items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3 text-left transition hover:bg-slate-100/80"
-                      >
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900" style={{ fontWeight: 600 }}>
-                            {a.clientName.trim() || "Sin cliente"}
-                          </p>
-                          <p className="text-xs text-slate-600" style={{ fontWeight: 500 }}>
-                            {a.title} · {format(start, "HH:mm")} – {format(end, "HH:mm")}
-                          </p>
-                        </div>
-                        <Badge
-                          variant="outline"
-                          className={cn("shrink-0", statusBadgeClassName(a.status))}
-                        >
-                          {AGENDA_STATUS_LABEL[a.status]}
-                        </Badge>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="sm:max-w-md">
@@ -661,6 +517,9 @@ export function AdminAgendaModule() {
             </div>
           </div>
           <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>
+              Cancelar
+            </Button>
             <Button type="button" onClick={saveNew} className="bg-primary text-primary-foreground">
               Guardar
             </Button>

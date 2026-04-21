@@ -1,12 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router";
 import { motion, useReducedMotion } from "motion/react";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { SearchBar, SearchFilters } from "../components/SearchBar";
-import { PropertyCard } from "../components/PropertyCard";
+import { PropertyCard, type Property } from "../components/PropertyCard";
 import { PropertyMap } from "../components/PropertyMap";
-import { mockProperties } from "../data/properties";
+import { useCatalogProperties } from "../hooks/useCatalogProperties";
 import { SlidersHorizontal, Map, LayoutGrid } from "lucide-react";
 import { Reveal } from "../components/Reveal";
 import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
@@ -23,27 +23,20 @@ import {
 export function SalePage() {
   const reduceMotion = useReducedMotion();
   const [searchParams] = useSearchParams();
-  const saleProperties = mockProperties.filter(p => p.status === "venta");
-  const [filteredProperties, setFilteredProperties] = useState(saleProperties);
+  const { properties } = useCatalogProperties();
+  const saleProperties = useMemo(
+    () => properties.filter((p) => p.status === "venta"),
+    [properties]
+  );
+  const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
   const [sortBy, setSortBy] = useState("newest");
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
 
   useEffect(() => {
-    const filters: SearchFilters = {
-      query: searchParams.get('query') || '',
-      type: searchParams.get('type') || '',
-      status: 'venta',
-      minPrice: searchParams.get('minPrice') || '',
-      maxPrice: searchParams.get('maxPrice') || '',
-    };
+    setFilteredProperties(saleProperties);
+  }, [saleProperties]);
 
-    const hasFilters = filters.query || filters.type || filters.minPrice || filters.maxPrice;
-    if (hasFilters) {
-      handleSearch(filters);
-    }
-  }, [searchParams]);
-
-  const handleSearch = (filters: SearchFilters) => {
+  const handleSearch = useCallback((filters: SearchFilters) => {
     let filtered = [...saleProperties];
 
     if (filters.query) {
@@ -68,7 +61,22 @@ export function SalePage() {
     }
 
     setFilteredProperties(filtered);
-  };
+  }, [saleProperties]);
+
+  useEffect(() => {
+    const filters: SearchFilters = {
+      query: searchParams.get("query") || "",
+      type: searchParams.get("type") || "",
+      status: "venta",
+      minPrice: searchParams.get("minPrice") || "",
+      maxPrice: searchParams.get("maxPrice") || "",
+    };
+
+    const hasFilters = filters.query || filters.type || filters.minPrice || filters.maxPrice;
+    if (hasFilters) {
+      handleSearch(filters);
+    }
+  }, [searchParams, handleSearch]);
 
   const handleSort = (value: string) => {
     setSortBy(value);

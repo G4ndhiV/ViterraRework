@@ -1,7 +1,6 @@
 import { Link } from "react-router";
 import { Home, ArrowLeft } from "lucide-react";
 import { Reveal } from "../components/Reveal";
-import { SocialFollowStrip } from "../components/SocialFollowStrip";
 
 export function NotFoundPage() {
   return (
@@ -34,7 +33,6 @@ export function NotFoundPage() {
           </div>
         </Reveal>
       </div>
-      <SocialFollowStrip theme="light" />
     </div>
   );
 }

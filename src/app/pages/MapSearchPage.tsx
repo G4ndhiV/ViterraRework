@@ -6,7 +6,7 @@ import { cn } from "../components/ui/utils";
 import { MapSearchHeaderBar } from "../components/MapSearchHeaderBar";
 import { MapSearchListingCard } from "../components/map/MapSearchListingCard";
 import type { Property } from "../components/PropertyCard";
-import { mockProperties } from "../data/properties";
+import { useCatalogProperties } from "../hooks/useCatalogProperties";
 import {
   pointInZone,
   zoneFromLeafletLayer,
@@ -158,6 +158,7 @@ function statusFromSearchParams(searchParams: URLSearchParams): "" | "venta" | "
 }
 
 export function MapSearchPage() {
+  const { properties: catalogProperties } = useCatalogProperties();
   const [searchParams] = useSearchParams();
   const mapEl = useRef<HTMLDivElement>(null);
   const mapShellRef = useRef<HTMLDivElement>(null);
@@ -200,7 +201,10 @@ export function MapSearchPage() {
     setFilters((f) => ({ ...f, status: st }));
   }, [searchParams]);
 
-  const results = useMemo(() => applyFilters(mockProperties, filters, zone), [filters, zone]);
+  const results = useMemo(
+    () => applyFilters(catalogProperties, filters, zone),
+    [catalogProperties, filters, zone]
+  );
 
   const selectedProperty = useMemo(
     () => (selectedPropertyId ? results.find((p) => p.id === selectedPropertyId) ?? null : null),

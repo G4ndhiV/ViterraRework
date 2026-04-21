@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { PropertyCard } from "../components/PropertyCard";
 import { SearchBar, SearchFilters } from "../components/SearchBar";
-import { mockProperties } from "../data/properties";
+import { useCatalogProperties } from "../hooks/useCatalogProperties";
 import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
@@ -34,8 +34,14 @@ export function HomePage() {
   const reduceMotion = useReducedMotion();
   const { content } = useSiteContent();
   const h = content.home;
-  const featuredProperties = mockProperties.slice(0, 6);
+  const { properties, loading: propertiesLoading } = useCatalogProperties();
+  const featuredProperties = properties.slice(0, 6);
   const [carouselIndex, setCarouselIndex] = useState(0);
+
+  useEffect(() => {
+    if (featuredProperties.length === 0) return;
+    setCarouselIndex((i) => Math.min(i, featuredProperties.length - 1));
+  }, [featuredProperties.length]);
 
   const goPrev = () => {
     setCarouselIndex((prev) => (prev - 1 + featuredProperties.length) % featuredProperties.length);
@@ -264,57 +270,69 @@ export function HomePage() {
           </Reveal>
 
           <div className="mx-auto max-w-5xl">
-            <motion.div
-              key={featuredProperties[carouselIndex].id}
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <PropertyCard property={featuredProperties[carouselIndex]} variant="editorial" />
-            </motion.div>
+            {propertiesLoading ? (
+              <p className="text-center text-sm text-brand-navy/60" style={{ fontWeight: 500 }}>
+                Cargando propiedades…
+              </p>
+            ) : featuredProperties.length === 0 ? (
+              <p className="text-center text-sm text-brand-navy/60" style={{ fontWeight: 500 }}>
+                Próximamente publicaremos propiedades destacadas.
+              </p>
+            ) : (
+              <>
+                <motion.div
+                  key={featuredProperties[carouselIndex].id}
+                  initial={{ opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <PropertyCard property={featuredProperties[carouselIndex]} variant="editorial" />
+                </motion.div>
 
-            <div className="mt-8 flex items-center justify-between gap-4">
-              <motion.button
-                type="button"
-                onClick={goPrev}
-                whileHover={reduceMotion ? undefined : { scale: 1.06 }}
-                whileTap={reduceMotion ? undefined : { scale: 0.94 }}
-                transition={{ type: "spring", stiffness: 420, damping: 22 }}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-navy/20 text-brand-navy transition-colors hover:border-primary hover:text-primary"
-                aria-label="Propiedad anterior"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </motion.button>
-
-              <div className="flex items-center gap-2">
-                {featuredProperties.map((property, index) => (
+                <div className="mt-8 flex items-center justify-between gap-4">
                   <motion.button
-                    key={property.id}
                     type="button"
-                    onClick={() => setCarouselIndex(index)}
-                    whileHover={reduceMotion ? undefined : { scale: 1.15 }}
-                    whileTap={reduceMotion ? undefined : { scale: 0.9 }}
-                    className={cn(
-                      "h-1.5 rounded-full transition-[width,background-color] duration-300",
-                      index === carouselIndex ? "w-8 bg-primary" : "w-3 bg-brand-navy/25 hover:bg-brand-navy/45"
-                    )}
-                    aria-label={`Ir a propiedad ${index + 1}`}
-                  />
-                ))}
-              </div>
+                    onClick={goPrev}
+                    whileHover={reduceMotion ? undefined : { scale: 1.06 }}
+                    whileTap={reduceMotion ? undefined : { scale: 0.94 }}
+                    transition={{ type: "spring", stiffness: 420, damping: 22 }}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-navy/20 text-brand-navy transition-colors hover:border-primary hover:text-primary"
+                    aria-label="Propiedad anterior"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </motion.button>
 
-              <motion.button
-                type="button"
-                onClick={goNext}
-                whileHover={reduceMotion ? undefined : { scale: 1.06 }}
-                whileTap={reduceMotion ? undefined : { scale: 0.94 }}
-                transition={{ type: "spring", stiffness: 420, damping: 22 }}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-navy/20 text-brand-navy transition-colors hover:border-primary hover:text-primary"
-                aria-label="Siguiente propiedad"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </motion.button>
-            </div>
+                  <div className="flex items-center gap-2">
+                    {featuredProperties.map((property, index) => (
+                      <motion.button
+                        key={property.id}
+                        type="button"
+                        onClick={() => setCarouselIndex(index)}
+                        whileHover={reduceMotion ? undefined : { scale: 1.15 }}
+                        whileTap={reduceMotion ? undefined : { scale: 0.9 }}
+                        className={cn(
+                          "h-1.5 rounded-full transition-[width,background-color] duration-300",
+                          index === carouselIndex ? "w-8 bg-primary" : "w-3 bg-brand-navy/25 hover:bg-brand-navy/45"
+                        )}
+                        aria-label={`Ir a propiedad ${index + 1}`}
+                      />
+                    ))}
+                  </div>
+
+                  <motion.button
+                    type="button"
+                    onClick={goNext}
+                    whileHover={reduceMotion ? undefined : { scale: 1.06 }}
+                    whileTap={reduceMotion ? undefined : { scale: 0.94 }}
+                    transition={{ type: "spring", stiffness: 420, damping: 22 }}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-navy/20 text-brand-navy transition-colors hover:border-primary hover:text-primary"
+                    aria-label="Siguiente propiedad"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </motion.button>
+                </div>
+              </>
+            )}
           </div>
 
           <Reveal className="mt-20 flex flex-col items-center justify-center gap-8 border-t border-brand-navy/10 pt-12 text-sm sm:flex-row" y={18} delay={0.06}>
