@@ -23,11 +23,11 @@ import {
   Car,
   Send,
 } from "lucide-react";
-import { developments } from "../data/developments";
+import { useDevelopmentDetail } from "../hooks/useDevelopmentsCatalog";
 
 export function DevelopmentDetailPage() {
   const { id } = useParams();
-  const development = developments.find((d) => d.id === id);
+  const { development, loading, error } = useDevelopmentDetail(id);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [activeTab, setActiveTab] = useState("descripcion");
   const [formData, setFormData] = useState({
@@ -105,13 +105,28 @@ export function DevelopmentDetailPage() {
     };
   }, [development]);
 
-  if (!development) {
+  if (loading) {
+    return (
+      <div className="viterra-page min-h-screen flex flex-col bg-white">
+        <Header />
+        <div data-reveal className="flex flex-1 items-center justify-center text-slate-600" style={{ fontWeight: 500 }}>
+          Cargando…
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (error || !development) {
     return (
       <div className="viterra-page min-h-screen flex flex-col bg-white">
         <Header />
         <div data-reveal className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <h1 className="font-heading text-2xl font-semibold text-brand-navy mb-4">Desarrollo no encontrado</h1>
+            <h1 className="font-heading text-2xl font-semibold text-brand-navy mb-4">
+              {error ? "No se pudo cargar el desarrollo" : "Desarrollo no encontrado"}
+            </h1>
+            {error ? <p className="mb-4 text-sm text-slate-600">{error}</p> : null}
             <Link to="/desarrollos" className="text-slate-600 hover:text-slate-900">
               Volver a desarrollos
             </Link>

@@ -33,8 +33,8 @@ import { AdminDevelopmentsMap } from "./AdminDevelopmentsMap";
 
 interface Props {
   developments: Development[];
-  onSave: (input: Development) => void;
-  onDelete: (id: string) => void;
+  onSave: (input: Development) => void | Promise<void>;
+  onDelete: (id: string) => void | Promise<void>;
 }
 
 type DevelopmentStatus = Development["status"];
@@ -66,11 +66,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
   const [stateFilter, setStateFilter] = useState("all");
   const [deliveryFilter, setDeliveryFilter] = useState("all");
   const [inventoryView, setInventoryView] = useState<"cards" | "list" | "map">("cards");
-
-  const nextId = useMemo(
-    () => String(Math.max(0, ...developments.map((d) => Number(d.id) || 0)) + 1),
-    [developments]
-  );
+  const [newDevelopmentId, setNewDevelopmentId] = useState(() => crypto.randomUUID());
   const typeOptions = useMemo(
     () => Array.from(new Set(developments.map((d) => d.type).filter(Boolean))),
     [developments]
@@ -124,6 +120,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
   const openCreate = () => {
     setEditing(null);
     setForm(emptyForm);
+    setNewDevelopmentId(crypto.randomUUID());
     setOpen(true);
   };
 
@@ -148,7 +145,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim() || !form.location.trim() || !form.type.trim()) return;
-    const id = editing?.id ?? nextId;
+    const id = editing?.id ?? newDevelopmentId;
     const payload: Development = {
       id,
       name: form.name.trim(),
@@ -680,7 +677,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
         </div>
       )}
 
-      <Dialog open={open} onOpenChange={setOpen} key={editing?.id ?? `new-${nextId}`}>
+      <Dialog open={open} onOpenChange={setOpen} key={editing?.id ?? `new-${newDevelopmentId}`}>
         <DialogContent
           hideCloseButton
           className={cn(
@@ -720,7 +717,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                         title="Copiar enlace público"
                         aria-label="Copiar enlace público"
                         onClick={() =>
-                          copyPublicPageUrl(`/desarrollos/${editing?.id ?? nextId}`)
+                          copyPublicPageUrl(`/desarrollos/${editing?.id ?? newDevelopmentId}`)
                         }
                       >
                         <Link2 className="h-4 w-4" strokeWidth={1.5} />

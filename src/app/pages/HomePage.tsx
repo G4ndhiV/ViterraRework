@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { PropertyCard } from "../components/PropertyCard";
 import { SearchBar, SearchFilters } from "../components/SearchBar";
-import { mockProperties } from "../data/properties";
+import { useCatalogProperties } from "../hooks/useCatalogProperties";
 import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion } from "motion/react";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
@@ -32,8 +32,14 @@ export function HomePage() {
   const pl = usePreviewLayout();
   const { content } = useSiteContent();
   const h = content.home;
-  const featuredProperties = mockProperties.slice(0, 6);
+  const { properties, loading: propertiesLoading } = useCatalogProperties();
+  const featuredProperties = properties.slice(0, 6);
   const [carouselIndex, setCarouselIndex] = useState(0);
+
+  useEffect(() => {
+    if (featuredProperties.length === 0) return;
+    setCarouselIndex((i) => Math.min(i, featuredProperties.length - 1));
+  }, [featuredProperties.length]);
 
   const goPrev = () => {
     setCarouselIndex((prev) => (prev - 1 + featuredProperties.length) % featuredProperties.length);
@@ -194,49 +200,61 @@ export function HomePage() {
           </div>
 
           <div className="mx-auto max-w-5xl">
-            <motion.div
-              key={featuredProperties[carouselIndex].id}
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35 }}
-            >
-              <PropertyCard property={featuredProperties[carouselIndex]} variant="editorial" />
-            </motion.div>
+            {propertiesLoading ? (
+              <p className="text-center text-sm text-brand-navy/60" style={{ fontWeight: 500 }}>
+                Cargando propiedades…
+              </p>
+            ) : featuredProperties.length === 0 ? (
+              <p className="text-center text-sm text-brand-navy/60" style={{ fontWeight: 500 }}>
+                Próximamente publicaremos propiedades destacadas.
+              </p>
+            ) : (
+              <>
+                <motion.div
+                  key={featuredProperties[carouselIndex].id}
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35 }}
+                >
+                  <PropertyCard property={featuredProperties[carouselIndex]} variant="editorial" />
+                </motion.div>
 
-            <div className="mt-8 flex items-center justify-between gap-4">
-              <button
-                type="button"
-                onClick={goPrev}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-navy/20 text-brand-navy transition-colors hover:border-primary hover:text-primary"
-                aria-label="Propiedad anterior"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-
-              <div className="flex items-center gap-2">
-                {featuredProperties.map((property, index) => (
+                <div className="mt-8 flex items-center justify-between gap-4">
                   <button
-                    key={property.id}
                     type="button"
-                    onClick={() => setCarouselIndex(index)}
-                    className={cn(
-                      "h-1.5 rounded-full transition-all",
-                      index === carouselIndex ? "w-8 bg-primary" : "w-3 bg-brand-navy/25 hover:bg-brand-navy/45"
-                    )}
-                    aria-label={`Ir a propiedad ${index + 1}`}
-                  />
-                ))}
-              </div>
+                    onClick={goPrev}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-navy/20 text-brand-navy transition-colors hover:border-primary hover:text-primary"
+                    aria-label="Propiedad anterior"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
 
-              <button
-                type="button"
-                onClick={goNext}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-navy/20 text-brand-navy transition-colors hover:border-primary hover:text-primary"
-                aria-label="Siguiente propiedad"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
-            </div>
+                  <div className="flex items-center gap-2">
+                    {featuredProperties.map((property, index) => (
+                      <button
+                        key={property.id}
+                        type="button"
+                        onClick={() => setCarouselIndex(index)}
+                        className={cn(
+                          "h-1.5 rounded-full transition-all",
+                          index === carouselIndex ? "w-8 bg-primary" : "w-3 bg-brand-navy/25 hover:bg-brand-navy/45"
+                        )}
+                        aria-label={`Ir a propiedad ${index + 1}`}
+                      />
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={goNext}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-navy/20 text-brand-navy transition-colors hover:border-primary hover:text-primary"
+                    aria-label="Siguiente propiedad"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="mt-20 flex flex-col items-center justify-center gap-8 border-t border-brand-navy/10 pt-12 text-sm sm:flex-row">

@@ -2,7 +2,7 @@ import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { ArrowRight, MapPin, CheckCircle, Sparkles, ChevronsDown } from "lucide-react";
 import { Link } from "react-router";
-import { developments } from "../data/developments";
+import { useDevelopmentsCatalog } from "../hooks/useDevelopmentsCatalog";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
 import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
@@ -12,6 +12,7 @@ export function DevelopmentsPage() {
   const pl = usePreviewLayout();
   const { content } = useSiteContent();
   const page = content.developments;
+  const { developments, loading, error } = useDevelopmentsCatalog(true);
   const featuredDevelopments = developments.filter((x) => x.featured);
   const otherDevelopments = developments.filter((x) => !x.featured);
 
@@ -24,6 +25,33 @@ export function DevelopmentsPage() {
     };
     return colors[status as keyof typeof colors] || "bg-brand-canvas text-brand-navy/80 border border-brand-navy/15";
   };
+
+  if (loading) {
+    return (
+      <div className="viterra-page min-h-screen flex flex-col bg-white">
+        <Header />
+        <div className="flex flex-1 items-center justify-center px-4 py-24 text-slate-600" style={{ fontWeight: 500 }}>
+          Cargando desarrollos…
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="viterra-page min-h-screen flex flex-col bg-white">
+        <Header />
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-24 text-center">
+          <p className="text-slate-800" style={{ fontWeight: 600 }}>
+            No se pudieron cargar los desarrollos
+          </p>
+          <p className="text-sm text-slate-600">{error}</p>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="viterra-page min-h-screen flex flex-col bg-white" >

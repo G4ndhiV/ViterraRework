@@ -14,7 +14,7 @@ import type { User } from "../../contexts/AuthContext";
 import type { Lead, LeadPriorityStars } from "../../data/leads";
 import { isClickableTeamMemberProfile, resolveLeadTeamUser } from "../../lib/crmTeamUser";
 import { labelForLeadStatus, newLeadActivityId, newLeadClientNoteId, sortLeadClientNotesNewestFirst } from "../../data/leads";
-import { CRM_ASSIGNEES, getAssigneeNameById } from "../../data/crmAssignees";
+import { CRM_ASSIGNEES, resolveAssigneeName } from "../../data/crmAssignees";
 import { LeadPriorityBadge } from "./LeadPriorityBadge";
 import { LeadPriorityStarsInput } from "./LeadPriorityStarsInput";
 import { cn } from "../ui/utils";
@@ -70,6 +70,10 @@ export function LeadDetailDialog({
   canManageClients = false,
   onRegisterClientFromLead,
 }: Props) {
+  const assigneeSelectOptions = useMemo(() => {
+    const fromTeam = teamUsers.filter((u) => u.isActive).map((u) => ({ id: u.id, name: u.name }));
+    return fromTeam.length > 0 ? fromTeam : CRM_ASSIGNEES;
+  }, [teamUsers]);
   const [editing, setEditing] = useState(defaultMode === "edit");
   const [draft, setDraft] = useState<Lead | null>(null);
   const [activeTab, setActiveTab] = useState<"info" | "activity" | "contact">("info");
@@ -114,7 +118,7 @@ export function LeadDetailDialog({
     onSave({
       ...draft,
       clientNotes: prunedNotes,
-      assignedTo: getAssigneeNameById(draft.assignedToUserId),
+      assignedTo: resolveAssigneeName(draft.assignedToUserId, assigneeSelectOptions),
       updatedAt: new Date().toISOString(),
     });
     setEditing(false);
@@ -696,7 +700,7 @@ export function LeadDetailDialog({
                       className={leadFieldClass}
                       style={{ fontWeight: 500 }}
                     >
-                      {CRM_ASSIGNEES.map((a) => (
+                      {assigneeSelectOptions.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.name}
                         </option>
@@ -960,7 +964,7 @@ export function LeadDetailDialog({
               <Button
                 type="button"
                 variant="outline"
-                className="border-stone-300 bg-white text-brand-navy hover:bg-stone-50"
+                className="border-stone-300 bg-white text-brand-navy hover:bg-stone-50 hover:!text-brand-navy"
                 onClick={() => onRegisterClientFromLead(d)}
               >
                 <UserCircle2 className="mr-2 h-4 w-4" strokeWidth={1.75} />

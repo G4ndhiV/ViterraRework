@@ -1,7 +1,7 @@
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import { ChevronLeft, ChevronRight, MapPin, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, MapPin } from "lucide-react";
 import type { Lead } from "../../data/leads";
 import { LeadPriorityBadge } from "./LeadPriorityBadge";
 import { DEFAULT_CUSTOM_STAGE_HEX, stageHexToKanbanHeaderStyle } from "../../lib/stageColors";
@@ -20,8 +20,6 @@ type Props = {
   statusLabel: (status: string) => string;
   onStatusChange: (leadId: string, status: string) => void;
   onLeadOpen?: (lead: Lead) => void;
-  canAddStage?: boolean;
-  onAddStage?: (label: string) => void;
 };
 
 function DraggableLeadCard({
@@ -218,73 +216,6 @@ function KanbanColumn({
   );
 }
 
-function AddStagePanel({ onAdd }: { onAdd: (label: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [value, setValue] = useState("");
-
-  const submit = () => {
-    const t = value.trim();
-    if (!t) return;
-    onAdd(t);
-    setValue("");
-    setOpen(false);
-  };
-
-  return (
-    <div className="flex w-[min(100%,220px)] shrink-0 flex-col justify-start">
-      <div className="rounded-2xl border border-dashed border-slate-300/90 bg-white/60 p-3 shadow-inner">
-        {!open ? (
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="flex w-full flex-col items-center gap-2 rounded-xl border border-slate-200/80 bg-white py-6 text-center text-xs font-semibold uppercase tracking-[0.12em] text-brand-navy/80 transition-colors hover:border-primary/40 hover:bg-primary/[0.04] hover:text-brand-navy"
-            style={{ fontWeight: 600 }}
-          >
-            <Plus className="h-6 w-6 text-primary" strokeWidth={2} />
-            Nueva etapa
-          </button>
-        ) : (
-          <div className="space-y-2">
-            <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500" style={{ fontWeight: 600 }}>
-              Nombre de la etapa
-            </label>
-            <input
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), submit())}
-              placeholder="Ej. Propuesta enviada"
-              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-brand-navy placeholder:text-slate-400"
-              style={{ fontWeight: 500 }}
-              autoFocus
-            />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  setValue("");
-                }}
-                className="flex-1 rounded-lg border border-slate-200 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                style={{ fontWeight: 500 }}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={submit}
-                className="flex-1 rounded-lg bg-primary py-1.5 text-xs font-semibold text-primary-foreground hover:bg-brand-red-hover"
-                style={{ fontWeight: 600 }}
-              >
-                Crear
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function LeadsKanbanBoard({
   leads,
   columnStatuses,
@@ -292,17 +223,15 @@ export function LeadsKanbanBoard({
   statusLabel,
   onStatusChange,
   onLeadOpen,
-  canAddStage,
-  onAddStage,
 }: Props) {
   const byStatus = useMemo(() => {
     const map: Record<string, Lead[]> = {};
     for (const s of columnStatuses) {
       map[s] = [];
     }
-    const fallback = columnStatuses[0] ?? "nuevo";
     for (const lead of leads) {
-      const key = columnStatuses.includes(lead.status) ? lead.status : fallback;
+      if (!columnStatuses.includes(lead.status)) continue;
+      const key = lead.status;
       if (!map[key]) map[key] = [];
       map[key].push(lead);
     }
@@ -382,7 +311,6 @@ export function LeadsKanbanBoard({
                 accentHex={columnHexByStatus?.[status] ?? DEFAULT_CUSTOM_STAGE_HEX}
               />
             ))}
-            {canAddStage && onAddStage ? <AddStagePanel onAdd={onAddStage} /> : null}
           </div>
         </div>
       </div>

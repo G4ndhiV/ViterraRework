@@ -19,8 +19,9 @@ import {
   type LeadPriorityStars,
 } from "../../data/leads";
 import { LeadPriorityStarsInput } from "./LeadPriorityStarsInput";
-import { CRM_ASSIGNEES, getAssigneeNameById } from "../../data/crmAssignees";
-import { findDuplicateLeads, nextLeadId } from "../../lib/leadDuplicates";
+import { CRM_ASSIGNEES, resolveAssigneeName } from "../../data/crmAssignees";
+import { useAuth } from "../../contexts/AuthContext";
+import { findDuplicateLeads, newLeadId } from "../../lib/leadDuplicates";
 import { DEFAULT_PIPELINE_GROUP_ID } from "../../lib/pipelineByGroup";
 
 type Props = {
@@ -32,6 +33,8 @@ type Props = {
   customKanbanStages?: CustomKanbanStage[];
   /** Grupo de trabajo cuyo pipeline Kanban aplica a este lead */
   pipelineGroupId?: string;
+  /** Primera columna activa del pipeline; obligatoria para crear leads. */
+  defaultStageId?: string | null;
 };
 
 const emptyForm = {
@@ -55,7 +58,9 @@ export function AddLeadDialog({
   user,
   customKanbanStages = [],
   pipelineGroupId = DEFAULT_PIPELINE_GROUP_ID,
+  defaultStageId = null,
 }: Props) {
+  const { users: teamUsers } = useAuth();
   const [form, setForm] = useState(emptyForm);
   const [assigneeId, setAssigneeId] = useState(user.id);
 
@@ -67,11 +72,13 @@ export function AddLeadDialog({
   }, [open, user.id]);
 
   const assigneeOptions = useMemo(() => {
+    const fromTeam = teamUsers.filter((u) => u.isActive).map((u) => ({ id: u.id, name: u.name }));
+    const list = fromTeam.length > 0 ? fromTeam : CRM_ASSIGNEES;
     if (user.role === "asesor") {
-      return CRM_ASSIGNEES.filter((a) => a.id === user.id);
+      return list.filter((a) => a.id === user.id);
     }
-    return CRM_ASSIGNEES;
-  }, [user.role, user.id]);
+    return list;
+  }, [teamUsers, user.role, user.id]);
 
   useEffect(() => {
     if (user.role === "asesor") {
@@ -88,6 +95,7 @@ export function AddLeadDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!defaultStageId) return;
     const name = form.name.trim();
     const email = form.email.trim();
     const phone = form.phone.trim();
@@ -98,7 +106,7 @@ export function AddLeadDialog({
 
     const noteText = form.notes.trim();
     const newLead: Lead = {
-      id: nextLeadId(allLeads),
+      id: newLeadId(),
       name,
       email,
       phone,
@@ -106,10 +114,10 @@ export function AddLeadDialog({
       propertyType: form.propertyType.trim() || "—",
       budget: budgetNum,
       location: form.location.trim() || "—",
-      status: "nuevo",
+      status: defaultStageId,
       priorityStars: form.priorityStars,
       source: form.source.trim() || "CRM",
-      assignedTo: getAssigneeNameById(assigneeId),
+      assignedTo: resolveAssigneeName(assigneeId, assigneeOptions),
       assignedToUserId: assigneeId,
       pipelineGroupId,
       clientNotes: noteText
@@ -140,6 +148,22 @@ export function AddLeadDialog({
         </div>
 
         <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
+          {!defaultStageId && (
+            <div
+              className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950"
+              role="alert"
+            >
+              <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" strokeWidth={2} aria-hidden />
+              <div className="min-w-0 space-y-1">
+                <p className="font-semibold" style={{ fontWeight: 600 }}>
+                  No hay columnas configuradas
+                </p>
+                <p className="text-amber-900/90" style={{ fontWeight: 500 }}>
+                  Crea al menos una columna en <strong>Mi empresa → Pipeline de ventas</strong> para poder registrar leads.
+                </p>
+              </div>
+            </div>
+          )}
           {hasDuplicate && (
             <div
               className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950"
@@ -338,7 +362,11 @@ export function AddLeadDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" className="bg-primary hover:bg-brand-red-hover text-primary-foreground">
+            <Button
+              type="submit"
+              disabled={!defaultStageId}
+              className="bg-primary hover:bg-brand-red-hover text-primary-foreground"
+            >
               Guardar lead
             </Button>
           </DialogFooter>

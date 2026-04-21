@@ -1,15 +1,30 @@
 import { useParams, Link } from "react-router";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
-import { mockProperties } from "../data/properties";
+import { useCatalogProperties } from "../hooks/useCatalogProperties";
 import { Bed, Bath, Square, MapPin, Calendar, Share2, Heart, ArrowLeft, CheckCircle } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 
 export function PropertyDetailPage() {
   const { id } = useParams();
-  const property = mockProperties.find((p) => p.id === id);
+  const { properties, loading } = useCatalogProperties();
+  const property = useMemo(() => properties.find((p) => p.id === id), [properties, id]);
   const [isFavorite, setIsFavorite] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="viterra-page flex min-h-screen flex-col">
+        <Header />
+        <div data-reveal className="flex flex-1 items-center justify-center">
+          <p className="text-slate-600" style={{ fontWeight: 500 }}>
+            Cargando…
+          </p>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!property) {
     return (

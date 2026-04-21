@@ -39,16 +39,22 @@ import {
 import { AdminSiteEditor } from "../components/admin/AdminSiteEditor";
 import { useAuth } from "../contexts/AuthContext";
 import {
-  mockLeads,
   Lead,
-  normalizeStoredLead,
   LEAD_STATUS_LABEL,
-  BUILTIN_STATUS_ORDER,
   labelForLeadStatus,
   newLeadActivityId,
   newCustomStageId,
   type CustomKanbanStage,
 } from "../data/leads";
+import { getSupabaseClient, getSupabaseProjectHost, syncSupabaseAuthSession } from "../lib/supabaseClient";
+import { logTableCountHints } from "../lib/supabaseDiagnostics";
+import {
+  fetchActiveLeads,
+  insertLead,
+  updateLead,
+  softDeleteLead,
+} from "../lib/supabaseLeads";
+import { toast } from "sonner";
 import {
   CLIENTS_STORAGE_KEY,
   normalizeStoredClient,
@@ -70,11 +76,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
-import { filterLeadsForUser, roleLabelEs } from "../lib/leadsAccess";
+import { canViewAllLeads, filterLeadsForUser, roleLabelEs } from "../lib/leadsAccess";
 import { copyPublicPageUrl } from "../lib/copyPublicLink";
-import { mockProperties } from "../data/properties";
 import { Property } from "../components/PropertyCard";
-import { Development, developments as seedDevelopments } from "../data/developments";
+import { useCatalogProperties } from "../hooks/useCatalogProperties";
+import {
+  insertProperty,
+  softDeleteProperty,
+  updateProperty,
+} from "../lib/supabaseProperties";
+import type { Development } from "../data/developments";
+import {
+  fetchDevelopmentsWithUnits,
+  upsertDevelopment,
+  softDeleteDevelopment,
+} from "../lib/supabaseDevelopments";
 import { AGENDA_STORAGE_KEY } from "../data/agenda";
 import { AdminAgendaModule } from "../components/admin/AdminAgendaModule";
 import { PropertyMap } from "../components/PropertyMap";
@@ -140,6 +156,7 @@ export function AdminPage() {
     user,
     users,
     logout,
+    authReady,
     isAuthenticated,
     createUser,
     updateUser,
@@ -153,8 +170,12 @@ export function AdminPage() {
   const [stageDraftLabel, setStageDraftLabel] = useState("");
   const [editingStageId, setEditingStageId] = useState<string | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
+  const [leadsLoading, setLeadsLoading] = useState(true);
+  const [leadsError, setLeadsError] = useState<string | null>(null);
+  const { properties, reload: reloadProperties } = useCatalogProperties();
+  const [newPropertyDraftId, setNewPropertyDraftId] = useState(() => crypto.randomUUID());
   const [developments, setDevelopments] = useState<Development[]>([]);
+  const [developmentsLoading, setDevelopmentsLoading] = useState(true);
   const [clients, setClients] = useState<CrmClient[]>([]);
   const [focusClient, setFocusClient] = useState<{ id: string; nonce: number } | null>(null);
   const [seedClientFromLead, setSeedClientFromLead] = useState<{ lead: Lead; nonce: number } | null>(
@@ -223,28 +244,79 @@ export function AdminPage() {
 
   // Verificar autenticación y cargar datos
   useEffect(() => {
+    if (!authReady) return;
     if (!isAuthenticated) {
       navigate("/login");
       return;
     }
 
-    const savedLeads = localStorage.getItem("viterra_leads");
-    if (savedLeads) {
-      try {
-        const parsed = JSON.parse(savedLeads) as unknown[];
-        setLeads(parsed.map((row) => normalizeStoredLead(row as Record<string, unknown>)));
-      } catch {
-        setLeads(mockLeads);
+    let cancelled = false;
+    (async () => {
+      setLeadsLoading(true);
+      setDevelopmentsLoading(true);
+      setLeadsError(null);
+      const client = getSupabaseClient();
+      if (!client) {
+        setLeadsError(
+          "Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en .env (el prefijo VITE_ es obligatorio en Vite)."
+        );
+        setLeads([]);
+        setDevelopments([]);
+        setLeadsLoading(false);
+        setDevelopmentsLoading(false);
+        return;
       }
-    } else {
-      setLeads(mockLeads);
-    }
 
-    const savedProperties = localStorage.getItem("viterra_properties");
-    setProperties(savedProperties ? JSON.parse(savedProperties) : mockProperties);
+      const { hasSession } = await syncSupabaseAuthSession(client);
+      if (!hasSession) {
+        setLeadsError(
+          "No hay sesión de Supabase en el cliente. Cierra sesión y vuelve a entrar, o revisa que el dominio no bloquee localStorage."
+        );
+        setLeads([]);
+        setDevelopments([]);
+        setLeadsLoading(false);
+        setDevelopmentsLoading(false);
+        return;
+      }
 
-    const savedDevelopments = localStorage.getItem("viterra_admin_developments");
-    setDevelopments(savedDevelopments ? JSON.parse(savedDevelopments) : seedDevelopments);
+      const [leadsRes, devRes] = await Promise.all([
+        fetchActiveLeads(client),
+        fetchDevelopmentsWithUnits(client, { publicOnly: false }),
+      ]);
+      if (cancelled) return;
+
+      if (leadsRes.error) {
+        setLeadsError(leadsRes.error.message);
+        setLeads([]);
+      } else {
+        setLeads(leadsRes.data);
+        if (import.meta.env.DEV && leadsRes.data.length === 0) {
+          void logTableCountHints(client, "leads");
+        }
+      }
+      setLeadsLoading(false);
+
+      if (devRes.error) {
+        toast.error(devRes.error.message);
+        setDevelopments([]);
+      } else {
+        setDevelopments(devRes.data ?? []);
+        if (import.meta.env.DEV && (devRes.data?.length ?? 0) === 0) {
+          void logTableCountHints(client, "developments");
+        }
+      }
+      setDevelopmentsLoading(false);
+
+      if (import.meta.env.DEV) {
+        const host = getSupabaseProjectHost();
+        if (host) {
+          console.info(
+            "[Viterra] Comprueba que este host coincide con tu proyecto en Supabase Dashboard:",
+            host
+          );
+        }
+      }
+    })();
 
     const savedClients = localStorage.getItem(CLIENTS_STORAGE_KEY);
     if (savedClients) {
@@ -257,7 +329,10 @@ export function AdminPage() {
         setClients([]);
       }
     }
-  }, [navigate, isAuthenticated]);
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate, isAuthenticated, authReady]);
 
   useEffect(() => {
     document.body.classList.add("admin-crm-montserrat");
@@ -265,24 +340,6 @@ export function AdminPage() {
       document.body.classList.remove("admin-crm-montserrat");
     };
   }, []);
-
-  useEffect(() => {
-    if (leads.length > 0) {
-      localStorage.setItem("viterra_leads", JSON.stringify(leads));
-    }
-  }, [leads]);
-
-  useEffect(() => {
-    if (properties.length > 0) {
-      localStorage.setItem("viterra_properties", JSON.stringify(properties));
-    }
-  }, [properties]);
-
-  useEffect(() => {
-    if (developments.length > 0) {
-      localStorage.setItem("viterra_admin_developments", JSON.stringify(developments));
-    }
-  }, [developments]);
 
   useEffect(() => {
     localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(clients));
@@ -339,7 +396,7 @@ export function AdminPage() {
   );
 
   const allStageIds = useMemo(
-    () => [...BUILTIN_STATUS_ORDER, ...customKanbanStages.map((s) => s.id)],
+    () => [...customKanbanStages.map((s) => s.id)],
     [customKanbanStages]
   );
 
@@ -376,25 +433,63 @@ export function AdminPage() {
     setDeletePropertyId(id);
   };
 
-  const executeDeleteProperty = useCallback(() => {
+  const executeDeleteProperty = useCallback(async () => {
     if (!deletePropertyId) return;
-    setProperties((prev) => prev.filter((p) => p.id !== deletePropertyId));
+    const client = getSupabaseClient();
+    if (client) {
+      const { error: delErr } = await softDeleteProperty(client, deletePropertyId);
+      if (delErr) {
+        toast.error(delErr.message);
+        return;
+      }
+    }
+    await reloadProperties();
     setPropertyForm((f) => (f?.property?.id === deletePropertyId ? null : f));
     setDeletePropertyId(null);
-  }, [deletePropertyId]);
+  }, [deletePropertyId, reloadProperties]);
 
-  const handleDeleteLead = (id: string) => {
-    if (window.confirm("¿Estás seguro de eliminar este lead?")) {
-      setLeads((prev) => prev.filter((l) => l.id !== id));
-      setLeadDialog((d) => (d?.lead.id === id ? null : d));
+  const handleDeleteLead = useCallback(async (id: string) => {
+    const client = getSupabaseClient();
+    if (client) {
+      const { error: delLeadErr } = await softDeleteLead(client, id);
+      if (delLeadErr) {
+        toast.error(delLeadErr.message);
+        return;
+      }
     }
-  };
+    setLeads((prev) => prev.filter((l) => l.id !== id));
+    setLeadDialog((d) => (d?.lead.id === id ? null : d));
+  }, []);
 
-  const handleDeleteDevelopment = useCallback((id: string) => {
+  const handleDeleteDevelopment = useCallback(async (id: string) => {
+    const client = getSupabaseClient();
+    if (client) {
+      const { error } = await softDeleteDevelopment(client, id);
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      const { data, error: fetchErr } = await fetchDevelopmentsWithUnits(client, { publicOnly: false });
+      if (fetchErr) toast.error(fetchErr.message);
+      else setDevelopments(data ?? []);
+      return;
+    }
     setDevelopments((prev) => prev.filter((row) => row.id !== id));
   }, []);
 
-  const handleSaveDevelopment = useCallback((payload: Development) => {
+  const handleSaveDevelopment = useCallback(async (payload: Development) => {
+    const client = getSupabaseClient();
+    if (client) {
+      const res = await upsertDevelopment(client, payload);
+      if (res.error) {
+        toast.error(res.error.message);
+        return;
+      }
+      const { data, error: fetchErr } = await fetchDevelopmentsWithUnits(client, { publicOnly: false });
+      if (fetchErr) toast.error(fetchErr.message);
+      else setDevelopments(data ?? []);
+      return;
+    }
     setDevelopments((prev) => {
       const exists = prev.some((row) => row.id === payload.id);
       return exists ? prev.map((row) => (row.id === payload.id ? payload : row)) : [...prev, payload];
@@ -405,7 +500,7 @@ export function AdminPage() {
     () =>
       pipelineStageOrder.length > 0
         ? pipelineStageOrder
-        : [...BUILTIN_STATUS_ORDER, ...customKanbanStages.map((s) => s.id)],
+        : [...customKanbanStages.map((s) => s.id)],
     [pipelineStageOrder, customKanbanStages]
   );
 
@@ -420,6 +515,8 @@ export function AdminPage() {
       }),
     [leadColumnStatuses, customKanbanStages]
   );
+
+  const defaultLeadStageId = leadColumnStatuses[0] ?? null;
 
   const effectiveStageColors = useMemo(() => {
     const out: Record<string, string> = {};
@@ -444,36 +541,45 @@ export function AdminPage() {
     [customKanbanStages]
   );
 
-  const handleUpdateLeadStatus = useCallback((leadId: string, newStatus: string) => {
-    const updatedAt = new Date().toISOString();
-    setLeads((prev) =>
-      prev.map((lead) => {
-        if (lead.id !== leadId) return lead;
-        if (lead.status === newStatus) return lead;
-        const prevLabel = resolveStatusLabel(lead.status);
-        const nextLabel = resolveStatusLabel(newStatus);
-        return {
-          ...lead,
-          status: newStatus,
-          updatedAt,
-          activity: [
-            {
-              id: newLeadActivityId(),
-              type: "status_change",
-              createdAt: updatedAt,
-              description: `Se movió de ${prevLabel} a ${nextLabel}`,
-            },
-            ...(lead.activity ?? []),
-          ],
-        };
-      })
-    );
-    setLeadDialog((d) =>
-      d && d.lead.id === leadId
-        ? { ...d, lead: { ...d.lead, status: newStatus, updatedAt } }
-        : d
-    );
-  }, [resolveStatusLabel]);
+  const handleUpdateLeadStatus = useCallback(
+    async (leadId: string, newStatus: string) => {
+      const lead = leads.find((l) => l.id === leadId);
+      if (!lead || lead.status === newStatus) return;
+
+      const updatedAt = new Date().toISOString();
+      const prevLabel = resolveStatusLabel(lead.status);
+      const nextLabel = resolveStatusLabel(newStatus);
+      const nextLead: Lead = {
+        ...lead,
+        status: newStatus,
+        updatedAt,
+        activity: [
+          {
+            id: newLeadActivityId(),
+            type: "status_change",
+            createdAt: updatedAt,
+            description: `Se movió de ${prevLabel} a ${nextLabel}`,
+          },
+          ...(lead.activity ?? []),
+        ],
+      };
+
+      const client = getSupabaseClient();
+      if (client) {
+        const { error: updErr } = await updateLead(client, nextLead);
+        if (updErr) {
+          toast.error(updErr.message);
+          return;
+        }
+      }
+
+      setLeads((prev) => prev.map((l) => (l.id === leadId ? nextLead : l)));
+      setLeadDialog((d) =>
+        d && d.lead.id === leadId ? { ...d, lead: nextLead } : d
+      );
+    },
+    [leads, resolveStatusLabel]
+  );
 
   const handleAddKanbanStage = useCallback(
     (label: string) => {
@@ -515,40 +621,64 @@ export function AdminPage() {
     (stageId: string, stageLabel: string) => {
       const updatedAt = new Date().toISOString();
       const gid = activePipelineGroupId;
+      let fallbackStageId = "";
       setPipelineByGroup((map) => {
         const cur = map[gid] ?? createEmptyGroupPipelineSnapshot();
         const nextColors = { ...cur.stageColors };
         if (Object.prototype.hasOwnProperty.call(nextColors, stageId)) delete nextColors[stageId];
+        const nextStageOrder = cur.stageOrder.filter((id) => id !== stageId);
+        fallbackStageId = nextStageOrder[0] ?? "";
         return {
           ...map,
           [gid]: {
             ...cur,
             customStages: cur.customStages.filter((item) => item.id !== stageId),
-            stageOrder: cur.stageOrder.filter((id) => id !== stageId),
+            stageOrder: nextStageOrder,
             stageColors: nextColors,
           },
         };
       });
-      setLeads((prev) =>
-        prev.map((lead) =>
+      setLeads((prev) => {
+        const next = prev.map((lead) =>
           lead.status !== stageId || lead.pipelineGroupId !== gid
             ? lead
             : {
                 ...lead,
-                status: "nuevo",
+                status: fallbackStageId,
                 updatedAt,
                 activity: [
                   {
                     id: newLeadActivityId(),
-                    type: "status_change",
+                    type: "status_change" as const,
                     createdAt: updatedAt,
-                    description: `La columna ${stageLabel} se eliminó y el lead volvió a Nuevo`,
+                    description: fallbackStageId
+                      ? `La columna ${stageLabel} se eliminó y el lead se movió a ${resolveStatusLabel(fallbackStageId)}`
+                      : `La columna ${stageLabel} se eliminó y el lead quedó sin columna asignada`,
                   },
                   ...(lead.activity ?? []),
                 ],
               }
-        )
-      );
+        );
+
+        const client = getSupabaseClient();
+        if (client) {
+          const toSave = next.filter((lead) => {
+            const old = prev.find((x) => x.id === lead.id);
+            return (
+              !!old &&
+              old.status === stageId &&
+              lead.status === fallbackStageId &&
+              lead.pipelineGroupId === gid
+            );
+          });
+          void Promise.all(toSave.map((l) => updateLead(client, l))).then((responses) => {
+            const e = responses.find((r) => r.error)?.error;
+            if (e) toast.error(e.message);
+          });
+        }
+
+        return next;
+      });
       setLeadDialog((current) =>
         current &&
         current.lead.status === stageId &&
@@ -557,14 +687,14 @@ export function AdminPage() {
               ...current,
               lead: {
                 ...current.lead,
-                status: "nuevo",
+                status: fallbackStageId,
                 updatedAt,
               },
             }
           : current
       );
     },
-    [activePipelineGroupId]
+    [activePipelineGroupId, resolveStatusLabel]
   );
 
   const requestDeletePipelineStage = useCallback((stageId: string, label: string) => {
@@ -601,66 +731,89 @@ export function AdminPage() {
     [activePipelineGroupId, allStageIds]
   );
 
-  const handleAddLead = useCallback((lead: Lead) => {
+  const handleAddLead = useCallback(async (lead: Lead) => {
     const createdAt = new Date().toISOString();
-    setLeads((prev) => [
-      ...prev,
-      {
-        ...lead,
-        activity:
-          lead.activity && lead.activity.length > 0
-            ? lead.activity
-            : [
-                {
-                  id: newLeadActivityId(),
-                  type: "created",
-                  createdAt,
-                  description: "Lead creado",
-                },
-              ],
-      },
-    ]);
+    const withActivity: Lead = {
+      ...lead,
+      activity:
+        lead.activity && lead.activity.length > 0
+          ? lead.activity
+          : [
+              {
+                id: newLeadActivityId(),
+                type: "created",
+                createdAt,
+                description: "Lead creado",
+              },
+            ],
+    };
+
+    const client = getSupabaseClient();
+    if (client) {
+      const { error: insLeadErr } = await insertLead(client, withActivity);
+      if (insLeadErr) {
+        toast.error(insLeadErr.message);
+        return;
+      }
+    }
+    setLeads((prev) => [...prev, withActivity]);
   }, []);
 
-  const handleSaveLead = useCallback((updated: Lead) => {
-    setLeads((prev) =>
-      prev.map((l) => {
-        if (l.id !== updated.id) return l;
-        const baseActivity = updated.activity ?? l.activity ?? [];
-        const hasNewActivity = baseActivity.length > (l.activity ?? []).length;
-        return {
-          ...updated,
-          activity: hasNewActivity
-            ? baseActivity
-            : [
-                {
-                  id: newLeadActivityId(),
-                  type: "updated",
-                  createdAt: new Date().toISOString(),
-                  description: "Se actualizaron los datos del lead",
-                },
-                ...baseActivity,
-              ],
-        };
-      })
-    );
-    setLeadDialog((d) =>
-      d && d.lead.id === updated.id ? { ...d, lead: updated } : d
-    );
-  }, []);
-
-  const nextPropertyId = useMemo(
-    () => String(Math.max(0, ...properties.map((p) => parseInt(p.id, 10) || 0)) + 1),
-    [properties]
-  );
-
-  const handleSaveProperty = useCallback((p: Property) => {
-    setProperties((prev) => {
-      const exists = prev.some((x) => x.id === p.id);
-      if (exists) return prev.map((x) => (x.id === p.id ? p : x));
-      return [...prev, p];
+  const handleSaveLead = useCallback(async (updated: Lead) => {
+    let merged: Lead | null = null;
+    setLeads((prev) => {
+      const l = prev.find((x) => x.id === updated.id);
+      if (!l) return prev;
+      const baseActivity = updated.activity ?? l.activity ?? [];
+      const hasNewActivity = baseActivity.length > (l.activity ?? []).length;
+      merged = {
+        ...updated,
+        activity: hasNewActivity
+          ? baseActivity
+          : [
+              {
+                id: newLeadActivityId(),
+                type: "updated",
+                createdAt: new Date().toISOString(),
+                description: "Se actualizaron los datos del lead",
+              },
+              ...baseActivity,
+            ],
+      };
+      return prev.map((row) => (row.id === updated.id ? merged! : row));
     });
+    if (!merged) return;
+
+    const client = getSupabaseClient();
+    if (client) {
+      const { error: saveLeadErr } = await updateLead(client, merged);
+      if (saveLeadErr) {
+        toast.error(saveLeadErr.message);
+        return;
+      }
+    }
+    setLeadDialog((d) =>
+      d && d.lead.id === updated.id ? { ...d, lead: merged } : d
+    );
   }, []);
+
+  const handleSaveProperty = useCallback(
+    async (p: Property) => {
+      const client = getSupabaseClient();
+      if (!client) {
+        toast.error("Supabase no configurado.");
+        return;
+      }
+      const exists = properties.some((x) => x.id === p.id);
+      const propRes = exists ? await updateProperty(client, p) : await insertProperty(client, p, p.id);
+      if (propRes.error) {
+        toast.error(propRes.error.message);
+        return;
+      }
+      await reloadProperties();
+    },
+    [properties, reloadProperties]
+  );
 
   const leadsForUser = useMemo(() => filterLeadsForUser(leads, user), [leads, user]);
 
@@ -740,27 +893,117 @@ export function AdminPage() {
     return matchesSearch && matchesStatus;
   });
 
+  const normalizeStageToken = useCallback((value: string) => {
+    return value
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[\s-]+/g, "_")
+      .replace(/_+/g, "_");
+  }, []);
+
+  const stageAliasToConfiguredId = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const id of leadColumnStatuses) {
+      out.set(normalizeStageToken(id), id);
+    }
+    for (const stage of customKanbanStages) {
+      out.set(normalizeStageToken(stage.label), stage.id);
+    }
+    return out;
+  }, [leadColumnStatuses, customKanbanStages, normalizeStageToken]);
+
+  const filteredLeadsForBoard = useMemo(
+    () =>
+      filteredLeads.map((lead) => {
+        if (leadColumnStatuses.includes(lead.status)) return lead;
+        const mapped = stageAliasToConfiguredId.get(normalizeStageToken(lead.status));
+        return mapped && mapped !== lead.status ? { ...lead, status: mapped } : lead;
+      }),
+    [filteredLeads, leadColumnStatuses, stageAliasToConfiguredId, normalizeStageToken]
+  );
+
+  useEffect(() => {
+    if (leadColumnStatuses.length === 0) return;
+    const client = getSupabaseClient();
+    if (!client) return;
+
+    const toMigrate = leadsInActivePipeline
+      .map((lead) => {
+        if (!lead.status || leadColumnStatuses.includes(lead.status)) return null;
+        const mapped = stageAliasToConfiguredId.get(normalizeStageToken(lead.status));
+        if (!mapped || mapped === lead.status) return null;
+        return { lead, mapped };
+      })
+      .filter((x): x is { lead: Lead; mapped: string } => x !== null);
+
+    if (toMigrate.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      const responses = await Promise.all(
+        toMigrate.map(async ({ lead, mapped }) => {
+          const next: Lead = { ...lead, status: mapped, updatedAt: new Date().toISOString() };
+          const { error } = await updateLead(client, next);
+          return { id: lead.id, mapped, error };
+        })
+      );
+      if (cancelled) return;
+
+      const ok = responses.filter((r) => !r.error);
+      const failed = responses.filter((r) => !!r.error);
+
+      if (ok.length > 0) {
+        const map = new Map(ok.map((r) => [r.id, r.mapped]));
+        setLeads((prev) =>
+          prev.map((lead) => {
+            const mapped = map.get(lead.id);
+            return mapped ? { ...lead, status: mapped } : lead;
+          })
+        );
+        if (import.meta.env.DEV) {
+          console.info(`[Viterra] Estados legacy migrados en DB: ${ok.length}`);
+        }
+      }
+      if (failed.length > 0) {
+        toast.error("No se pudieron normalizar algunos estados legacy del pipeline.");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    leadsInActivePipeline,
+    leadColumnStatuses,
+    stageAliasToConfiguredId,
+    normalizeStageToken,
+  ]);
+
+  const leadStatusesForRendering = useMemo(() => {
+    const seen = new Set(leadColumnStatuses);
+    const extraIds = [...new Set(filteredLeadsForBoard.map((l) => l.status))]
+      .filter((id) => !!id && !seen.has(id))
+      .sort();
+    return [...leadColumnStatuses, ...extraIds];
+  }, [leadColumnStatuses, filteredLeadsForBoard]);
+
   /** Vista tabla: grupos por estado (orden del pipeline), sin columnas fijas que fuercen scroll horizontal */
   const leadsTableGroupedByStatus = useMemo(() => {
     const byStatus = new Map<string, Lead[]>();
-    for (const lead of filteredLeads) {
+    for (const lead of filteredLeadsForBoard) {
       const list = byStatus.get(lead.status) ?? [];
       list.push(lead);
       byStatus.set(lead.status, list);
     }
     const sections: { statusId: string; label: string; leads: Lead[] }[] = [];
-    for (const id of leadColumnStatuses) {
-      const list = byStatus.get(id);
-      if (list?.length) sections.push({ statusId: id, label: resolveStatusLabel(id), leads: list });
-    }
-    const seen = new Set(leadColumnStatuses);
-    const extraIds = [...new Set(filteredLeads.map((l) => l.status))].filter((id) => !seen.has(id)).sort();
-    for (const id of extraIds) {
+    for (const id of leadStatusesForRendering) {
       const list = byStatus.get(id);
       if (list?.length) sections.push({ statusId: id, label: resolveStatusLabel(id), leads: list });
     }
     return sections;
-  }, [filteredLeads, leadColumnStatuses, resolveStatusLabel]);
+  }, [filteredLeadsForBoard, leadStatusesForRendering, resolveStatusLabel]);
 
   const toggleLeadsTableSection = useCallback((statusId: string) => {
     setLeadsTableSectionCollapsed((prev) => ({ ...prev, [statusId]: !prev[statusId] }));
@@ -825,10 +1068,6 @@ export function AdminPage() {
   const conversionRate = totalLeads > 0 ? ((closedDeals / totalLeads) * 100).toFixed(1) : "0";
   const totalValue = properties.reduce((sum, p) => sum + p.price, 0);
   const avgPropertyPrice = properties.length > 0 ? (totalValue / properties.length).toFixed(0) : "0";
-
-  if (!user) {
-    return null;
-  }
 
   const adminNavigationRoutes = useMemo(
     () => [
@@ -1005,6 +1244,10 @@ export function AdminPage() {
     setDashboardRouteSearchOpen(false);
   };
 
+  if (!user) {
+    return null;
+  }
+
   return (
     <div className="viterra-page viterra-crm min-h-screen bg-gradient-to-b from-[#f7f5f2] via-slate-50 to-slate-100">
       <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-[14.5rem] lg:flex-col lg:border-r lg:border-brand-gold/20 lg:bg-brand-navy lg:text-white">
@@ -1132,7 +1375,7 @@ export function AdminPage() {
 
       <div
         data-reveal
-        className={`px-4 pb-4 sm:px-6 lg:pl-[16.5rem] lg:pr-8 ${activeTab !== "dashboard" ? "pt-4 sm:pt-4" : ""}`}
+        className={`viterra-reveal-off px-4 pb-4 sm:px-6 lg:pl-[16.5rem] lg:pr-8 ${activeTab !== "dashboard" ? "pt-4 sm:pt-4" : ""}`}
         style={
           activeTab === "dashboard"
             ? {
@@ -1590,22 +1833,6 @@ export function AdminPage() {
                       </button>
                     </div>
 
-                    {canConfigureActivePipeline && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const name = window.prompt("Nombre de la nueva etapa del embudo");
-                          if (name?.trim()) handleAddKanbanStage(name.trim());
-                        }}
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200/90 bg-white px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-brand-navy shadow-sm transition-all hover:border-brand-navy/25 hover:bg-slate-50 sm:flex-initial sm:text-[13px]"
-                        style={{ fontWeight: 600 }}
-                        title="Solo el administrador o el líder del grupo pueden añadir columnas"
-                      >
-                        <Plus className="h-4 w-4 shrink-0" strokeWidth={2} />
-                        Nueva etapa
-                      </button>
-                    )}
-
                     <button
                       type="button"
                       onClick={() => setAddLeadOpen(true)}
@@ -1693,18 +1920,72 @@ export function AdminPage() {
               user={user}
               customKanbanStages={customKanbanStages}
               pipelineGroupId={activePipelineGroupId}
+          defaultStageId={defaultLeadStageId}
             />
 
+            {leadsError && (
+              <div
+                className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+                style={{ fontWeight: 500 }}
+                role="alert"
+              >
+                {leadsError}
+              </div>
+            )}
+
+            {!leadsLoading && leadColumnStatuses.length === 0 && (
+              <div
+                className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                style={{ fontWeight: 500 }}
+                role="status"
+              >
+                Este pipeline no tiene columnas todavía. Crea la primera en <code className="text-xs">Mi empresa → Pipeline de ventas</code>.
+              </div>
+            )}
+
+            {!leadsLoading &&
+              user &&
+              !canViewAllLeads(user.role) &&
+              leads.length > 0 &&
+              leadsForUser.length === 0 && (
+                <div
+                  className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                  style={{ fontWeight: 500 }}
+                  role="status"
+                >
+                  Hay {leads.length} lead{leads.length === 1 ? "" : "s"} en el sistema, pero ninguno está asignado a tu
+                  usuario ({roleLabelEs(user.role)}). Pide a un administrador que asigne{" "}
+                  <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">assigned_to_user_id</code> a tu id de
+                  sesión, o configura en Supabase el metadata{" "}
+                  <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">role: &quot;admin&quot;</code> para ver
+                  todos.
+                </div>
+              )}
+
+            {!leadsLoading && leads.length === 0 && (
+              <div
+                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+                style={{ fontWeight: 500 }}
+              >
+                No hay leads en la base de datos (tabla <code className="text-xs">leads</code>). Si esperabas datos de
+                Tokko, revisa el sync; si es entorno nuevo, crea un lead desde aquí.
+              </div>
+            )}
+
+            {leadsLoading ? (
+              <div className="rounded-2xl border border-slate-200/80 bg-white/95 px-6 py-16 text-center text-slate-600 shadow-sm">
+                Cargando leads…
+              </div>
+            ) : (
+              <>
             {leadsView === "kanban" && (
               <LeadsKanbanBoard
-                leads={filteredLeads}
-                columnStatuses={leadColumnStatuses}
+                leads={filteredLeadsForBoard}
+                columnStatuses={leadStatusesForRendering}
                 columnHexByStatus={effectiveStageColors}
                 statusLabel={resolveStatusLabel}
                 onStatusChange={handleUpdateLeadStatus}
                 onLeadOpen={(l) => openLeadDetail(l, "view")}
-                canAddStage={canConfigureActivePipeline}
-                onAddStage={handleAddKanbanStage}
               />
             )}
 
@@ -1814,7 +2095,11 @@ export function AdminPage() {
                                       </button>
                                       <button
                                         type="button"
-                                        onClick={() => handleDeleteLead(lead.id)}
+                                        onClick={() => {
+                                          if (window.confirm("¿Eliminar este lead?")) {
+                                            void handleDeleteLead(lead.id);
+                                          }
+                                        }}
                                         className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
                                         title="Eliminar"
                                       >
@@ -1892,7 +2177,11 @@ export function AdminPage() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleDeleteLead(lead.id)}
+                                    onClick={() => {
+                                          if (window.confirm("¿Eliminar este lead?")) {
+                                            void handleDeleteLead(lead.id);
+                                          }
+                                        }}
                                     className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
                                     title="Eliminar"
                                   >
@@ -1912,6 +2201,8 @@ export function AdminPage() {
                 </div>
               )}
             </div>
+            )}
+              </>
             )}
           </div>
         )}
@@ -1998,7 +2289,10 @@ export function AdminPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setPropertyForm({ mode: "create", property: null })}
+                    onClick={() => {
+                      setNewPropertyDraftId(crypto.randomUUID());
+                      setPropertyForm({ mode: "create", property: null });
+                    }}
                     className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#C8102E] px-5 py-2.5 font-medium text-white transition-all hover:bg-[#a00d25] sm:w-auto"
                     style={{ fontWeight: 600 }}
                   >
@@ -2406,7 +2700,10 @@ export function AdminPage() {
                   {properties.length === 0 && (
                     <button
                       type="button"
-                      onClick={() => setPropertyForm({ mode: "create", property: null })}
+                      onClick={() => {
+                      setNewPropertyDraftId(crypto.randomUUID());
+                      setPropertyForm({ mode: "create", property: null });
+                    }}
                       className="inline-flex items-center gap-2 rounded-lg bg-[#C8102E] px-6 py-2.5 font-medium text-white transition-all hover:bg-[#a00d25]"
                       style={{ fontWeight: 600 }}
                     >
@@ -2420,13 +2717,18 @@ export function AdminPage() {
           </div>
         )}
 
-        {activeTab === "developments" && (
-          <AdminDevelopmentsManager
-            developments={developments}
-            onSave={handleSaveDevelopment}
-            onDelete={handleDeleteDevelopment}
-          />
-        )}
+        {activeTab === "developments" &&
+          (developmentsLoading ? (
+            <div className="py-16 text-center text-slate-600" style={{ fontWeight: 500 }}>
+              Cargando desarrollos…
+            </div>
+          ) : (
+            <AdminDevelopmentsManager
+              developments={developments}
+              onSave={handleSaveDevelopment}
+              onDelete={handleDeleteDevelopment}
+            />
+          ))}
 
         {activeTab === "company" && (
           <div className="space-y-5">
@@ -2646,7 +2948,7 @@ export function AdminPage() {
                         style={{ fontWeight: 600 }}
                       >
                         <Plus className="h-4 w-4" strokeWidth={2} />
-                        Agregar estado
+                        Agregar columna
                       </button>
                     </div>
                   </div>
@@ -2661,7 +2963,7 @@ export function AdminPage() {
                     <div>
                       <h4 className="text-base text-brand-navy" style={{ fontWeight: 600 }}>Orden de columnas del pipeline</h4>
                       <p className="mt-1 text-sm text-slate-500">
-                        Arrastra cada fila para ordenar las columnas del Kanban (estados del sistema y personalizados). Usa el selector de color para el acento de cada columna en el tablero y la vista lista.
+                        Arrastra cada fila para ordenar las columnas del Kanban. Usa el selector de color para el acento de cada columna en el tablero y la vista lista.
                       </p>
                     </div>
 
@@ -2669,8 +2971,8 @@ export function AdminPage() {
                     <div className="mt-4 space-y-3">
                       {leadColumnStatuses.map((stageId, index) => {
                         const customStage = customKanbanStages.find((stage) => stage.id === stageId);
-                        const isBuiltin = Object.prototype.hasOwnProperty.call(LEAD_STATUS_LABEL, stageId);
-                        const stageLabel = isBuiltin
+                        const stageLabel =
+                          Object.prototype.hasOwnProperty.call(LEAD_STATUS_LABEL, stageId)
                           ? LEAD_STATUS_LABEL[stageId as keyof typeof LEAD_STATUS_LABEL]
                           : customStage?.label ?? stageId;
                         const isEditing = editingStageId === stageId;
@@ -2715,12 +3017,8 @@ export function AdminPage() {
                                       <p className="text-sm text-brand-navy" style={{ fontWeight: 600 }}>
                                         {stageLabel}
                                       </p>
-                                      <span
-                                        className={`rounded-full px-2.5 py-0.5 text-[11px] uppercase tracking-[0.08em] ${
-                                          isBuiltin ? "bg-slate-100 text-slate-600" : "bg-primary/10 text-primary"
-                                        }`}
-                                      >
-                                        {isBuiltin ? "Sistema" : "Personalizado"}
+                                      <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] uppercase tracking-[0.08em] text-primary">
+                                        Columna
                                       </span>
                                     </div>
                                     <p className="mt-1 text-xs text-slate-500">
@@ -2788,33 +3086,29 @@ export function AdminPage() {
                                   </>
                                 ) : (
                                   <>
-                                    {!isBuiltin && (
-                                      <>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setEditingStageId(stageId);
-                                            setStageDraftLabel(stageLabel);
-                                          }}
-                                          disabled={!canConfigureActivePipeline}
-                                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                          style={{ fontWeight: 600 }}
-                                        >
-                                          <Edit className="h-3.5 w-3.5" strokeWidth={1.8} />
-                                          Editar
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => requestDeletePipelineStage(stageId, stageLabel)}
-                                          disabled={!canConfigureActivePipeline}
-                                          className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                          style={{ fontWeight: 600 }}
-                                        >
-                                          <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} />
-                                          Eliminar
-                                        </button>
-                                      </>
-                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingStageId(stageId);
+                                        setStageDraftLabel(stageLabel);
+                                      }}
+                                      disabled={!canConfigureActivePipeline}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                      style={{ fontWeight: 600 }}
+                                    >
+                                      <Edit className="h-3.5 w-3.5" strokeWidth={1.8} />
+                                      Editar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => requestDeletePipelineStage(stageId, stageLabel)}
+                                      disabled={!canConfigureActivePipeline}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                      style={{ fontWeight: 600 }}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} />
+                                      Eliminar
+                                    </button>
                                   </>
                                 )}
                               </div>
@@ -2867,7 +3161,7 @@ export function AdminPage() {
         )}
 
         <LeadDetailDialog
-          open={!!leadDialog}
+          open={!!leadDialog && activeTab === "leads"}
           onOpenChange={(o) => {
             if (!o) setLeadDialog(null);
           }}
@@ -2885,7 +3179,7 @@ export function AdminPage() {
         />
 
         <AlertDialog
-          open={!!deletePipelineStage}
+          open={!!deletePipelineStage && activeTab === "leads"}
           onOpenChange={(open) => {
             if (!open) setDeletePipelineStage(null);
           }}
@@ -2906,7 +3200,8 @@ export function AdminPage() {
                 <AlertDialogDescription className="text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
                   Vas a eliminar la columna{" "}
                   <span className="font-semibold text-brand-navy">«{deletePipelineStage?.label}»</span>. Los leads que
-                  estén en esta etapa volverán al estado <span className="font-semibold text-brand-navy">Nuevo</span>.
+                  estén en esta etapa se moverán a la primera columna disponible (si no hay otra, quedarán sin columna
+                  asignada).
                 </AlertDialogDescription>
               </AlertDialogHeader>
             </div>
@@ -2931,7 +3226,7 @@ export function AdminPage() {
         </AlertDialog>
 
         <AlertDialog
-          open={!!deletePropertyId}
+          open={!!deletePropertyId && activeTab === "properties"}
           onOpenChange={(open) => {
             if (!open) setDeletePropertyId(null);
           }}
@@ -2985,13 +3280,13 @@ export function AdminPage() {
               ? `${propertyForm.mode}-${propertyForm.property?.id ?? "new"}`
               : "closed"
           }
-          open={!!propertyForm}
+          open={!!propertyForm && activeTab === "properties"}
           onOpenChange={(o) => {
             if (!o) setPropertyForm(null);
           }}
           mode={propertyForm?.mode ?? "create"}
           property={propertyForm?.mode === "edit" ? propertyForm.property : null}
-          newId={nextPropertyId}
+          newId={newPropertyDraftId}
           onSave={handleSaveProperty}
         />
       </div>

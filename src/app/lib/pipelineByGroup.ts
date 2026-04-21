@@ -1,6 +1,5 @@
 import type { User } from "../contexts/AuthContext";
 import {
-  BUILTIN_STATUS_ORDER,
   type CustomKanbanStage,
 } from "../data/leads";
 import type { UserGroup } from "./userGroups";
@@ -18,7 +17,7 @@ export type GroupPipelineSnapshot = {
 export function createEmptyGroupPipelineSnapshot(): GroupPipelineSnapshot {
   return {
     customStages: [],
-    stageOrder: [...BUILTIN_STATUS_ORDER],
+    stageOrder: [],
     stageColors: {},
   };
 }
@@ -51,7 +50,7 @@ function parseSnapshot(raw: unknown): GroupPipelineSnapshot {
     o.stageColors && typeof o.stageColors === "object" && !Array.isArray(o.stageColors)
       ? (o.stageColors as Record<string, string>)
       : {};
-  const allIds = [...BUILTIN_STATUS_ORDER, ...customStages.map((s) => s.id)];
+  const allIds = [...customStages.map((s) => s.id)];
   const normOrder = stageOrder.length > 0 ? normalizeStageOrder(stageOrder, allIds) : [...allIds];
   return { customStages, stageOrder: normOrder, stageColors };
 }
@@ -83,11 +82,11 @@ export function migrateLegacyPipelineSnapshot(): GroupPipelineSnapshot | null {
     ) {
       return null;
     }
-    const allIds = [...BUILTIN_STATUS_ORDER, ...customStages.map((s) => s.id)];
+    const allIds = [...customStages.map((s) => s.id)];
     const normalizedOrder =
       stageOrder.length > 0
         ? normalizeStageOrder(stageOrder, allIds)
-        : [...BUILTIN_STATUS_ORDER, ...customStages.map((s) => s.id)];
+        : [...customStages.map((s) => s.id)];
     return { customStages, stageOrder: normalizedOrder, stageColors };
   } catch {
     return null;

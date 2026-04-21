@@ -1,4 +1,7 @@
-import { createContext, useContext, useMemo, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { getSupabaseClient } from "../lib/supabaseClient";
+import { fetchAllTokkoUsersForDirectory, fetchTokkoUserRow } from "../lib/supabaseTokkoUsers";
 
 export type UserRole = "admin" | "lider_grupo" | "asesor";
 export type UserPermission =
@@ -57,8 +60,10 @@ interface UpdateUserInput {
 interface AuthContextType {
   user: User | null;
   users: User[];
-  login: (email: string, password: string) => boolean;
-  logout: () => void;
+  /** `true` tras resolver la sesión de Supabase (o si no hay cliente). Evita redirigir a login antes de restaurar sesión. */
+  authReady: boolean;
+  login: (email: string, password: string) => Promise<{ ok: boolean; message?: string }>;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
   isAdmin: boolean;
   createUser: (input: CreateUserInput, actorName?: string) => { ok: boolean; message?: string };
@@ -86,12 +91,6 @@ const defaultPermissionsByRole: Record<UserRole, UserPermission[]> = {
   lider_grupo: ["manage_leads", "manage_properties", "manage_developments", "manage_clients"],
   asesor: ["manage_leads", "manage_clients"],
 };
-
-const baseSeedUsers: Array<{ email: string; password: string; user: Omit<User, "permissions" | "profile" | "isActive" | "createdAt" | "updatedAt" | "history"> & Partial<User> }> = [
-  { email: "admin@viterra.com", password: "admin123", user: { id: "1", email: "admin@viterra.com", name: "Admin Viterra", role: "admin" } },
-  { email: "lider@viterra.com", password: "lider123", user: { id: "2", email: "lider@viterra.com", name: "Patricia López", role: "lider_grupo" } },
-  { email: "asesor@viterra.com", password: "asesor123", user: { id: "3", email: "asesor@viterra.com", name: "Laura Méndez", role: "asesor" } },
-];
 
 const newHistoryEntry = (
   type: UserHistoryEntry["type"],
@@ -148,61 +147,259 @@ const normalizeUser = (raw: Partial<User>): User => {
   };
 };
 
-const seedUsers = (): User[] =>
-  baseSeedUsers.map(({ user }) => {
-    const normalized = normalizeUser(user);
-    return {
-      ...normalized,
-      profile: {
-        ...normalized.profile,
-        workHistory:
-          normalized.id === "1"
-            ? ["Director Comercial (2019-Actualidad)", "Gerente de Ventas (2016-2019)"]
-            : normalized.id === "2"
-              ? ["Líder Regional (2021-Actualidad)", "Asesor Senior (2018-2021)"]
-              : ["Asesora Inmobiliaria (2022-Actualidad)"],
-      },
-      history: [newHistoryEntry("created", "Usuario inicial del sistema", "Sistema")],
-    };
-  });
+/** Rol en `user_metadata` o `app_metadata` (Supabase permite ambos). Sin valor → `asesor` (solo ve leads asignados a su UUID). */
+function roleStringFromAuthUser(su: Session["user"]): string | undefined {
+  const meta = (su.user_metadata ?? {}) as Record<string, unknown>;
+  const app = (su.app_metadata ?? {}) as Record<string, unknown>;
+  const pick = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  return pick(meta.role) ?? pick(app.role);
+}
 
-const seedPasswords = (): Record<string, string> =>
-  baseSeedUsers.reduce<Record<string, string>>((acc, row) => {
-    acc[row.user.id] = row.password;
-    return acc;
-  }, {});
+/** Construye el usuario CRM desde la sesión de Supabase Auth (`user_metadata`: name, full_name, role, permissions, etc.). */
+function sessionToAppUser(session: Session): User {
+  const su = session.user;
+  const meta = (su.user_metadata ?? {}) as Record<string, unknown>;
+  const appMeta = (su.app_metadata ?? {}) as Record<string, unknown>;
+  const email = su.email ?? "";
+  const name =
+    (typeof meta.name === "string" && meta.name) ||
+    (typeof meta.full_name === "string" && meta.full_name) ||
+    email.split("@")[0] ||
+    "Usuario";
+  const role = normalizeRole(roleStringFromAuthUser(su) ?? "asesor");
+  const rawPerms = meta.permissions ?? appMeta.permissions;
+  const hasCustomPerms =
+    Array.isArray(rawPerms) &&
+    rawPerms.some((p) => typeof p === "string" && ALL_PERMISSIONS.includes(p as UserPermission));
+  const permissions: UserPermission[] = hasCustomPerms
+    ? (rawPerms as unknown[]).filter(
+        (p): p is UserPermission => typeof p === "string" && ALL_PERMISSIONS.includes(p as UserPermission)
+      )
+    : [...defaultPermissionsByRole[role]];
+  const now = new Date().toISOString();
+  const createdAt = typeof su.created_at === "string" ? su.created_at : now;
+  return normalizeUser({
+    id: su.id,
+    email,
+    name,
+    role,
+    permissions,
+    profile: {
+      phone: String(meta.phone ?? ""),
+      address: String(meta.address ?? ""),
+      birthDate: String(meta.birth_date ?? meta.birthDate ?? ""),
+      workHistory: Array.isArray(meta.work_history)
+        ? (meta.work_history as string[])
+        : Array.isArray(meta.workHistory)
+          ? (meta.workHistory as string[])
+          : [],
+    },
+    isActive: true,
+    createdAt,
+    updatedAt: now,
+    history: [],
+  });
+}
+
+/** Si existe fila en `tokko_users` (mismo `id` que Supabase Auth), refuerza rol y permisos respecto a `user_metadata`. */
+function mergeTokkoRowIntoUser(base: User, row: Record<string, unknown>): User {
+  const roleRaw =
+    (typeof row.role === "string" && row.role) ||
+    (typeof row.user_role === "string" && row.user_role) ||
+    base.role;
+  const role = normalizeRole(roleRaw);
+
+  const nameFromRow =
+    (typeof row.full_name === "string" && row.full_name.trim()) ||
+    (typeof row.name === "string" && row.name.trim()) ||
+    (typeof row.display_name === "string" && row.display_name.trim()) ||
+    base.name;
+
+  const rawPerms = row.permissions ?? row.app_permissions;
+  const hasCustomPerms =
+    Array.isArray(rawPerms) &&
+    rawPerms.some((p) => typeof p === "string" && ALL_PERMISSIONS.includes(p as UserPermission));
+  const permissions: UserPermission[] = hasCustomPerms
+    ? (rawPerms as unknown[]).filter(
+        (p): p is UserPermission => typeof p === "string" && ALL_PERMISSIONS.includes(p as UserPermission)
+      )
+    : role !== base.role
+      ? [...defaultPermissionsByRole[role]]
+      : base.permissions;
+
+  const phone = typeof row.phone === "string" ? row.phone : base.profile.phone;
+  const address = typeof row.address === "string" ? row.address : base.profile.address;
+  const birthDate =
+    (typeof row.birth_date === "string" && row.birth_date) ||
+    (typeof row.birthdate === "string" && row.birthdate) ||
+    base.profile.birthDate;
+
+  return normalizeUser({
+    ...base,
+    name: nameFromRow,
+    role,
+    permissions,
+    profile: {
+      ...base.profile,
+      phone,
+      address,
+      birthDate,
+    },
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+/** Fila `tokko_users` → usuario del directorio CRM (misma lógica que el refuerzo por sesión). */
+function directoryUserFromTokkoRow(row: Record<string, unknown>): User {
+  const id = String(row.id ?? "");
+  const email = String(row.email ?? "").trim();
+  const base = normalizeUser({
+    id,
+    email,
+    name: email.split("@")[0] || "Usuario",
+    role: "asesor",
+    permissions: [],
+    profile: { phone: "", address: "", birthDate: "", workHistory: [] },
+    isActive: true,
+    createdAt: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(),
+    updatedAt: typeof row.updated_at === "string" ? row.updated_at : new Date().toISOString(),
+    history: [],
+  });
+  const merged = mergeTokkoRowIntoUser(base, row);
+  const isArchived =
+    (row.archived_at != null && String(row.archived_at).trim().length > 0) ||
+    row.is_active === false ||
+    row.is_active === "false";
+  if (isArchived) {
+    return normalizeUser({
+      ...merged,
+      isActive: false,
+      archivedAt:
+        typeof row.archived_at === "string" && row.archived_at.trim()
+          ? row.archived_at
+          : merged.archivedAt,
+    });
+  }
+  return merged;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem(USERS_STORAGE_KEY);
-    if (!saved) return seedUsers();
+    if (!saved) return [];
     try {
       const parsed = JSON.parse(saved) as Partial<User>[];
       return parsed.map(normalizeUser);
     } catch {
-      return seedUsers();
+      return [];
     }
   });
 
   const [passwordByUserId, setPasswordByUserId] = useState<Record<string, string>>(() => {
     const saved = localStorage.getItem(PASSWORDS_STORAGE_KEY);
-    if (!saved) return seedPasswords();
+    if (!saved) return {};
     try {
       return JSON.parse(saved) as Record<string, string>;
     } catch {
-      return seedPasswords();
+      return {};
     }
   });
 
-  const [user, setUser] = useState<User | null>(() => {
-    const savedUser = localStorage.getItem("viterra_user");
-    if (!savedUser) return null;
-    try {
-      return normalizeUser(JSON.parse(savedUser) as Partial<User>);
-    } catch {
-      return null;
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  useEffect(() => {
+    const client = getSupabaseClient();
+    if (!client) {
+      setAuthReady(true);
+      return;
     }
-  });
+
+    const mergeSessionUserIntoDirectory = (appUser: User) => {
+      setUsers((prev) => {
+        const email = appUser.email.toLowerCase();
+        const i = prev.findIndex((u) => u.email.toLowerCase() === email);
+        let next: User[];
+        if (i === -1) {
+          next = [...prev, appUser];
+        } else {
+          next = [...prev];
+          next[i] = {
+            ...prev[i],
+            id: appUser.id,
+            name: appUser.name,
+            email: appUser.email,
+            role: appUser.role,
+            permissions: appUser.permissions,
+            profile: appUser.profile,
+            updatedAt: appUser.updatedAt,
+          };
+        }
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
+    };
+
+    const applySession = async (session: Session | null) => {
+      if (!session?.user) {
+        setUser(null);
+        return;
+      }
+      let appUser = sessionToAppUser(session);
+      const c = getSupabaseClient();
+      if (c) {
+        const { data, error } = await fetchTokkoUserRow(c, session.user.id);
+        if (!error && data) {
+          appUser = mergeTokkoRowIntoUser(appUser, data as Record<string, unknown>);
+        }
+
+        const listRes = await fetchAllTokkoUsersForDirectory(c);
+        if (!listRes.error && Array.isArray(listRes.data)) {
+          const activeRows = (listRes.data as Record<string, unknown>[]).filter((rec) => {
+            const del = rec.deleted_at;
+            return del == null || String(del).trim() === "";
+          });
+
+          let merged: User[];
+          if (activeRows.length === 0) {
+            merged = [appUser];
+          } else {
+            const directory = activeRows.map((rec) => directoryUserFromTokkoRow(rec));
+            const byId = new Map(directory.map((u) => [u.id, u]));
+            byId.set(appUser.id, appUser);
+            merged = Array.from(byId.values()).sort((a, b) =>
+              a.name.localeCompare(b.name, "es", { sensitivity: "base" })
+            );
+          }
+          setUsers(merged);
+          localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(merged));
+        } else {
+          if (import.meta.env.DEV && listRes.error) {
+            console.warn("[Viterra] No se pudo listar tokko_users (equipo):", listRes.error.message);
+          }
+          mergeSessionUserIntoDirectory(appUser);
+        }
+      } else {
+        mergeSessionUserIntoDirectory(appUser);
+      }
+      setUser(appUser);
+    };
+
+    void client.auth
+      .getSession()
+      .then(({ data: { session } }) => applySession(session))
+      .finally(() => {
+        setAuthReady(true);
+      });
+
+    const {
+      data: { subscription },
+    } = client.auth.onAuthStateChange((_event, session) => {
+      void applySession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const persistUsers = (next: User[]) => {
     setUsers(next);
@@ -210,12 +407,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) {
       const refreshed = next.find((u) => u.id === user.id);
       if (!refreshed || !refreshed.isActive) {
+        void getSupabaseClient()?.auth.signOut();
         setUser(null);
-        localStorage.removeItem("viterra_user");
-        localStorage.removeItem("viterra_session_start");
-      } else {
-        setUser(refreshed);
-        localStorage.setItem("viterra_user", JSON.stringify(refreshed));
       }
     }
   };
@@ -231,32 +424,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     history: [entry, ...target.history],
   });
 
-  const login = (email: string, password: string): boolean => {
-    const found = users.find((u) => u.email === email);
-    if (!found || !found.isActive) return false;
-    const savedPassword = passwordByUserId[found.id];
-    if (!savedPassword || savedPassword !== password) return false;
-    setUser(found);
-    localStorage.setItem("viterra_user", JSON.stringify(found));
-    localStorage.setItem("viterra_session_start", new Date().toISOString());
-    return true;
+  const login: AuthContextType["login"] = async (email, password) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: "Supabase no está configurado (variables VITE_SUPABASE_*)." };
+    }
+    const { error } = await client.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+    return { ok: true };
   };
 
-  const logout = () => {
+  const logout: AuthContextType["logout"] = async () => {
+    const client = getSupabaseClient();
+    await client?.auth.signOut();
     setUser(null);
-    localStorage.removeItem("viterra_user");
-    localStorage.removeItem("viterra_session_start");
   };
 
-  const checkSessionExpiration = () => {
-    const sessionStart = localStorage.getItem("viterra_session_start");
-    if (!sessionStart) return;
-    const elapsed = Date.now() - new Date(sessionStart).getTime();
-    const eightHours = 8 * 60 * 60 * 1000;
-    if (elapsed > eightHours) logout();
-  };
-  if (user) checkSessionExpiration();
-
+  /**
+   * Creación local del directorio (localStorage). En producción, altas reales de cuentas
+   * suelen hacerse con Supabase Dashboard o una Edge Function con service role.
+   */
   const createUser: AuthContextType["createUser"] = (input, actorName = "Admin") => {
     const normalizedEmail = input.email.trim().toLowerCase();
     if (users.some((u) => u.email.toLowerCase() === normalizedEmail)) {
@@ -346,6 +538,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       users,
+      authReady,
       login,
       logout,
       isAuthenticated: !!user,
@@ -357,7 +550,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       archiveUser,
       reactivateUser,
     }),
-    [user, users]
+    [user, users, authReady]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

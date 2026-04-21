@@ -198,6 +198,7 @@ export function AdminUsersManager({
   onFocusUserConsumed,
   onUserDetailClosed,
 }: Props) {
+  const [managementTab, setManagementTab] = useState<"users" | "groups">("users");
   const [showArchived, setShowArchived] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
@@ -301,142 +302,189 @@ export function AdminUsersManager({
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-slate-200 bg-white p-6">
+        <div
+          className="mb-5 inline-flex max-w-full flex-wrap gap-0.5 rounded-2xl bg-slate-100/95 p-1 ring-1 ring-slate-200/80 ring-inset"
+          role="tablist"
+          aria-label="Secciones de equipo y accesos"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={managementTab === "users"}
+            onClick={() => setManagementTab("users")}
+            className={cn(
+              "inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-all duration-200 sm:px-4 sm:py-2.5",
+              managementTab === "users"
+                ? "bg-white text-brand-navy shadow-[0_1px_3px_rgba(15,23,42,0.12)] ring-1 ring-slate-200/90"
+                : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
+            )}
+          >
+            <Users className="h-4 w-4" strokeWidth={managementTab === "users" ? 2 : 1.75} />
+            Usuarios
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={managementTab === "groups"}
+            onClick={() => setManagementTab("groups")}
+            className={cn(
+              "inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-all duration-200 sm:px-4 sm:py-2.5",
+              managementTab === "groups"
+                ? "bg-white text-brand-navy shadow-[0_1px_3px_rgba(15,23,42,0.12)] ring-1 ring-slate-200/90"
+                : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
+            )}
+          >
+            <Building2 className="h-4 w-4" strokeWidth={managementTab === "groups" ? 2 : 1.75} />
+            Grupos
+          </button>
+        </div>
+
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
           <div className="min-w-0">
-            <h2 className="text-xl font-semibold text-slate-900">Mi empresa · Usuarios</h2>
+            <h2 className="text-xl font-semibold text-slate-900">
+              {managementTab === "users" ? "Mi empresa · Usuarios" : "Mi empresa · Grupos"}
+            </h2>
             <p className="mt-1 text-sm text-slate-600">
-              Gestiona usuarios, permisos y consulta historial de usuarios archivados.
+              {managementTab === "users"
+                ? "Gestiona usuarios, permisos y consulta historial de usuarios archivados."
+                : "Organiza equipos, líderes y miembros para controlar accesos por grupo."}
             </p>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowArchived((p) => !p)}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              {showArchived ? "Ver activos" : "Ver archivados"}
-            </button>
-            {canManageUsers && (
+          {managementTab === "users" && (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => setCreatingOpen(true)}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-hover"
+                onClick={() => setShowArchived((p) => !p)}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
-                <UserPlus className="h-4 w-4" />
-                Crear usuario
+                {showArchived ? "Ver activos" : "Ver archivados"}
               </button>
-            )}
-          </div>
+              {canManageUsers && (
+                <button
+                  type="button"
+                  onClick={() => setCreatingOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-hover"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Crear usuario
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="mt-6 flex flex-col gap-3 border-t border-slate-200/80 pt-6 sm:flex-row sm:items-stretch">
-          <div className="relative min-h-[2.75rem] flex-1">
-            <Search
-              className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
-              strokeWidth={1.75}
-              aria-hidden
-            />
-            <input
-              type="search"
-              value={userSearchQuery}
-              onChange={(e) => setUserSearchQuery(e.target.value)}
-              placeholder="Buscar por nombre, correo, teléfono o rol…"
-              className="h-full min-h-[2.75rem] w-full rounded-xl border border-slate-200/90 bg-white py-2.5 pl-11 pr-4 text-sm text-brand-navy shadow-sm transition-all placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-              style={{ fontWeight: 500 }}
-              autoComplete="off"
-              aria-label="Buscar usuarios"
-            />
+        {managementTab === "users" && (
+          <div className="mt-6 flex flex-col gap-3 border-t border-slate-200/80 pt-6 sm:flex-row sm:items-stretch">
+            <div className="relative min-h-[2.75rem] flex-1">
+              <Search
+                className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
+                strokeWidth={1.75}
+                aria-hidden
+              />
+              <input
+                type="search"
+                value={userSearchQuery}
+                onChange={(e) => setUserSearchQuery(e.target.value)}
+                placeholder="Buscar por nombre, correo, teléfono o rol…"
+                className="h-full min-h-[2.75rem] w-full rounded-xl border border-slate-200/90 bg-white py-2.5 pl-11 pr-4 text-sm text-brand-navy shadow-sm transition-all placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                style={{ fontWeight: 500 }}
+                autoComplete="off"
+                aria-label="Buscar usuarios"
+              />
+            </div>
+            <Select
+              value={roleFilter}
+              onValueChange={(v) => setRoleFilter(v as "all" | UserRole)}
+            >
+              <SelectTrigger className="h-[2.75rem] w-full rounded-xl border-slate-200/90 bg-white shadow-sm sm:w-[min(100%,220px)]">
+                <SelectValue placeholder="Rol" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los roles</SelectItem>
+                {roleOptions.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>
+                    {r.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <Select
-            value={roleFilter}
-            onValueChange={(v) => setRoleFilter(v as "all" | UserRole)}
-          >
-            <SelectTrigger className="h-[2.75rem] w-full rounded-xl border-slate-200/90 bg-white shadow-sm sm:w-[min(100%,220px)]">
-              <SelectValue placeholder="Rol" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los roles</SelectItem>
-              {roleOptions.map((r) => (
-                <SelectItem key={r.value} value={r.value}>
-                  {r.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        )}
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <table className="w-full">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Usuario</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Contacto</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Rol</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Permisos</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredUsers.length === 0 ? (
+      {managementTab === "users" ? (
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <table className="w-full">
+            <thead className="bg-slate-50">
               <tr>
-                <td colSpan={5} className="border-t border-slate-100 px-4 py-14 text-center text-sm text-slate-500" style={{ fontWeight: 500 }}>
-                  No hay usuarios que coincidan con la búsqueda o el filtro de rol.
-                </td>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Usuario</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Contacto</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Rol</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Permisos</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Acciones</th>
               </tr>
-            ) : (
-            filteredUsers.map((user) => (
-              <tr key={user.id} className="border-t border-slate-100">
-                <td className="px-4 py-3">
-                  <button type="button" onClick={() => setSelectedUser(user)} className="text-left">
-                    <p className="text-sm font-semibold text-slate-900">{user.name}</p>
-                    <p className="text-xs text-slate-500">
-                      {user.isActive ? "Activo" : `Archivado ${new Date(user.archivedAt || "").toLocaleDateString()}`}
-                    </p>
-                  </button>
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  <p>{user.email}</p>
-                  <p className="text-xs text-slate-500">{user.profile.phone || "Sin teléfono"}</p>
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-700">{roleOptions.find((r) => r.value === user.role)?.label}</td>
-                <td className="px-4 py-3 text-xs text-slate-700">{user.permissions.join(", ")}</td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end gap-1">
-                    <button type="button" onClick={() => setSelectedUser(user)} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" title="Detalle">
-                      <Edit className="h-4 w-4" />
+            </thead>
+            <tbody>
+              {filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="border-t border-slate-100 px-4 py-14 text-center text-sm text-slate-500" style={{ fontWeight: 500 }}>
+                    No hay usuarios que coincidan con la búsqueda o el filtro de rol.
+                  </td>
+                </tr>
+              ) : (
+              filteredUsers.map((user) => (
+                <tr key={user.id} className="border-t border-slate-100">
+                  <td className="px-4 py-3">
+                    <button type="button" onClick={() => setSelectedUser(user)} className="text-left">
+                      <p className="text-sm font-semibold text-slate-900">{user.name}</p>
+                      <p className="text-xs text-slate-500">
+                        {user.isActive ? "Activo" : `Archivado ${new Date(user.archivedAt || "").toLocaleDateString()}`}
+                      </p>
                     </button>
-                    {canManageUsers && (
-                      <button type="button" onClick={() => setPasswordModal(user)} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" title="Cambiar contraseña">
-                        <KeyRound className="h-4 w-4" />
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    <p>{user.email}</p>
+                    <p className="text-xs text-slate-500">{user.profile.phone || "Sin teléfono"}</p>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-700">{roleOptions.find((r) => r.value === user.role)?.label}</td>
+                  <td className="px-4 py-3 text-xs text-slate-700">{user.permissions.join(", ")}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-1">
+                      <button type="button" onClick={() => setSelectedUser(user)} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" title="Detalle">
+                        <Edit className="h-4 w-4" />
                       </button>
-                    )}
-                    {canManageUsers && user.id !== currentUser.id && (
-                      user.isActive ? (
-                        <button
-                          type="button"
-                          onClick={() => setArchiveCandidate(user)}
-                          className="rounded-md p-2 text-slate-500 hover:bg-amber-50 hover:text-amber-700"
-                          title="Archivar"
-                        >
-                          <ArchiveRestore className="h-4 w-4" />
+                      {canManageUsers && (
+                        <button type="button" onClick={() => setPasswordModal(user)} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" title="Cambiar contraseña">
+                          <KeyRound className="h-4 w-4" />
                         </button>
-                      ) : (
-                        <button type="button" onClick={() => onReactivate(user.id)} className="rounded-md p-2 text-slate-500 hover:bg-green-50 hover:text-green-700" title="Reactivar">
-                          <ArchiveRestore className="h-4 w-4" />
-                        </button>
-                      )
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <UserGroupsPanel users={users} canManageGroups={canManageUsers} />
+                      )}
+                      {canManageUsers && user.id !== currentUser.id && (
+                        user.isActive ? (
+                          <button
+                            type="button"
+                            onClick={() => setArchiveCandidate(user)}
+                            className="rounded-md p-2 text-slate-500 hover:bg-amber-50 hover:text-amber-700"
+                            title="Archivar"
+                          >
+                            <ArchiveRestore className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => onReactivate(user.id)} className="rounded-md p-2 text-slate-500 hover:bg-green-50 hover:text-green-700" title="Reactivar">
+                            <ArchiveRestore className="h-4 w-4" />
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <UserGroupsPanel users={users} canManageGroups={canManageUsers} />
+      )}
 
       <Dialog open={creatingOpen} onOpenChange={setCreatingOpen}>
         <DialogContent className="w-full max-w-2xl border-slate-200 bg-white p-6">
