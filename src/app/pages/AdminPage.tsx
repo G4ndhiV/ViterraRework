@@ -77,6 +77,7 @@ import {
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
 import { canViewAllLeads, filterLeadsForUser, roleLabelEs } from "../lib/leadsAccess";
+import { SocialFollowStrip } from "../components/SocialFollowStrip";
 import { copyPublicPageUrl } from "../lib/copyPublicLink";
 import { Property } from "../components/PropertyCard";
 import { useCatalogProperties } from "../hooks/useCatalogProperties";
@@ -3290,6 +3291,8 @@ export function AdminPage() {
           onSave={handleSaveProperty}
         />
       </div>
+
+      <SocialFollowStrip theme="muted" flush />
     </div>
   );
 }

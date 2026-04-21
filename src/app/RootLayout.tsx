@@ -1,26 +1,23 @@
 import { Outlet, useLocation } from "react-router";
-import { AnimatePresence, motion } from "motion/react";
 import { ScrollToTop } from "./components/ScrollToTop";
 
+/**
+ * Sin Motion/AnimatePresence en el shell: en Safari el contenedor absoluto + animación
+ * de opacidad a veces dejaba la ruta invisible (pantalla blanca) sin errores en consola.
+ */
 export function RootLayout() {
   const location = useLocation();
-  const pageKey = location.pathname;
+  const pageKey = `${location.pathname}${location.search}`;
 
   return (
-    <>
+    <div className="relative isolate min-h-[100dvh] bg-brand-canvas">
       <ScrollToTop />
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={pageKey}
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -12 }}
-          transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-          className="min-h-[100dvh] overflow-x-clip"
-        >
-          <Outlet />
-        </motion.div>
-      </AnimatePresence>
-    </>
+      <div
+        key={pageKey}
+        className="min-h-[100dvh] w-full overflow-x-clip bg-brand-canvas"
+      >
+        <Outlet />
+      </div>
+    </div>
   );
 }

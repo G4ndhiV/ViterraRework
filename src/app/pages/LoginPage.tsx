@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { Building2, Lock, User, Eye, EyeOff, ArrowRight } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { Reveal } from "../components/Reveal";
+import { SocialFollowStrip } from "../components/SocialFollowStrip";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -34,8 +35,9 @@ export function LoginPage() {
   };
 
   return (
-    <div className="viterra-page min-h-screen bg-white flex items-center justify-center p-6">
-      <Reveal className="w-full max-w-md" y={24}>
+    <div className="viterra-page flex min-h-screen flex-col bg-white">
+      <div className="flex flex-1 items-center justify-center p-6">
+        <Reveal className="w-full max-w-md" y={24}>
         {/* Logo y Título */}
         <div className="text-center mb-12">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-lg mb-6 bg-primary">
@@ -156,7 +158,9 @@ export function LoginPage() {
             Volver al sitio web
           </button>
         </div>
-      </Reveal>
+        </Reveal>
+      </div>
+      <SocialFollowStrip theme="light" />
     </div>
   );
 }

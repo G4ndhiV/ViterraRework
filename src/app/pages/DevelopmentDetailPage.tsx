@@ -167,15 +167,8 @@ export function DevelopmentDetailPage() {
     });
   };
 
-  const getStatusColor = (status: string) => {
-    const colors = {
-      "En Construcción": "bg-brand-gold/15 text-brand-gold border-brand-gold/30",
-      "Pre-venta": "bg-primary/10 text-primary border-primary/25",
-      "Disponible": "bg-brand-burgundy/10 text-brand-burgundy border-brand-burgundy/25",
-      "Próximamente": "bg-slate-100 text-slate-800 border-slate-200",
-    };
-    return colors[status as keyof typeof colors] || "bg-slate-100 text-slate-800";
-  };
+  const statusBadgeClass =
+    "border border-black/15 bg-white text-neutral-950 shadow-[0_1px_3px_rgba(0,0,0,0.12)]";
 
   return (
     <div className="viterra-page min-h-screen flex flex-col bg-slate-50">
@@ -229,7 +222,7 @@ export function DevelopmentDetailPage() {
 
                 {/* Status Badge */}
                 <div className="absolute top-4 left-4">
-                  <span className={`px-3 py-1.5 rounded-lg text-xs font-semibold border backdrop-blur-sm ${getStatusColor(development.status)}`} style={{ fontWeight: 600 }}>
+                  <span className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${statusBadgeClass}`} style={{ fontWeight: 600 }}>
                     {development.status}
                   </span>
                 </div>

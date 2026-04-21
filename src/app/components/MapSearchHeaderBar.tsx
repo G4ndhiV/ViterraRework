@@ -1,7 +1,8 @@
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { useState, useEffect, useRef, useSyncExternalStore, type CSSProperties } from "react";
-import { Search, User, ChevronDown } from "lucide-react";
-import { VITERRA_NAV_ITEMS } from "../config/siteNav";
+import { User, ChevronDown } from "lucide-react";
+import { VITERRA_NAV_ITEMS, isActiveNavPath } from "../config/siteNav";
+import { SocialHeaderDropdown } from "./SocialHeaderDropdown";
 import { cn } from "./ui/utils";
 
 const NAVY = { r: 20, g: 28, b: 46 } as const;
@@ -59,6 +60,7 @@ function lineRevealStyle(
 }
 
 export function MapSearchHeaderBar() {
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   /** Sigue en DOM unos ms al cerrar para que el fondo termine scaleY(0). */
   const [panelMounted, setPanelMounted] = useState(false);
@@ -80,10 +82,11 @@ export function MapSearchHeaderBar() {
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
+      if (e.button !== 0) return;
       if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
     };
-    if (open) document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    if (open) document.addEventListener("click", onDoc);
+    return () => document.removeEventListener("click", onDoc);
   }, [open]);
 
   return (
@@ -106,9 +109,12 @@ export function MapSearchHeaderBar() {
           <span className="h-px w-7 bg-[#C8102E] sm:w-8" aria-hidden />
         </Link>
         <div className="flex min-w-0 items-center justify-end gap-0.5 sm:gap-1">
-          <button type="button" className="p-2 text-white/85 hover:text-white" aria-label="Buscar">
-            <Search className="h-[18px] w-[18px]" strokeWidth={1.5} />
-          </button>
+          <SocialHeaderDropdown
+            triggerClassName="p-2 text-white/85 hover:text-white"
+            menuAlign="end"
+            iconSize="sm"
+            variant="compact"
+          />
           <button type="button" className="p-2 text-white/85 hover:text-white" aria-label="Cuenta">
             <User className="h-[18px] w-[18px]" strokeWidth={1.5} />
           </button>
@@ -165,17 +171,26 @@ export function MapSearchHeaderBar() {
               Grupo Inmobiliario
             </p>
             <nav className="flex flex-col gap-0.5">
-              {VITERRA_NAV_ITEMS.map(([to, label], i) => (
-                <Link
-                  key={to}
-                  to={to}
-                  onClick={close}
-                  className="rounded-lg px-3 py-2.5 text-xs uppercase tracking-[0.12em] text-white/90 hover:bg-white/10 sm:text-sm"
-                  style={lineRevealStyle(1 + i, open, reducedMotion)}
-                >
-                  {label}
-                </Link>
-              ))}
+              {VITERRA_NAV_ITEMS.map(([to, label], i) => {
+                const active = isActiveNavPath(location.pathname, to);
+                return (
+                  <Link
+                    key={to}
+                    to={to}
+                    onClick={close}
+                    className={cn(
+                      "rounded-lg border-l-[3px] px-3 py-2.5 text-xs uppercase tracking-[0.12em] sm:text-sm",
+                      active
+                        ? "border-primary bg-white/10 font-semibold text-white"
+                        : "border-transparent text-white/90 hover:bg-white/10"
+                    )}
+                    style={lineRevealStyle(1 + i, open, reducedMotion)}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
             </nav>
           </div>
         </div>
