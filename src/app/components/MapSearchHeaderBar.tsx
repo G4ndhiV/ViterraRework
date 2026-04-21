@@ -7,6 +7,12 @@ import { cn } from "./ui/utils";
 
 const NAVY = { r: 20, g: 28, b: 46 } as const;
 
+/** Misma marca que el header móvil (`Header.tsx`). */
+const MARK_ICON_MONO = "/images/branding/viterra-mark-mono-alpha.png";
+const MAP_HEADER_MARK_BOX_W = 104;
+const MAP_HEADER_MARK_BOX_H = 26;
+const MAP_HEADER_MARK_SCALE = 0.92 * 0.88;
+
 /** Misma curva que `viterra-reveal-in` (animations.css). */
 const REVEAL_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
 /** Cada fila: duración parecida al reveal del inicio (~0.58s). */
@@ -99,16 +105,46 @@ export function MapSearchHeaderBar() {
         backgroundImage: `linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.2) 100%)`,
       }}
     >
-      <div className="flex items-center justify-between gap-2 px-3 py-2 sm:px-4">
+      <div className="grid grid-cols-3 items-center gap-2 px-3 py-2 sm:px-4 lg:px-6">
         <Link
           to="/"
-          className="group inline-flex min-w-0 shrink flex-col items-start gap-0.5"
+          className="group inline-flex min-w-0 max-w-full flex-col items-start gap-0.5 justify-self-start"
           onClick={close}
         >
           <span className="font-heading text-[12px] font-medium tracking-[0.22em] text-white sm:text-[13px]">VITERRA</span>
           <span className="h-px w-7 bg-[#C8102E] sm:w-8" aria-hidden />
         </Link>
-        <div className="flex min-w-0 items-center justify-end gap-0.5 sm:gap-1">
+        <Link
+          to="/"
+          className="flex shrink-0 items-center justify-center justify-self-center"
+          onClick={close}
+          aria-label="Viterra Grupo Inmobiliario — Inicio"
+        >
+          <span
+            className="inline-flex shrink-0 items-end justify-center overflow-visible"
+            style={{ width: MAP_HEADER_MARK_BOX_W, height: MAP_HEADER_MARK_BOX_H }}
+            aria-hidden
+          >
+            <img
+              src={MARK_ICON_MONO}
+              alt=""
+              width={1024}
+              height={264}
+              decoding="async"
+              className="block max-h-full object-contain"
+              style={{
+                width: "100%",
+                height: MAP_HEADER_MARK_BOX_H,
+                maxHeight: MAP_HEADER_MARK_BOX_H,
+                objectPosition: "bottom center",
+                transform: `scale(${MAP_HEADER_MARK_SCALE})`,
+                transformOrigin: "bottom center",
+                opacity: 0.96,
+              }}
+            />
+          </span>
+        </Link>
+        <div className="flex min-w-0 items-center justify-end gap-0.5 justify-self-end sm:gap-1">
           <SocialHeaderDropdown
             triggerClassName="p-2 text-white/85 hover:text-white"
             menuAlign="end"

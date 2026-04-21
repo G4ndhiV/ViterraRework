@@ -167,7 +167,7 @@ export function HomePage() {
                   onClick={scrollToSearch}
                   whileTap={reduceMotion ? undefined : { scale: 0.98 }}
                   transition={{ type: "spring", stiffness: 400, damping: 24 }}
-                  className="flex w-full max-w-sm min-w-0 items-center justify-center border-0 border-b border-white/40 bg-transparent px-2 py-4 text-center text-xs font-normal uppercase tracking-[0.22em] text-white transition-colors hover:border-white sm:w-auto sm:max-w-none sm:shrink-0 sm:px-0"
+                  className="flex w-full max-w-sm min-w-0 cursor-pointer items-center justify-center border-0 border-b border-white/40 bg-transparent px-2 py-4 text-center text-xs font-normal uppercase tracking-[0.22em] text-white transition-colors hover:border-white sm:w-auto sm:max-w-none sm:shrink-0 sm:px-0"
                 >
                   {h.heroCtaPrimary}
                 </motion.button>
@@ -296,13 +296,13 @@ export function HomePage() {
                     whileHover={reduceMotion ? undefined : { scale: 1.06 }}
                     whileTap={reduceMotion ? undefined : { scale: 0.94 }}
                     transition={{ type: "spring", stiffness: 420, damping: 22 }}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-navy/20 text-brand-navy transition-colors hover:border-primary hover:text-primary"
+                    className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-brand-navy/20 bg-white text-brand-navy outline-none transition-colors hover:border-brand-navy/40 hover:bg-brand-navy/[0.04] hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 active:border-brand-navy/30"
                     aria-label="Propiedad anterior"
                   >
-                    <ChevronLeft className="h-5 w-5" />
+                    <ChevronLeft className="h-5 w-5" strokeWidth={1.75} />
                   </motion.button>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-2">
                     {featuredProperties.map((property, index) => (
                       <motion.button
                         key={property.id}
@@ -311,7 +311,7 @@ export function HomePage() {
                         whileHover={reduceMotion ? undefined : { scale: 1.15 }}
                         whileTap={reduceMotion ? undefined : { scale: 0.9 }}
                         className={cn(
-                          "h-1.5 rounded-full transition-[width,background-color] duration-300",
+                          "h-1.5 shrink-0 cursor-pointer rounded-full outline-none transition-[width,background-color] duration-300 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2",
                           index === carouselIndex ? "w-8 bg-primary" : "w-3 bg-brand-navy/25 hover:bg-brand-navy/45"
                         )}
                         aria-label={`Ir a propiedad ${index + 1}`}
@@ -325,10 +325,10 @@ export function HomePage() {
                     whileHover={reduceMotion ? undefined : { scale: 1.06 }}
                     whileTap={reduceMotion ? undefined : { scale: 0.94 }}
                     transition={{ type: "spring", stiffness: 420, damping: 22 }}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-navy/20 text-brand-navy transition-colors hover:border-primary hover:text-primary"
+                    className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-brand-navy/20 bg-white text-brand-navy outline-none transition-colors hover:border-brand-navy/40 hover:bg-brand-navy/[0.04] hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 active:border-brand-navy/30"
                     aria-label="Siguiente propiedad"
                   >
-                    <ChevronRight className="h-5 w-5" />
+                    <ChevronRight className="h-5 w-5" strokeWidth={1.75} />
                   </motion.button>
                 </div>
               </>

@@ -184,11 +184,25 @@ export function PropertyCard({
           <div className={cn("mb-6 flex items-center gap-5", ed ? "text-brand-navy/55" : "text-slate-600")}>
             <div className="flex items-center gap-1.5">
               <Bed className="w-4 h-4" strokeWidth={1.5} />
-              <span className="text-sm font-light">{property.bedrooms} Beds</span>
+              <span
+                className={cn(
+                  "text-sm font-light tabular-nums",
+                  ed && "font-heading tracking-normal"
+                )}
+              >
+                {property.bedrooms} Beds
+              </span>
             </div>
             <div className="flex items-center gap-1.5">
               <Bath className="w-4 h-4" strokeWidth={1.5} />
-              <span className="text-sm font-light">{property.bathrooms} Baths</span>
+              <span
+                className={cn(
+                  "text-sm font-light tabular-nums",
+                  ed && "font-heading tracking-normal"
+                )}
+              >
+                {property.bathrooms} Baths
+              </span>
             </div>
           </div>
 
@@ -201,7 +215,15 @@ export function PropertyCard({
             )}
           >
             <div className={ed ? "min-w-0 space-y-1" : undefined}>
-              <p className={cn("text-slate-900", ed ? "font-tertiary text-[44px] leading-none tracking-tight text-brand-navy" : "text-2xl font-semibold")} style={!ed ? { fontWeight: 700 } : undefined}>
+              <p
+                className={cn(
+                  "text-slate-900 tabular-nums",
+                  ed
+                    ? "font-heading text-[44px] font-light leading-none tracking-tight text-brand-navy"
+                    : "text-2xl font-semibold"
+                )}
+                style={!ed ? { fontWeight: 700 } : undefined}
+              >
                 ${property.price.toLocaleString()}
               </p>
               {property.status === "alquiler" && (
