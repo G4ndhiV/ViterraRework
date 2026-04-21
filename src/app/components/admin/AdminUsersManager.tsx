@@ -163,6 +163,7 @@ interface Props {
   leads: Lead[];
   userGroups?: UserGroup[];
   onViewLead?: (lead: Lead) => void;
+  onUserGroupsChange?: (groups: UserGroup[]) => void;
   onCreateUser: (input: {
     name: string;
     email: string;
@@ -197,6 +198,7 @@ export function AdminUsersManager({
   leads,
   userGroups = [],
   onViewLead,
+  onUserGroupsChange,
   onCreateUser,
   onUpdateUser,
   onUpdatePassword,
@@ -530,7 +532,12 @@ export function AdminUsersManager({
           </table>
         </div>
       ) : (
-        <UserGroupsPanel users={users} canManageGroups={canManageUsers} />
+        <UserGroupsPanel
+          users={users}
+          canManageGroups={canManageUsers}
+          groups={userGroups}
+          onGroupsChange={onUserGroupsChange}
+        />
       )}
 
       <Dialog open={creatingOpen} onOpenChange={setCreatingOpen}>

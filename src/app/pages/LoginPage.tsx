@@ -3,7 +3,6 @@ import { useNavigate } from "react-router";
 import { Building2, Lock, User, Eye, EyeOff, ArrowRight } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { Reveal } from "../components/Reveal";
-import { SocialFollowStrip } from "../components/SocialFollowStrip";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -160,7 +159,6 @@ export function LoginPage() {
         </div>
         </Reveal>
       </div>
-      <SocialFollowStrip theme="light" />
     </div>
   );
 }

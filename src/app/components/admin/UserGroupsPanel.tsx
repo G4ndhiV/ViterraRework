@@ -4,9 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Edit, Plus, Search, Trash2, Users } from "lucide-react";
 import type { User, UserRole } from "../../contexts/AuthContext";
 import {
-  loadUserGroupsFromStorage,
   newUserGroupId,
-  saveUserGroupsToStorage,
   type UserGroup,
   isValidGroupLeader,
 } from "../../lib/userGroups";
@@ -41,6 +39,8 @@ const roleLabels: Record<UserRole, string> = {
 type Props = {
   users: User[];
   canManageGroups: boolean;
+  groups: UserGroup[];
+  onGroupsChange?: (groups: UserGroup[]) => void;
 };
 
 type GroupFormState = {
@@ -58,9 +58,8 @@ function emptyForm(leaders: User[]): GroupFormState {
   };
 }
 
-export function UserGroupsPanel({ users, canManageGroups }: Props) {
+export function UserGroupsPanel({ users, canManageGroups, groups: groupsProp, onGroupsChange }: Props) {
   const [groups, setGroups] = useState<UserGroup[]>([]);
-  const [hydrated, setHydrated] = useState(false);
   const [groupListQuery, setGroupListQuery] = useState("");
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -76,14 +75,8 @@ export function UserGroupsPanel({ users, canManageGroups }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<UserGroup | null>(null);
 
   useEffect(() => {
-    setGroups(loadUserGroupsFromStorage());
-    setHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    saveUserGroupsToStorage(groups);
-  }, [groups, hydrated]);
+    setGroups(groupsProp);
+  }, [groupsProp]);
 
   const activeUsers = useMemo(() => users.filter((u) => u.isActive), [users]);
 
@@ -201,13 +194,15 @@ export function UserGroupsPanel({ users, canManageGroups }: Props) {
 
     const now = new Date().toISOString();
     if (editingId) {
-      setGroups((prev) =>
-        prev.map((g) =>
+      setGroups((prev) => {
+        const next = prev.map((g) =>
           g.id === editingId
             ? { ...g, name, leaderId: form.leaderId, memberIds }
             : g
-        )
-      );
+        );
+        onGroupsChange?.(next);
+        return next;
+      });
     } else {
       const ng: UserGroup = {
         id: newUserGroupId(),
@@ -216,14 +211,22 @@ export function UserGroupsPanel({ users, canManageGroups }: Props) {
         memberIds,
         createdAt: now,
       };
-      setGroups((prev) => [...prev, ng]);
+      setGroups((prev) => {
+        const next = [...prev, ng];
+        onGroupsChange?.(next);
+        return next;
+      });
     }
     setDialogOpen(false);
   };
 
   const confirmDelete = () => {
     if (!deleteTarget) return;
-    setGroups((prev) => prev.filter((g) => g.id !== deleteTarget.id));
+    setGroups((prev) => {
+      const next = prev.filter((g) => g.id !== deleteTarget.id);
+      onGroupsChange?.(next);
+      return next;
+    });
     setDeleteTarget(null);
   };
 

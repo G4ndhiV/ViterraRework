@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link, useNavigate } from "react-router";
 import {
   LayoutDashboard,
@@ -82,7 +82,6 @@ import {
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
 import { canViewAllLeads, filterLeadsForUser, roleLabelEs } from "../lib/leadsAccess";
-import { SocialFollowStrip } from "../components/SocialFollowStrip";
 import { copyPublicPageUrl } from "../lib/copyPublicLink";
 import { Property } from "../components/PropertyCard";
 import { useCatalogProperties } from "../hooks/useCatalogProperties";
@@ -136,7 +135,8 @@ import {
   savePipelineByGroup,
   type GroupPipelineSnapshot,
 } from "../lib/pipelineByGroup";
-import { loadUserGroupsFromStorage, type UserGroup } from "../lib/userGroups";
+import { type UserGroup } from "../lib/userGroups";
+import { fetchActiveUserGroups, softDeleteUserGroup, upsertUserGroup } from "../lib/supabaseUserGroups";
 import { foldSearchText } from "../lib/searchText";
 
 type TabType =
@@ -211,7 +211,7 @@ export function AdminPage() {
   const [pipelineByGroup, setPipelineByGroup] = useState<Record<string, GroupPipelineSnapshot>>(() =>
     loadPipelineByGroup()
   );
-  const [userGroups, setUserGroups] = useState<UserGroup[]>(() => loadUserGroupsFromStorage());
+  const [userGroups, setUserGroups] = useState<UserGroup[]>([]);
   const [activePipelineGroupId, setActivePipelineGroupId] = useState<string>(DEFAULT_PIPELINE_GROUP_ID);
   const [leadDialog, setLeadDialog] = useState<{ lead: Lead; mode: "view" | "edit" } | null>(null);
   const [usersPanelFocus, setUsersPanelFocus] = useState<{ id: string; nonce: number } | null>(null);
@@ -231,30 +231,6 @@ export function AdminPage() {
     null
   );
   const [deletePropertyId, setDeletePropertyId] = useState<string | null>(null);
-  const dashboardHeaderRef = useRef<HTMLElement | null>(null);
-  const [dashboardHeaderHeightPx, setDashboardHeaderHeightPx] = useState(0);
-
-  useLayoutEffect(() => {
-    if (activeTab !== "dashboard") {
-      setDashboardHeaderHeightPx(0);
-      return;
-    }
-    const el = dashboardHeaderRef.current;
-    if (!el) return;
-
-    const measure = () => {
-      setDashboardHeaderHeightPx(Math.ceil(el.getBoundingClientRect().height));
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    window.addEventListener("resize", measure);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", measure);
-    };
-  }, [activeTab, user?.name]);
-
   // Verificar autenticación y cargar datos
   useEffect(() => {
     if (!authReady) return;
@@ -292,9 +268,10 @@ export function AdminPage() {
         return;
       }
 
-      const [leadsRes, devRes] = await Promise.all([
+      const [leadsRes, devRes, groupsRes] = await Promise.all([
         fetchActiveLeads(client),
         fetchDevelopmentsWithUnits(client, { publicOnly: false }),
+        fetchActiveUserGroups(client),
       ]);
       if (cancelled) return;
 
@@ -319,6 +296,15 @@ export function AdminPage() {
         }
       }
       setDevelopmentsLoading(false);
+
+      if (groupsRes.error) {
+        if (import.meta.env.DEV) {
+          console.warn("[Viterra] No se pudieron cargar grupos desde DB:", groupsRes.error.message);
+        }
+        setUserGroups([]);
+      } else {
+        setUserGroups(groupsRes.data);
+      }
 
       if (import.meta.env.DEV) {
         const host = getSupabaseProjectHost();
@@ -358,9 +344,42 @@ export function AdminPage() {
     localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(clients));
   }, [clients]);
 
-  useEffect(() => {
-    setUserGroups(loadUserGroupsFromStorage());
-  }, [companySubtab]);
+  const handleUserGroupsChange = useCallback(
+    async (nextGroups: UserGroup[]) => {
+      const client = getSupabaseClient();
+      const prevGroups = userGroups;
+      setUserGroups(nextGroups);
+      if (!client) return;
+
+      const prevIds = new Set(prevGroups.map((g) => g.id));
+      const nextIds = new Set(nextGroups.map((g) => g.id));
+      const deletedIds = [...prevIds].filter((id) => !nextIds.has(id));
+
+      const upsertResults = await Promise.all(nextGroups.map((g) => upsertUserGroup(client, g)));
+      const deleteResults = await Promise.all(deletedIds.map((id) => softDeleteUserGroup(client, id)));
+      const failed = [
+        ...upsertResults.filter((r) => !!r.error).map((r) => r.error?.message ?? "upsert_error"),
+        ...deleteResults.filter((r) => !!r.error).map((r) => r.error?.message ?? "delete_error"),
+      ];
+      if (failed.length > 0) {
+        setUserGroups(prevGroups);
+        toast.error("No se pudieron guardar algunos cambios de grupos en la base de datos.");
+        if (import.meta.env.DEV) {
+          console.warn("[Viterra] Fallo al persistir grupos:", failed);
+        }
+        return;
+      }
+
+      if (nextGroups.length > prevGroups.length) {
+        toast.success("Grupo creado y guardado correctamente en la base de datos.");
+      } else if (nextGroups.length < prevGroups.length) {
+        toast.success("Grupo eliminado y cambios guardados en la base de datos.");
+      } else {
+        toast.success("Grupo actualizado y guardado en la base de datos.");
+      }
+    },
+    [userGroups]
+  );
 
   const allowedPipelineGroupIds = useMemo(
     () => (user ? getAllowedPipelineGroupIds(user, userGroups) : [DEFAULT_PIPELINE_GROUP_ID]),
@@ -1547,22 +1566,11 @@ export function AdminPage() {
 
       <div
         data-reveal
-        className={`viterra-reveal-off px-4 pb-4 sm:px-6 lg:pl-[16.5rem] lg:pr-8 ${activeTab !== "dashboard" ? "pt-4 sm:pt-4" : ""}`}
-        style={
-          activeTab === "dashboard"
-            ? {
-                paddingTop:
-                  dashboardHeaderHeightPx > 0
-                    ? `calc(0.75rem + ${dashboardHeaderHeightPx}px + 1.5rem)`
-                    : "15rem",
-              }
-            : undefined
-        }
+        className="viterra-reveal-off px-4 pb-4 pt-4 sm:px-6 sm:pt-4 lg:pl-[16.5rem] lg:pr-8"
       >
         {activeTab === "dashboard" && (
           <header
-            ref={dashboardHeaderRef}
-            className="fixed left-4 right-4 top-3 z-50 overflow-visible rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white/95 via-white/95 to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.22)] ring-1 ring-slate-900/[0.04] backdrop-blur-md sm:left-6 sm:right-6 lg:left-[16.5rem] lg:right-8"
+            className="sticky top-3 z-50 overflow-visible rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white/95 via-white/95 to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.22)] ring-1 ring-slate-900/[0.04] backdrop-blur-md"
           >
             <div
               className="h-1.5 w-full shrink-0 bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
@@ -3091,6 +3099,7 @@ export function AdminPage() {
                     users={users}
                     leads={leads}
                     userGroups={userGroups}
+                    onUserGroupsChange={handleUserGroupsChange}
                     onViewLead={(lead) => {
                       setActiveTab("leads");
                       openLeadDetail(lead, "view");
@@ -3554,7 +3563,6 @@ export function AdminPage() {
         />
       </div>
 
-      <SocialFollowStrip theme="muted" flush />
     </div>
   );
 }
