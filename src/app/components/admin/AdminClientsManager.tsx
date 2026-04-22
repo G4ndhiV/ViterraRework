@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { User } from "../../contexts/AuthContext";
 import type { Lead } from "../../data/leads";
+import { leadIsAssignedToUser } from "../../lib/leadsAccess";
 import type { Property } from "../PropertyCard";
 import type { Development } from "../../data/developments";
 import {
@@ -193,7 +194,7 @@ export function AdminClientsManager({
       if (clients.some((c) => c.linkedLeadIds.includes(lead.id))) return false;
       if (isLeadContactLinkedToClient(clients, lead.email, lead.phone)) return false;
       if (!lead.email.trim() && !lead.phone.trim()) return false;
-      if (currentUser.role === "asesor" && lead.assignedToUserId !== currentUser.id) return false;
+      if (currentUser.role === "asesor" && !leadIsAssignedToUser(lead, currentUser)) return false;
       return true;
     });
   }, [leads, clients, currentUser.role, currentUser.id]);

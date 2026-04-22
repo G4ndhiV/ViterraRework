@@ -1,7 +1,5 @@
 import type { User } from "../contexts/AuthContext";
-import {
-  type CustomKanbanStage,
-} from "../data/leads";
+import { LEAD_STATUS_LABEL, type CustomKanbanStage, type LeadBuiltinStatus } from "../data/leads";
 import type { UserGroup } from "./userGroups";
 
 export const DEFAULT_PIPELINE_GROUP_ID = "__default__";
@@ -22,6 +20,16 @@ export function createEmptyGroupPipelineSnapshot(): GroupPipelineSnapshot {
   };
 }
 
+/** Pipeline por defecto del espacio global (columnas estándar del embudo). */
+export function createDefaultBuiltinPipelineSnapshot(): GroupPipelineSnapshot {
+  const stageOrder = Object.keys(LEAD_STATUS_LABEL) as LeadBuiltinStatus[];
+  return {
+    customStages: [],
+    stageOrder: [...stageOrder],
+    stageColors: {},
+  };
+}
+
 function isCustomStage(x: unknown): x is CustomKanbanStage {
   return (
     typeof x === "object" &&
@@ -38,7 +46,7 @@ export function normalizeStageOrder(stageOrder: string[], allStageIds: string[])
   ];
 }
 
-function parseSnapshot(raw: unknown): GroupPipelineSnapshot {
+export function parseGroupPipelineConfigFromUnknown(raw: unknown): GroupPipelineSnapshot {
   const empty = createEmptyGroupPipelineSnapshot();
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return empty;
   const o = raw as Record<string, unknown>;
@@ -102,7 +110,7 @@ export function loadPipelineByGroup(): Record<string, GroupPipelineSnapshot> {
         const out: Record<string, GroupPipelineSnapshot> = {};
         for (const [k, v] of Object.entries(parsed)) {
           if (typeof k !== "string" || !k) continue;
-          out[k] = parseSnapshot(v);
+          out[k] = parseGroupPipelineConfigFromUnknown(v);
         }
         if (Object.keys(out).length > 0) return out;
       }

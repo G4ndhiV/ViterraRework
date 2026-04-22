@@ -3,6 +3,16 @@ import type { Development, DevelopmentUnit } from "../data/developments";
 
 const nowIso = () => new Date().toISOString();
 
+/** Postgres/JSON pueden devolver coordenadas como string; Leaflet necesita número. */
+function parseCoord(value: unknown, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const n = parseFloat(value.trim());
+    if (Number.isFinite(n)) return n;
+  }
+  return fallback;
+}
+
 type DevelopmentRow = Record<string, unknown> & {
   id: string;
   tokko_id: string;
@@ -29,6 +39,8 @@ type DevelopmentRow = Record<string, unknown> & {
   updated_at: string;
   deleted_at: string | null;
   display_on_web: boolean;
+  in_charge_phone?: string | null;
+  in_charge_email?: string | null;
 };
 
 type DevelopmentUnitRow = {
@@ -97,11 +109,14 @@ export function rowToDevelopment(row: DevelopmentRow, units: DevelopmentUnit[]):
     additionalFeatures: Array.isArray(row.additional_features) ? row.additional_features : [],
     developmentUnits: units,
     coordinates: {
-      lat: row.lat ?? 20.67,
-      lng: row.lng ?? -103.35,
+      lat: parseCoord(row.lat, 20.67),
+      lng: parseCoord(row.lng, -103.35),
     },
     featured: row.featured,
     displayOnWeb: row.display_on_web ?? true,
+    inChargePhone: row.in_charge_phone?.trim() ?? "",
+    inChargeEmail: row.in_charge_email?.trim() ?? "",
+    tokkoId: row.tokko_id?.trim() || undefined,
   };
 }
 
@@ -204,8 +219,8 @@ export async function upsertDevelopment(client: SupabaseClient, d: Development) 
     construction_status: null,
     financing_details: null,
     in_charge_name: null,
-    in_charge_email: null,
-    in_charge_phone: null,
+    in_charge_email: d.inChargeEmail?.trim() || null,
+    in_charge_phone: d.inChargePhone?.trim() || null,
     development_type_tokko_id: null,
   };
 
