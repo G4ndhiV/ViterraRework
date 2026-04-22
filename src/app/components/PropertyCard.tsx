@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { Bed, Bath, Square, MapPin, Heart, X, ArrowRight } from "lucide-react";
+import { Bed, Bath, Square, MapPin, X, ArrowRight } from "lucide-react";
 import { useState, useCallback } from "react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { cn } from "./ui/utils";
@@ -60,8 +60,6 @@ export interface Property {
   parkingSpaces?: number;
   /** URLs de galería (`images`), ordenadas y sin duplicar la imagen principal. */
   galleryImages?: string[];
-  /** Destacada en catálogo (`featured`). */
-  featured?: boolean;
   /** Fecha ISO para mostrar antigüedad de publicación (`synced_at` o `updated_at`). */
   listingUpdatedAt?: string;
   /** ID Tokko del desarrollo (`development_tokko_id`); si existe, se enlaza con `developments.tokko_id`. */
@@ -70,6 +68,15 @@ export interface Property {
 
 function cardHeadline(p: Property) {
   return p.publicationTitle?.trim() || p.title;
+}
+
+function editorialCardHeadline(p: Property) {
+  const publication = p.publicationTitle?.trim();
+  const fallback = p.title?.trim() || "";
+  if (!publication) return fallback;
+  // Si el título de publicación es demasiado largo y existe uno más corto, priorizamos legibilidad en Inicio.
+  if (fallback && publication.length > 52 && fallback.length <= 48) return fallback;
+  return publication;
 }
 
 function habitacionesLabel(n: number) {
@@ -100,7 +107,6 @@ export function PropertyCard({
   onMapSearchSelect,
   disablePreview = false,
 }: PropertyCardProps) {
-  const [isFavorite, setIsFavorite] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const ed = variant === "editorial";
 
@@ -175,28 +181,6 @@ export function PropertyCard({
               {property.type}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsFavorite(!isFavorite);
-            }}
-            className={cn(
-              "absolute z-[1] backdrop-blur-sm flex items-center justify-center transition-all duration-300 border",
-              ed
-                ? "top-3 right-3 h-9 w-9 rounded-none border-brand-navy/10 bg-white/75 text-brand-navy/40 hover:bg-white/90 hover:text-brand-navy/60"
-                : "top-4 right-4 h-10 w-10 rounded-none border-slate-200 bg-white/90 hover:scale-105 hover:bg-white"
-            )}
-          >
-            <Heart
-              className={cn(
-                "w-4 h-4 transition-all",
-                isFavorite ? "scale-110" : ed ? "text-brand-navy/50" : "text-slate-600"
-              )}
-              style={isFavorite ? { fill: "#C8102E", color: "#C8102E" } : {}}
-              strokeWidth={1.5}
-            />
-          </button>
         </div>
 
         <div
@@ -215,12 +199,12 @@ export function PropertyCard({
               className={cn(
                 "text-slate-900 mb-2 transition-colors tracking-tight",
                 ed
-                  ? "font-heading text-pretty break-words text-2xl font-light leading-snug text-brand-navy sm:text-[1.65rem] md:text-[1.7rem] group-hover:text-brand-burgundy"
-                  : "text-xl font-semibold hover:text-slate-700"
+                  ? "font-heading line-clamp-3 min-h-[6.6rem] text-2xl leading-tight font-semibold text-brand-navy group-hover:text-brand-burgundy md:text-[2.05rem]"
+                  : "line-clamp-3 min-h-[5.25rem] text-xl font-semibold leading-snug hover:text-slate-700"
               )}
               style={!ed ? { fontWeight: 600 } : undefined}
             >
-              {cardHeadline(property)}
+              {ed ? editorialCardHeadline(property) : cardHeadline(property)}
             </h3>
           </button>
 

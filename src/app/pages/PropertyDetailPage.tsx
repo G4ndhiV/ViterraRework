@@ -15,7 +15,6 @@ import {
   MapPin,
   Calendar,
   Share2,
-  Heart,
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
@@ -203,7 +202,6 @@ export function PropertyDetailPage() {
   const { id } = useParams();
   const { properties, loading } = useCatalogProperties();
   const property = useMemo(() => properties.find((p) => p.id === id), [properties, id]);
-  const [isFavorite, setIsFavorite] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [activeTab, setActiveTab] = useState("descripcion");
   const reduceMotion = useReducedMotion();
@@ -434,7 +432,7 @@ export function PropertyDetailPage() {
       <Header />
 
       <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-4">
+        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
           <Link
             to={property.status === "venta" ? "/venta" : "/renta"}
             className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium"
@@ -446,11 +444,11 @@ export function PropertyDetailPage() {
         </div>
       </div>
 
-      <div data-reveal className="max-w-7xl mx-auto px-6 lg:px-8 py-5">
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-5">
+      <div data-reveal className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-5 lg:px-8">
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="min-w-0 space-y-5 lg:col-span-2">
             <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-slate-200">
-              <div className="relative h-[320px] md:h-[360px] lg:h-[400px] bg-slate-200 group">
+              <div className="relative h-[250px] bg-slate-200 group sm:h-[320px] md:h-[360px] lg:h-[400px]">
                 <ImageWithFallback
                   src={propertyImages[currentImageIndex] ?? property.image}
                   alt={displayTitle}
@@ -489,12 +487,6 @@ export function PropertyDetailPage() {
                 </div>
 
                 <div className="absolute top-4 right-4 flex gap-2">
-                  <button
-                    onClick={() => setIsFavorite(!isFavorite)}
-                    className="w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all"
-                  >
-                    <Heart className={`w-5 h-5 ${isFavorite ? "fill-red-600 text-red-600" : "text-slate-700"}`} strokeWidth={1.5} />
-                  </button>
                   <button className="w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all">
                     <Share2 className="w-5 h-5 text-slate-700" strokeWidth={1.5} />
                   </button>
@@ -511,9 +503,9 @@ export function PropertyDetailPage() {
                     <button
                       key={idx}
                       onClick={() => setCurrentImageIndex(idx)}
-                      className={`relative flex-shrink-0 h-16 w-16 rounded-lg overflow-hidden border-2 transition-all md:h-[4.5rem] md:w-[4.5rem] ${
+                      className={`relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border-2 transition-all sm:h-16 sm:w-16 md:h-[4.5rem] md:w-[4.5rem] ${
                         idx === currentImageIndex
-                          ? "border-slate-900 ring-2 ring-slate-900 ring-offset-2"
+                          ? "border-slate-900 ring-2 ring-slate-900 sm:ring-offset-2"
                           : "border-slate-200 hover:border-slate-400"
                       }`}
                     >
@@ -524,15 +516,15 @@ export function PropertyDetailPage() {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-              <div className="flex items-start justify-between mb-4 flex-wrap gap-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 mb-2 tracking-tight" style={{ fontWeight: 700 }}>
+                  <h1 className="mb-2 break-words text-[1.75rem] font-semibold leading-tight tracking-tight text-slate-900 sm:text-2xl md:text-3xl" style={{ fontWeight: 700 }}>
                     {displayTitle}
                   </h1>
-                  <div className="flex items-center gap-2 text-slate-600 mb-2">
+                  <div className="mb-2 flex items-start gap-2 text-slate-600">
                     <MapPin className="w-4 h-4 flex-shrink-0" strokeWidth={1.5} />
-                    <span className="text-sm font-medium" style={{ fontWeight: 500 }}>{property.location}</span>
+                    <span className="break-words text-sm font-medium" style={{ fontWeight: 500 }}>{property.location}</span>
                   </div>
                   {property.colony ? (
                     <p className="mb-3 text-sm text-slate-600" style={{ fontWeight: 500 }}>
@@ -541,7 +533,7 @@ export function PropertyDetailPage() {
                     </p>
                   ) : null}
                 </div>
-                <div className="text-right">
+                <div className="text-left sm:text-right">
                   <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: "0.05em", fontWeight: 500 }}>
                     {property.status === "venta" ? "Precio" : "Renta mensual"}
                   </p>
@@ -551,7 +543,7 @@ export function PropertyDetailPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 md:gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 md:gap-4 md:p-4">
                 <div className="text-center">
                   <Bed className="w-5 h-5 text-slate-600 mx-auto mb-1" strokeWidth={1.5} />
                   <p className="text-base md:text-lg font-semibold text-slate-900" style={{ fontWeight: 600 }}>{property.bedrooms}</p>
@@ -579,7 +571,7 @@ export function PropertyDetailPage() {
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`flex min-w-0 flex-1 items-center justify-center px-3 py-4 text-xs font-medium transition-all sm:px-5 sm:text-sm ${
+                      className={`flex min-w-[8.8rem] items-center justify-center px-3 py-4 text-xs font-medium transition-all sm:min-w-0 sm:flex-1 sm:px-5 sm:text-sm ${
                         activeTab === tab.id
                           ? "border-b-2 border-slate-900 bg-slate-50 text-slate-900"
                           : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
@@ -593,7 +585,7 @@ export function PropertyDetailPage() {
                 </div>
               </div>
 
-              <div className="p-6">
+              <div className="p-4 sm:p-6">
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.div
                     key={activeTab}
@@ -794,9 +786,9 @@ export function PropertyDetailPage() {
             </div>
           </div>
 
-          <div className="lg:col-span-1">
-            <div className="sticky top-24 space-y-6">
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
+          <div className="min-w-0 lg:col-span-1">
+            <div className="space-y-6 lg:sticky lg:top-24">
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                 <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: "0.05em", fontWeight: 500 }}>
                   {property.status === "venta" ? "Precio" : "Renta mensual"}
                 </p>
