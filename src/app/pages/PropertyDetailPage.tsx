@@ -2,15 +2,15 @@ import { useParams, Link } from "react-router";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { useCatalogProperties } from "../hooks/useCatalogProperties";
-import { Bed, Bath, Square, MapPin, Calendar, Share2, Heart, ArrowLeft, CheckCircle } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Bed, Bath, Square, MapPin, Calendar, Share2, ArrowLeft, CheckCircle } from "lucide-react";
+import { useMemo } from "react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
+import { copyPublicPageUrl } from "../lib/copyPublicLink";
 
 export function PropertyDetailPage() {
   const { id } = useParams();
   const { properties, loading } = useCatalogProperties();
   const property = useMemo(() => properties.find((p) => p.id === id), [properties, id]);
-  const [isFavorite, setIsFavorite] = useState(false);
 
   if (loading) {
     return (
@@ -91,18 +91,12 @@ export function PropertyDetailPage() {
               </div>
               <div className="absolute top-6 right-6 flex gap-2">
                 <button
-                  onClick={() => setIsFavorite(!isFavorite)}
-                  className="w-12 h-12 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all border border-slate-200"
+                  type="button"
+                  onClick={() => id && copyPublicPageUrl(`/propiedades/${id}`)}
+                  className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white/90 backdrop-blur-sm transition-all hover:bg-white"
+                  aria-label="Copiar enlace de la propiedad"
                 >
-                  <Heart
-                    className={`w-6 h-6 ${
-                      isFavorite ? "fill-brand-navy text-brand-navy" : "text-slate-600"
-                    }`}
-                    strokeWidth={1.5}
-                  />
-                </button>
-                <button className="w-12 h-12 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all border border-slate-200">
-                  <Share2 className="w-6 h-6 text-slate-600" strokeWidth={1.5} />
+                  <Share2 className="h-6 w-6 text-slate-600" strokeWidth={1.5} />
                 </button>
               </div>
             </div>

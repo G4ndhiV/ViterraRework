@@ -33,6 +33,8 @@ export type PropertyRow = {
   synced_at: string;
   updated_at: string;
   featured: boolean;
+  /** FK lógica al desarrollo: coincide con `developments.tokko_id`. */
+  development_tokko_id?: string | null;
 };
 
 export function rowToProperty(row: PropertyRow): Property {
@@ -59,6 +61,23 @@ export function rowToProperty(row: PropertyRow): Property {
 export async function fetchCatalogProperties(client: SupabaseClient) {
   /** No filtramos por `deleted_at IS NULL`: en datos sincronizados desde Tokko a veces nunca queda NULL y el listado quedaría vacío. El borrado en admin sigue usando `softDeleteProperty`. */
   return client.from("properties").select("*").order("updated_at", { ascending: false });
+}
+
+/** Propiedades (unidades) vinculadas a un desarrollo vía `properties.development_tokko_id` = `developments.tokko_id`. */
+export async function fetchPropertiesByDevelopmentTokkoId(
+  client: SupabaseClient,
+  developmentTokkoId: string
+) {
+  const tid = developmentTokkoId.trim();
+  if (!tid) return { data: [] as Property[], error: null };
+  const res = await client
+    .from("properties")
+    .select("*")
+    .eq("development_tokko_id", tid)
+    .order("price", { ascending: true });
+  if (res.error) return { data: [] as Property[], error: res.error };
+  const rows = (res.data ?? []) as PropertyRow[];
+  return { data: rows.map(rowToProperty), error: null };
 }
 
 export async function insertProperty(client: SupabaseClient, p: Property, explicitId: string) {
