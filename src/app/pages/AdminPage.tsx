@@ -127,6 +127,7 @@ import {
 import {
   DEFAULT_PIPELINE_GROUP_ID,
   canConfigurePipelineForGroup,
+  createDefaultBuiltinPipelineSnapshot,
   createEmptyGroupPipelineSnapshot,
   getAllowedPipelineGroupIds,
   loadPipelineByGroup,
@@ -137,6 +138,11 @@ import {
 } from "../lib/pipelineByGroup";
 import { type UserGroup } from "../lib/userGroups";
 import { fetchActiveUserGroups, softDeleteUserGroup, upsertUserGroup } from "../lib/supabaseUserGroups";
+import {
+  buildPipelineByGroupFromSources,
+  fetchSalesPipelineConfigs,
+  persistSalesPipelineConfigs,
+} from "../lib/supabaseSalesPipeline";
 import { foldSearchText } from "../lib/searchText";
 
 type TabType =
@@ -208,9 +214,11 @@ export function AdminPage() {
   const [leadsView, setLeadsView] = useState<"kanban" | "table">("kanban");
   /** Vista lista: secciones por estado; true = colapsada */
   const [leadsTableSectionCollapsed, setLeadsTableSectionCollapsed] = useState<Record<string, boolean>>({});
-  const [pipelineByGroup, setPipelineByGroup] = useState<Record<string, GroupPipelineSnapshot>>(() =>
-    loadPipelineByGroup()
-  );
+  const [pipelineByGroup, setPipelineByGroup] = useState<Record<string, GroupPipelineSnapshot>>(() => ({
+    [DEFAULT_PIPELINE_GROUP_ID]: createDefaultBuiltinPipelineSnapshot(),
+  }));
+  /** Tras cargar pipeline desde Supabase (y fusionar local legacy si aplica). */
+  const [pipelineSourcesHydrated, setPipelineSourcesHydrated] = useState(false);
   const [userGroups, setUserGroups] = useState<UserGroup[]>([]);
   const [activePipelineGroupId, setActivePipelineGroupId] = useState<string>(DEFAULT_PIPELINE_GROUP_ID);
   const [leadDialog, setLeadDialog] = useState<{ lead: Lead; mode: "view" | "edit" } | null>(null);
@@ -238,6 +246,10 @@ export function AdminPage() {
       navigate("/login");
       return;
     }
+    if (user?.mustChangePassword) {
+      navigate("/admin/cambiar-contrasena", { replace: true });
+      return;
+    }
 
     let cancelled = false;
     (async () => {
@@ -253,6 +265,8 @@ export function AdminPage() {
         setDevelopments([]);
         setLeadsLoading(false);
         setDevelopmentsLoading(false);
+        setPipelineByGroup(loadPipelineByGroup());
+        setPipelineSourcesHydrated(true);
         return;
       }
 
@@ -265,6 +279,8 @@ export function AdminPage() {
         setDevelopments([]);
         setLeadsLoading(false);
         setDevelopmentsLoading(false);
+        setPipelineByGroup(loadPipelineByGroup());
+        setPipelineSourcesHydrated(true);
         return;
       }
 
@@ -297,14 +313,32 @@ export function AdminPage() {
       }
       setDevelopmentsLoading(false);
 
+      let groupsData: UserGroup[] = [];
       if (groupsRes.error) {
         if (import.meta.env.DEV) {
           console.warn("[Viterra] No se pudieron cargar grupos desde DB:", groupsRes.error.message);
         }
         setUserGroups([]);
       } else {
+        groupsData = groupsRes.data;
         setUserGroups(groupsRes.data);
       }
+
+      const allowedGroupIds = user
+        ? getAllowedPipelineGroupIds(user, groupsData)
+        : [DEFAULT_PIPELINE_GROUP_ID];
+      const localLegacy = loadPipelineByGroup();
+      const pipeRes = await fetchSalesPipelineConfigs(client);
+      if (cancelled) return;
+      if (pipeRes.error) {
+        if (import.meta.env.DEV) {
+          console.warn("[Viterra] sales_pipeline_configs:", pipeRes.error.message);
+        }
+        setPipelineByGroup(buildPipelineByGroupFromSources([], allowedGroupIds, localLegacy));
+      } else {
+        setPipelineByGroup(buildPipelineByGroupFromSources(pipeRes.data, allowedGroupIds, localLegacy));
+      }
+      setPipelineSourcesHydrated(true);
 
       if (import.meta.env.DEV) {
         const host = getSupabaseProjectHost();
@@ -331,7 +365,25 @@ export function AdminPage() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, isAuthenticated, authReady]);
+  }, [navigate, isAuthenticated, authReady, user?.mustChangePassword, user?.id, user?.role]);
+
+  useEffect(() => {
+    if (!pipelineSourcesHydrated) return;
+    const client = getSupabaseClient();
+    const handle = window.setTimeout(() => {
+      if (client) {
+        void persistSalesPipelineConfigs(client, pipelineByGroup).then((r) => {
+          if (r.error) {
+            toast.error(`Pipeline: no se pudo guardar en la base (${r.error.message}).`);
+            savePipelineByGroup(pipelineByGroup);
+          }
+        });
+      } else {
+        savePipelineByGroup(pipelineByGroup);
+      }
+    }, 500);
+    return () => window.clearTimeout(handle);
+  }, [pipelineByGroup, pipelineSourcesHydrated]);
 
   useEffect(() => {
     document.body.classList.add("admin-crm-montserrat");
@@ -370,6 +422,17 @@ export function AdminPage() {
         return;
       }
 
+      setPipelineByGroup((prev) => {
+        const next = { ...prev };
+        for (const id of deletedIds) {
+          delete next[id];
+        }
+        for (const g of nextGroups) {
+          if (!next[g.id]) next[g.id] = createEmptyGroupPipelineSnapshot();
+        }
+        return next;
+      });
+
       if (nextGroups.length > prevGroups.length) {
         toast.success("Grupo creado y guardado correctamente en la base de datos.");
       } else if (nextGroups.length < prevGroups.length) {
@@ -405,16 +468,13 @@ export function AdminPage() {
   useEffect(() => {
     setPipelineByGroup((prev) => {
       if (prev[activePipelineGroupId]) return prev;
-      return {
-        ...prev,
-        [activePipelineGroupId]: createEmptyGroupPipelineSnapshot(),
-      };
+      const snap =
+        activePipelineGroupId === DEFAULT_PIPELINE_GROUP_ID
+          ? createDefaultBuiltinPipelineSnapshot()
+          : createEmptyGroupPipelineSnapshot();
+      return { ...prev, [activePipelineGroupId]: snap };
     });
   }, [activePipelineGroupId]);
-
-  useEffect(() => {
-    savePipelineByGroup(pipelineByGroup);
-  }, [pipelineByGroup]);
 
   const activePipeline =
     pipelineByGroup[activePipelineGroupId] ?? createEmptyGroupPipelineSnapshot();
@@ -1061,12 +1121,17 @@ export function AdminPage() {
   }, []);
 
   const stageAliasToConfiguredId = useMemo(() => {
+    const builtinTokens = new Set(
+      Object.keys(LEAD_STATUS_LABEL).map((k) => normalizeStageToken(k))
+    );
     const out = new Map<string, string>();
     for (const id of leadColumnStatuses) {
       out.set(normalizeStageToken(id), id);
     }
     for (const stage of customKanbanStages) {
-      out.set(normalizeStageToken(stage.label), stage.id);
+      const t = normalizeStageToken(stage.label);
+      if (builtinTokens.has(t)) continue;
+      if (!out.has(t)) out.set(t, stage.id);
     }
     return out;
   }, [leadColumnStatuses, customKanbanStages, normalizeStageToken]);
@@ -1091,6 +1156,13 @@ export function AdminPage() {
         if (!lead.status || leadColumnStatuses.includes(lead.status)) return null;
         const mapped = stageAliasToConfiguredId.get(normalizeStageToken(lead.status));
         if (!mapped || mapped === lead.status) return null;
+        const leadKey = lead.status.trim().toLowerCase();
+        if (
+          Object.prototype.hasOwnProperty.call(LEAD_STATUS_LABEL, leadKey) &&
+          mapped.startsWith("custom_")
+        ) {
+          return null;
+        }
         return { lead, mapped };
       })
       .filter((x): x is { lead: Lead; mapped: string } => x !== null);
@@ -1982,11 +2054,7 @@ export function AdminPage() {
                     <p className="mt-2.5 text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
                       Administra y da seguimiento a tus clientes potenciales con vista Kanban o tabla.
                     </p>
-                    {user.role === "asesor" && (
-                      <p className="mt-3 rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-xs text-amber-900/90" style={{ fontWeight: 500 }}>
-                        Solo ves los leads asignados a tu usuario.
-                      </p>
-                    )}
+                    
                   </div>
 
                   <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
@@ -2196,15 +2264,19 @@ export function AdminPage() {
               </div>
             )}
 
-            {!leadsLoading && leadColumnStatuses.length === 0 && (
-              <div
-                className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
-                style={{ fontWeight: 500 }}
-                role="status"
-              >
-                Este pipeline no tiene columnas todavía. Crea la primera en <code className="text-xs">Mi empresa → Pipeline de ventas</code>.
-              </div>
-            )}
+            {!leadsLoading &&
+              leadColumnStatuses.length === 0 &&
+              customKanbanStages.length === 0 &&
+              leadStatusesForRendering.length === 0 && (
+                <div
+                  className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                  style={{ fontWeight: 500 }}
+                  role="status"
+                >
+                  Este pipeline no tiene columnas todavía. Crea la primera en{" "}
+                  <code className="text-xs">Mi empresa → Pipeline de ventas</code>.
+                </div>
+              )}
 
             {!leadsLoading &&
               user &&
@@ -2216,10 +2288,13 @@ export function AdminPage() {
                   style={{ fontWeight: 500 }}
                   role="status"
                 >
-                  Hay {leads.length} lead{leads.length === 1 ? "" : "s"} en el sistema, pero ninguno está asignado a tu
-                  usuario ({roleLabelEs(user.role)}). Pide a un administrador que asigne{" "}
-                  <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">assigned_to_user_id</code> a tu id de
-                  sesión, o configura en Supabase el metadata{" "}
+                  Hay {leads.length} lead{leads.length === 1 ? "" : "s"} en el sistema, pero ninguno coincide con tu
+                  usuario ({roleLabelEs(user.role)}). En datos Tokko,{" "}
+                  <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">assigned_to_user_id</code> suele ser el{" "}
+                  <strong>id Tokko del asesor</strong> (no el UUID de Auth): debe coincidir con{" "}
+                  <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">tokko_users.tokko_user_id</code> o con{" "}
+                  <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">user_metadata.tokko_user_id</code> en
+                  Auth. Un administrador puede poner{" "}
                   <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">role: &quot;admin&quot;</code> para ver
                   todos.
                 </div>
@@ -3451,7 +3526,11 @@ export function AdminPage() {
         />
 
         <AlertDialog
-          open={!!deletePipelineStage && activeTab === "leads"}
+          open={
+            !!deletePipelineStage &&
+            activeTab === "company" &&
+            companySubtab === "leadStages"
+          }
           onOpenChange={(open) => {
             if (!open) setDeletePipelineStage(null);
           }}

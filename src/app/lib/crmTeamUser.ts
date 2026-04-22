@@ -5,8 +5,13 @@ const PROFILE_ROLES: UserRole[] = ["lider_grupo", "asesor"];
 
 /** Encuentra el usuario del equipo que corresponde al asignado del lead (id CRM o nombre). */
 export function resolveLeadTeamUser(users: User[], lead: Lead): User | undefined {
-  const byId = users.find((u) => u.id === lead.assignedToUserId);
-  if (byId) return byId;
+  const aid = lead.assignedToUserId?.trim();
+  if (aid) {
+    const byId = users.find((u) => u.id === aid);
+    if (byId) return byId;
+    const byTokko = users.find((u) => u.tokkoUserId === aid);
+    if (byTokko) return byTokko;
+  }
   const name = lead.assignedTo?.trim();
   if (!name) return undefined;
   return users.find((u) => u.name.trim() === name);
