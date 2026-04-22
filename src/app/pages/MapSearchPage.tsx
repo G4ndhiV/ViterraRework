@@ -181,6 +181,11 @@ export function MapSearchPage() {
 
   const [zone, setZone] = useState<SearchZone | null>(null);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
+  const [isReducedViewport, setIsReducedViewport] = useState(
+    () => (typeof window !== "undefined" ? window.innerWidth < 1024 : false)
+  );
+  const [mobileShowMap, setMobileShowMap] = useState(true);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   /** Propiedad cuya tarjeta está enfocada; el marcador correspondiente se resalta en el mapa. */
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const selectedPropertyIdRef = useRef<string | null>(null);
@@ -197,6 +202,24 @@ export function MapSearchPage() {
   }, [isDrawingMode]);
 
   useEffect(() => {
+    const onResize = () => setIsReducedViewport(window.innerWidth < 1024);
+    window.addEventListener("resize", onResize, { passive: true });
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    if (!isReducedViewport) {
+      setMobileShowMap(true);
+      setMobileFiltersOpen(false);
+      return;
+    }
+    if (zone) {
+      setMobileShowMap(false);
+      setMobileFiltersOpen(false);
+    }
+  }, [isReducedViewport, zone]);
+
+  useEffect(() => {
     const st = statusFromSearchParams(searchParams);
     setFilters((f) => ({ ...f, status: st }));
   }, [searchParams]);
@@ -205,6 +228,8 @@ export function MapSearchPage() {
     () => applyFilters(catalogProperties, filters, zone),
     [catalogProperties, filters, zone]
   );
+  const resultsRef = useRef<Property[]>(results);
+  resultsRef.current = results;
 
   const selectedProperty = useMemo(
     () => (selectedPropertyId ? results.find((p) => p.id === selectedPropertyId) ?? null : null),
@@ -395,6 +420,8 @@ export function MapSearchPage() {
         }
       };
       map.on("zoomend", onZoomEnd);
+      onZoomEnd();
+      syncMarkers(resultsRef.current);
 
       const container = map.getContainer();
 
@@ -513,7 +540,12 @@ export function MapSearchPage() {
       container.addEventListener("pointerup", onPointerUp);
       container.addEventListener("pointercancel", onPointerCancel);
 
-      setTimeout(() => map.invalidateSize(), 200);
+      setTimeout(() => {
+        if (cancelled || !mapRef.current) return;
+        map.invalidateSize();
+        onZoomEnd();
+        syncMarkers(resultsRef.current);
+      }, 200);
 
       const cleanupPointer = () => {
         container.removeEventListener("pointerdown", onPointerDown);
@@ -574,6 +606,7 @@ export function MapSearchPage() {
     setZone(null);
     drawingModeRef.current = false;
     setIsDrawingMode(false);
+    if (isReducedViewport) setMobileShowMap(true);
   };
 
   const redrawZone = () => {
@@ -587,6 +620,10 @@ export function MapSearchPage() {
     setZone(null);
     drawingModeRef.current = true;
     setIsDrawingMode(true);
+    if (isReducedViewport) {
+      setMobileShowMap(true);
+      setMobileFiltersOpen(false);
+    }
   };
 
   useEffect(() => {
@@ -595,6 +632,28 @@ export function MapSearchPage() {
     const t = window.setTimeout(() => map.invalidateSize(), 220);
     return () => window.clearTimeout(t);
   }, [zone]);
+
+  useEffect(() => {
+    if (!isReducedViewport || !mobileShowMap) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const t = window.setTimeout(() => map.invalidateSize(), 240);
+    return () => window.clearTimeout(t);
+  }, [isReducedViewport, mobileShowMap]);
+
+  const toggleDrawingMode = () => {
+    if (isDrawingMode) {
+      cancelPartialStrokeRef.current?.();
+      drawingModeRef.current = false;
+      setIsDrawingMode(false);
+      setMobileFiltersOpen(false);
+      return;
+    }
+    drawingModeRef.current = true;
+    setIsDrawingMode(true);
+    setMobileFiltersOpen(false);
+    if (isReducedViewport) setMobileShowMap(true);
+  };
 
   const filterFields = (
     <>
@@ -666,7 +725,17 @@ export function MapSearchPage() {
   return (
     <div className="viterra-page map-search-page flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-white text-slate-900">
       <div data-reveal className="flex min-h-0 flex-1 flex-col lg:flex-row lg:overflow-hidden">
-        <aside className="flex h-[50dvh] min-h-0 w-full shrink-0 flex-col overflow-hidden border-slate-200 bg-white lg:h-auto lg:w-1/2 lg:max-w-[50vw] lg:shrink lg:border-r lg:border-slate-200 lg:min-h-0">
+        <aside
+          className={cn(
+            "flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-slate-200 bg-white lg:h-auto lg:w-1/2 lg:max-w-[50vw] lg:shrink lg:border-r lg:border-slate-200 lg:min-h-0",
+            isReducedViewport
+              ? mobileShowMap
+                ? "hidden"
+                : "h-full flex-1"
+              : "h-[50dvh]"
+          )}
+        >
+          {isReducedViewport && !mobileShowMap && <MapSearchHeaderBar />}
           <div className="shrink-0 border-b-2 border-brand-navy/15 bg-gradient-to-b from-[#f4f2ef] to-white px-4 py-4 sm:px-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -684,18 +753,21 @@ export function MapSearchPage() {
                 >
                   Ver lista
                 </Link>
+                {isReducedViewport && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileShowMap(true);
+                      setMobileFiltersOpen(false);
+                    }}
+                    className="font-heading rounded-none border-2 border-brand-navy/25 bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-brand-navy shadow-sm transition-colors hover:border-primary hover:text-primary sm:text-xs"
+                  >
+                    Ver mapa
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => {
-                    if (isDrawingMode) {
-                      cancelPartialStrokeRef.current?.();
-                      drawingModeRef.current = false;
-                      setIsDrawingMode(false);
-                    } else {
-                      drawingModeRef.current = true;
-                      setIsDrawingMode(true);
-                    }
-                  }}
+                  onClick={toggleDrawingMode}
                   className={cn(
                     "font-heading inline-flex items-center justify-center rounded-none px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.14em] shadow-lg transition-all sm:text-xs",
                     isDrawingMode
@@ -766,10 +838,68 @@ export function MapSearchPage() {
 
         <div
           ref={mapShellRef}
-          className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col border-t border-slate-200 bg-slate-100 lg:h-auto lg:min-h-0 lg:w-1/2 lg:border-l lg:border-t-0"
+          className={cn(
+            "relative isolate flex min-h-0 min-w-0 flex-1 flex-col border-t border-slate-200 bg-slate-100 lg:h-auto lg:min-h-0 lg:w-1/2 lg:border-l lg:border-t-0",
+            isReducedViewport && !mobileShowMap && "hidden lg:flex"
+          )}
         >
-          <MapSearchHeaderBar />
+          {(!isReducedViewport || mobileShowMap) && <MapSearchHeaderBar />}
           <div className="relative z-0 min-h-0 w-full flex-1 overflow-hidden lg:min-h-0">
+            {isReducedViewport && mobileShowMap && (
+              <div className="pointer-events-none absolute left-3 right-3 top-2 z-[1006] flex flex-col gap-2">
+                {isDrawingMode ? (
+                  <div className="pointer-events-auto flex items-center">
+                    <button
+                      type="button"
+                      onClick={toggleDrawingMode}
+                      className="font-heading inline-flex w-full items-center justify-center rounded-none border-2 border-primary bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-primary shadow-[0_8px_24px_rgba(0,0,0,0.18)] ring-2 ring-primary/25 hover:bg-red-50"
+                    >
+                      Cancelar trazo
+                    </button>
+                  </div>
+                ) : (
+                  <div className="pointer-events-auto flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setMobileFiltersOpen((v) => !v)}
+                      className="font-heading inline-flex flex-1 items-center justify-center rounded-none border-2 border-slate-200 bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy shadow-sm transition-colors hover:border-primary hover:text-primary"
+                    >
+                      {mobileFiltersOpen ? "Cerrar filtros" : "Filtros"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={zone && !isDrawingMode ? redrawZone : toggleDrawingMode}
+                      className="font-heading inline-flex flex-1 items-center justify-center rounded-none bg-primary px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white shadow-lg shadow-primary/35 transition-all hover:bg-brand-red-hover"
+                    >
+                      {zone ? "Redibujar zona" : "Dibujar zona"}
+                    </button>
+                    {zone && (
+                      <button
+                        type="button"
+                        onClick={clearZone}
+                        className="font-heading inline-flex flex-1 items-center justify-center rounded-none border-2 border-brand-navy/25 bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy shadow-sm transition-colors hover:border-primary hover:text-primary"
+                      >
+                        Quitar zona
+                      </button>
+                    )}
+                  </div>
+                )}
+                {zone && (
+                  <button
+                    type="button"
+                    onClick={() => setMobileShowMap(false)}
+                    className="pointer-events-auto font-heading inline-flex items-center justify-center rounded-none border-2 border-brand-navy/25 bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy shadow-sm transition-colors hover:border-primary hover:text-primary"
+                  >
+                    Ver propiedades ({results.length})
+                  </button>
+                )}
+                {mobileFiltersOpen && !isDrawingMode && (
+                  <div className="pointer-events-auto rounded-none border-2 border-brand-navy/25 bg-white p-3 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
+                    {filterFields}
+                  </div>
+                )}
+              </div>
+            )}
             <div
               ref={mapEl}
               className="absolute inset-0 z-0 bg-slate-300 [&_.leaflet-container]:!filter-none [&_.leaflet-tile-pane]:!filter-none"
@@ -777,7 +907,10 @@ export function MapSearchPage() {
 
             <button
               type="button"
-              className="absolute right-3 top-3 z-[1002] flex h-9 w-9 items-center justify-center rounded-none border-2 border-slate-200 bg-white text-slate-800 shadow-md transition-colors hover:bg-slate-50"
+              className={cn(
+                "absolute right-3 z-[1002] flex h-9 w-9 items-center justify-center rounded-none border-2 border-slate-200 bg-white text-slate-800 shadow-md transition-colors hover:bg-slate-50",
+                isReducedViewport && mobileShowMap ? "top-16" : "top-3"
+              )}
               aria-label={mapFs ? "Salir de pantalla completa" : "Pantalla completa"}
               onClick={() => {
                 const shell = mapShellRef.current;
@@ -877,15 +1010,7 @@ export function MapSearchPage() {
               </div>
             )}
 
-            {isDrawingMode && (
-              <div className="pointer-events-none absolute inset-x-0 top-4 z-[1000] flex justify-center px-4">
-                <div className="max-w-md rounded-none border border-white/15 bg-slate-900 px-5 py-2.5 text-center text-[13px] font-medium text-white shadow-lg">
-                  Dibuja el contorno en el mapa y suelta para aplicar
-                </div>
-              </div>
-            )}
-
-            {zone && !isDrawingMode && (
+            {zone && !isDrawingMode && !isReducedViewport && (
               <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1000] flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
                 <div className="pointer-events-auto flex w-full max-w-md flex-col gap-2 rounded-none border-2 border-slate-200 bg-white p-2 shadow-[0_-4px_24px_rgba(0,0,0,0.12)] sm:flex-row sm:p-2">
                   <button

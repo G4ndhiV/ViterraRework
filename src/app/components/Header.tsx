@@ -132,9 +132,12 @@ export function Header() {
   const isRentPage = location.pathname === "/renta";
   const isSalePage = location.pathname === "/venta";
   const isDevelopmentsPage = location.pathname === "/desarrollos";
+  const isDevelopmentsSection = location.pathname.startsWith("/desarrollos");
+  const isPropertiesSection = location.pathname.startsWith("/propiedades");
   const isServicesPage = location.pathname === "/servicios";
   const isContactPage = location.pathname === "/contacto";
   const isAboutPage = location.pathname === "/nosotros";
+  const lockHeaderInMode2 = isDevelopmentsSection || isPropertiesSection;
   const useOverlayHeader =
     isHome || isRentPage || isSalePage || isDevelopmentsPage || isServicesPage || isContactPage || isAboutPage;
   const rafRef = useRef<number | null>(null);
@@ -163,7 +166,7 @@ export function Header() {
     readScroll();
   }, [location.pathname, readScroll]);
 
-  const p = scrollP;
+  const p = lockHeaderInMode2 ? 1 : scrollP;
 
   /** 1 en la parte superior, 0 tras un poco de scroll — refuerzo del velo solo al inicio */
   const firstModeHero = 1 - smoothstep01(p, 0.02, 0.16);
@@ -328,9 +331,9 @@ export function Header() {
               })}
             </div>
             <div className="flex w-20 shrink-0 items-center justify-end gap-0.5 self-stretch">
-              <button type="button" className={iconBtnClass} aria-label="Cuenta">
+              <Link to="/login" className={iconBtnClass} aria-label="Inicio de sesión">
                 <User className="h-5 w-5" strokeWidth={1.5} />
-              </button>
+              </Link>
             </div>
           </nav>
 
@@ -375,29 +378,34 @@ export function Header() {
                   </Link>
                 );
               })}
-              <button type="button" className="shrink-0 p-2 text-white/85 hover:text-white" aria-label="Cuenta">
+              <Link to="/login" className="shrink-0 p-2 text-white/85 hover:text-white" aria-label="Inicio de sesión">
                 <User className="h-[18px] w-[18px]" strokeWidth={1.5} />
-              </button>
+              </Link>
             </div>
           </nav>
         </div>
 
         <div
           className={cn(
-            "relative flex min-h-[52px] items-center justify-between gap-2 border-t-0 px-2 py-1.5 sm:px-3",
-            inPreviewCanvas ? "flex" : "flex lg:hidden"
+            "relative grid min-h-[52px] grid-cols-3 items-center gap-2 border-t-0 px-2 py-1.5 sm:px-3",
+            inPreviewCanvas ? "" : "lg:hidden"
           )}
         >
-          <div className="relative z-[56] flex w-11 shrink-0 items-center justify-start sm:w-12">
-            <SocialHeaderDropdown
-              triggerClassName="p-2 text-white/85 hover:text-white"
-              menuAlign="start"
-            />
-          </div>
-          <div className="relative z-[52] flex min-w-0 flex-1 items-center justify-end gap-1.5 sm:gap-2">
+          <Link
+            to="/"
+            className="relative z-[56] inline-flex min-w-0 max-w-full flex-col items-start justify-center gap-0.5 justify-self-start"
+            onClick={() => setIsMenuOpen(false)}
+            aria-label="Viterra Grupo Inmobiliario — Inicio"
+          >
+            <span className="font-heading truncate text-[13px] font-medium tracking-[0.16em] text-white sm:tracking-[0.18em]">
+              VITERRA
+            </span>
+            <span className="h-px w-7 shrink-0 bg-[#C8102E] sm:w-8" aria-hidden />
+          </Link>
+          <div className="relative z-[52] flex min-w-0 items-center justify-center justify-self-center">
             <Link
               to="/"
-              className="flex min-w-0 max-w-[min(58vw,12rem)] items-center gap-1.5 overflow-visible sm:max-w-none sm:gap-2"
+              className="flex shrink-0 items-center justify-center overflow-visible rounded-sm"
               onClick={() => setIsMenuOpen(false)}
               aria-label="Viterra Grupo Inmobiliario — Inicio"
             >
@@ -428,17 +436,17 @@ export function Header() {
                   />
                 </span>
               </span>
-              <span className="inline-flex min-w-0 flex-col items-start gap-0.5">
-                <span className="font-heading truncate text-[13px] font-medium tracking-[0.16em] text-white sm:tracking-[0.18em]">
-                  VITERRA
-                </span>
-                <span className="h-px w-7 bg-[#C8102E] sm:w-8" aria-hidden />
-              </span>
             </Link>
+          </div>
+          <div className="relative z-[56] flex items-center justify-end gap-0.5 justify-self-end sm:gap-1">
+            <SocialHeaderDropdown
+              triggerClassName="p-2 text-white/85 hover:text-white"
+              menuAlign="end"
+            />
             <button
               type="button"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="relative z-[56] shrink-0 p-2 text-white"
+              className="shrink-0 p-2 text-white"
               aria-expanded={isMenuOpen}
             >
               {isMenuOpen ? <X className="h-6 w-6" strokeWidth={1.5} /> : <Menu className="h-6 w-6" strokeWidth={1.5} />}

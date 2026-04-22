@@ -192,7 +192,7 @@ export function PropertiesPage() {
 
           {/* Properties Grid */}
           {viewMode === "grid" && filteredProperties.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 items-stretch md:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredProperties.map((property) => (
                 <PropertyCard key={property.id} property={property} />
               ))}

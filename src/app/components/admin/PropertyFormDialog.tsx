@@ -54,6 +54,9 @@ export function PropertyFormDialog({
         type: "Apartamento",
         status: "venta",
         coordinates: { lat: 20.676208, lng: -103.34721 },
+        amenities: [],
+        services: [],
+        additionalFeatures: [],
       });
     }
   }, [open, mode, property, newId]);

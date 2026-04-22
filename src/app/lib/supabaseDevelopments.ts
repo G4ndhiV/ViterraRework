@@ -141,6 +141,31 @@ export async function fetchDevelopmentsWithUnits(
   return { data, error: null };
 }
 
+/**
+ * Busca un desarrollo por su `tokko_id` (coincide con `properties.development_tokko_id`).
+ * Incluye unidades para mantener el mismo modelo `Development` que el resto del catálogo.
+ */
+export async function fetchDevelopmentByTokkoId(
+  client: SupabaseClient,
+  tokkoId: string,
+  opts: { publicOnly?: boolean } = {}
+) {
+  const id = String(tokkoId).trim();
+  if (!id) return { data: null as Development | null, error: null };
+
+  let q = client.from("developments").select("*").eq("tokko_id", id);
+  if (opts.publicOnly) q = q.eq("display_on_web", true);
+  const devRes = await q.maybeSingle();
+  if (devRes.error) return { data: null, error: devRes.error };
+  const row = devRes.data as DevelopmentRow | null;
+  if (!row) return { data: null, error: null };
+
+  const unitRes = await client.from("development_units").select("*").eq("development_id", row.id);
+  if (unitRes.error) return { data: null, error: unitRes.error };
+  const units = groupUnitsByDevelopment((unitRes.data ?? []) as DevelopmentUnitRow[]).get(row.id) ?? [];
+  return { data: rowToDevelopment(row, units), error: null };
+}
+
 export async function fetchDevelopmentById(
   client: SupabaseClient,
   id: string,
