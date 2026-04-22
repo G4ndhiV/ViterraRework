@@ -35,6 +35,10 @@ export interface Development {
   featured?: boolean;
   /** Columna `display_on_web` en Supabase (por defecto true en creación admin). */
   displayOnWeb?: boolean;
+  /** Teléfono de contacto del desarrollo (`in_charge_phone` en Supabase). */
+  inChargePhone?: string;
+  /** Email de contacto (`in_charge_email` en Supabase). */
+  inChargeEmail?: string;
   tokkoId?: string;
   payload?: Record<string, unknown>;
 }
