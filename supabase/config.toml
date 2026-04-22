@@ -17,5 +17,9 @@ major_version = 17
 [functions.tokko-sync]
 verify_jwt = false
 
+# Aprovisionar Auth para filas tokko_users (service role + SYNC_HTTP_SECRET).
+[functions.tokko-provision-auth-users]
+verify_jwt = false
+
 [functions.mirror-listing-media]
 verify_jwt = false

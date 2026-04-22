@@ -281,10 +281,16 @@ export function AdminUsersManager({
     if (selectedName) aliases.add(selectedName);
     if (selectedEmail) aliases.add(selectedEmail);
     if (selectedEmailUser) aliases.add(selectedEmailUser);
+    const selectedTokko = selectedUser.tokkoUserId?.trim().toLowerCase();
     return leads
       .filter((lead) => {
         const leadAssignedId = lead.assignedToUserId?.trim().toLowerCase();
-        if (leadAssignedId && leadAssignedId === selectedId) return true;
+        if (
+          leadAssignedId &&
+          (leadAssignedId === selectedId || (selectedTokko && leadAssignedId === selectedTokko))
+        ) {
+          return true;
+        }
 
         const assignedByName = foldSearchText(lead.assignedTo);
         if (!assignedByName) return false;
