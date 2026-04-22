@@ -17,7 +17,6 @@ import {
   Maximize2,
   Map,
   Share2,
-  Heart,
   Ruler,
   Bed,
   Car,
@@ -45,7 +44,6 @@ export function DevelopmentDetailPage() {
     message: "",
   });
   const [submitted, setSubmitted] = useState(false);
-  const [isFavorite, setIsFavorite] = useState(false);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -236,7 +234,7 @@ export function DevelopmentDetailPage() {
 
       {/* Breadcrumb */}
       <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-4">
+        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
           <Link
             to="/desarrollos"
             className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium"
@@ -249,13 +247,13 @@ export function DevelopmentDetailPage() {
       </div>
 
       {/* Main Content */}
-      <div data-reveal className="max-w-7xl mx-auto px-6 lg:px-8 py-5">
-        <div className="grid lg:grid-cols-3 gap-6">
+      <div data-reveal className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-5 lg:px-8">
+        <div className="grid gap-6 lg:grid-cols-3">
           {/* Left Column - Gallery and Details */}
-          <div className="lg:col-span-2 space-y-5">
+          <div className="min-w-0 space-y-5 lg:col-span-2">
             {/* Image Gallery */}
             <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-slate-200">
-              <div className="relative h-[320px] md:h-[360px] lg:h-[400px] bg-slate-200 group">
+              <div className="relative h-[250px] bg-slate-200 group sm:h-[320px] md:h-[360px] lg:h-[400px]">
                 <img
                   src={development.images[currentImageIndex]}
                   alt={development.name}
@@ -296,12 +294,6 @@ export function DevelopmentDetailPage() {
                   >
                     <Maximize2 className="w-5 h-5 text-slate-700" strokeWidth={1.5} />
                   </button>
-                  <button
-                    onClick={() => setIsFavorite(!isFavorite)}
-                    className="w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all"
-                  >
-                    <Heart className={`w-5 h-5 ${isFavorite ? "fill-red-600 text-red-600" : "text-slate-700"}`} strokeWidth={1.5} />
-                  </button>
                   <button className="w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all">
                     <Share2 className="w-5 h-5 text-slate-700" strokeWidth={1.5} />
                   </button>
@@ -320,9 +312,9 @@ export function DevelopmentDetailPage() {
                     <button
                       key={idx}
                       onClick={() => setCurrentImageIndex(idx)}
-                      className={`relative flex-shrink-0 h-16 w-16 rounded-lg overflow-hidden border-2 transition-all md:h-[4.5rem] md:w-[4.5rem] ${
+                      className={`relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border-2 transition-all sm:h-16 sm:w-16 md:h-[4.5rem] md:w-[4.5rem] ${
                         idx === currentImageIndex
-                          ? "border-slate-900 ring-2 ring-slate-900 ring-offset-2"
+                          ? "border-slate-900 ring-2 ring-slate-900 sm:ring-offset-2"
                           : "border-slate-200 hover:border-slate-400"
                       }`}
                     >
@@ -334,20 +326,20 @@ export function DevelopmentDetailPage() {
             </div>
 
             {/* Development Info Header */}
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-              <div className="flex items-start justify-between mb-4 flex-wrap gap-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 mb-2 tracking-tight" style={{ fontWeight: 700 }}>
+                  <h1 className="mb-2 break-words text-[1.75rem] font-semibold leading-tight tracking-tight text-slate-900 sm:text-2xl md:text-3xl" style={{ fontWeight: 700 }}>
                     {development.name}
                   </h1>
-                  <div className="flex items-center gap-2 text-slate-600 mb-3">
+                  <div className="mb-3 flex items-start gap-2 text-slate-600">
                     <MapPin className="w-4 h-4 flex-shrink-0" strokeWidth={1.5} />
-                    <span className="text-sm font-medium" style={{ fontWeight: 500 }}>
+                    <span className="break-words text-sm font-medium" style={{ fontWeight: 500 }}>
                       {development.fullAddress}, {development.colony}
                     </span>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="text-left sm:text-right">
                   <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>Desde</p>
                   <p className="text-xl md:text-2xl font-semibold text-slate-900" style={{ fontWeight: 700 }}>
                     {development.priceRange.split(' - ')[0]}
@@ -356,7 +348,7 @@ export function DevelopmentDetailPage() {
               </div>
 
               {/* Quick Stats */}
-              <div className="grid grid-cols-3 gap-2 md:gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 md:gap-4 md:p-4">
                 <div className="text-center">
                   <Building2 className="w-5 h-5 text-slate-600 mx-auto mb-1" strokeWidth={1.5} />
                   <p className="text-base md:text-lg font-semibold text-slate-900" style={{ fontWeight: 600 }}>{development.units}</p>
@@ -388,7 +380,7 @@ export function DevelopmentDetailPage() {
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`flex-1 px-6 py-4 text-sm font-medium transition-all whitespace-nowrap ${
+                      className={`min-w-[8.8rem] px-4 py-4 text-xs font-medium transition-all whitespace-nowrap sm:min-w-0 sm:flex-1 sm:px-6 sm:text-sm ${
                         activeTab === tab.id
                           ? "text-slate-900 border-b-2 border-slate-900 bg-slate-50"
                           : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
@@ -402,7 +394,7 @@ export function DevelopmentDetailPage() {
               </div>
 
               {/* Tab Content */}
-              <div className="p-6">
+              <div className="p-4 sm:p-6">
                 {/* Descripción Tab */}
                 {activeTab === "descripcion" && (
                   <div className="space-y-4">
@@ -589,8 +581,8 @@ export function DevelopmentDetailPage() {
           </div>
 
           {/* Right Column - Contact Form (Sticky) */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-24 space-y-6">
+          <div className="min-w-0 lg:col-span-1">
+            <div className="space-y-6 lg:sticky lg:top-24">
               {/* Contact Card */}
               <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
                 <h3 className="text-lg font-semibold text-slate-900 mb-4" style={{ fontWeight: 600 }}>

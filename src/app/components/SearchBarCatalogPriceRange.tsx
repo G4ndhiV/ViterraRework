@@ -160,10 +160,10 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
   };
 
   const cardClass = cn(
-    "rounded-2xl border",
-    isAmbient && "border-white/15 bg-white/[0.04] backdrop-blur-sm",
-    isPremium && !isAmbient && "border-slate-100 bg-white shadow-sm",
-    !isPremium && !isAmbient && "border-slate-100 bg-white shadow-sm"
+    "rounded-2xl",
+    isAmbient && "bg-white/[0.04] backdrop-blur-sm",
+    isPremium && !isAmbient && "bg-white shadow-sm",
+    !isPremium && !isAmbient && "bg-white shadow-sm"
   );
 
   const titleClass = cn(
@@ -199,7 +199,7 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
   /** Pista fina + rango sólido; thumbs circulares (aspect-square + rounded-full). */
   const sliderLook = cn(
     "w-full touch-pan-x py-3",
-    "[&_[data-slot=slider-track]]:relative [&_[data-slot=slider-track]]:h-px [&_[data-slot=slider-track]]:rounded-none [&_[data-slot=slider-track]]:bg-neutral-300",
+    "[&_[data-slot=slider-track]]:relative [&_[data-slot=slider-track]]:mx-2 [&_[data-slot=slider-track]]:h-px [&_[data-slot=slider-track]]:rounded-none [&_[data-slot=slider-track]]:bg-neutral-300",
     "[&_[data-slot=slider-range]]:rounded-none",
     "[&_[data-slot=slider-thumb]]:box-border [&_[data-slot=slider-thumb]]:size-5 [&_[data-slot=slider-thumb]]:min-h-5 [&_[data-slot=slider-thumb]]:min-w-5 [&_[data-slot=slider-thumb]]:shrink-0 [&_[data-slot=slider-thumb]]:rounded-full [&_[data-slot=slider-thumb]]:border-2 [&_[data-slot=slider-thumb]]:border-neutral-900 [&_[data-slot=slider-thumb]]:bg-white [&_[data-slot=slider-thumb]]:shadow-sm [&_[data-slot=slider-thumb]]:outline-none [&_[data-slot=slider-thumb]]:transition-shadow [&_[data-slot=slider-thumb]]:duration-150 [&_[data-slot=slider-thumb]]:hover:shadow-[0_0_0_7px_rgba(0,0,0,0.06)] [&_[data-slot=slider-thumb]]:focus-visible:shadow-[0_0_0_7px_rgba(0,0,0,0.08)]",
     isAmbient &&
@@ -226,12 +226,9 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
               MXN
             </span>
           </h3>
-          <p className={cn(subClass, "mt-0.5 text-xs sm:text-sm")}>
-            Promedio del catálogo: <span className="font-medium text-inherit">{formatMxnLong(avg)}</span>
-          </p>
         </div>
 
-        <div className="mb-0.5 flex items-center justify-between gap-2 text-[10px] tabular-nums sm:text-[11px]">
+        <div className="mb-1.5 flex items-center justify-between gap-2 text-[10px] tabular-nums sm:text-[11px]">
           <span className={isAmbient ? "text-white/55" : "text-slate-400"}>{formatAxis(domMin)}</span>
           <span className={isAmbient ? "text-white/55" : "text-slate-400"}>{formatAxis(domMax)}</span>
         </div>

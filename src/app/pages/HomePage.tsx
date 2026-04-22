@@ -5,7 +5,7 @@ import { Footer } from "../components/Footer";
 import { PropertyCard } from "../components/PropertyCard";
 import { SearchBar, SearchFilters } from "../components/SearchBar";
 import { useCatalogProperties } from "../hooks/useCatalogProperties";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
@@ -48,6 +48,27 @@ export function HomePage() {
       null,
     [featuredProperties, activeFeaturedId]
   );
+  const activeFeaturedIndex = useMemo(
+    () => featuredProperties.findIndex((p) => p.id === activeFeaturedProperty?.id),
+    [featuredProperties, activeFeaturedProperty?.id]
+  );
+  const featuredLabel = (title?: string, fallback?: string) => {
+    const a = title?.trim();
+    const b = fallback?.trim();
+    const base = a || b || "Propiedad destacada";
+    const MAX_CHARS = 44;
+    return base.length > MAX_CHARS ? `${base.slice(0, MAX_CHARS - 3).trimEnd()}...` : base;
+  };
+  const goFeaturedPrev = () => {
+    if (featuredProperties.length <= 1 || activeFeaturedIndex < 0) return;
+    const next = (activeFeaturedIndex - 1 + featuredProperties.length) % featuredProperties.length;
+    setActiveFeaturedId(featuredProperties[next].id);
+  };
+  const goFeaturedNext = () => {
+    if (featuredProperties.length <= 1 || activeFeaturedIndex < 0) return;
+    const next = (activeFeaturedIndex + 1) % featuredProperties.length;
+    setActiveFeaturedId(featuredProperties[next].id);
+  };
 
   useEffect(() => {
     if (featuredProperties.length === 0) {
@@ -299,11 +320,31 @@ export function HomePage() {
                     whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
                     viewport={{ once: true, amount: 0.2 }}
                     transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
-                    className="mx-auto h-[360px] w-full max-w-5xl sm:h-[390px] md:h-[420px]"
+                    className="relative mx-auto h-[360px] w-full max-w-5xl sm:h-[390px] md:h-[420px]"
                   >
                     <div className="h-full [&>article]:h-full">
                       <PropertyCard property={activeFeaturedProperty} variant="editorial" />
                     </div>
+                    {featuredProperties.length > 1 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={goFeaturedPrev}
+                          className="absolute left-2 top-1/2 z-20 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/55 bg-black/45 text-white transition hover:bg-black/65 sm:left-3 sm:h-10 sm:w-10"
+                          aria-label="Propiedad destacada anterior"
+                        >
+                          <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={goFeaturedNext}
+                          className="absolute right-2 top-1/2 z-20 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/55 bg-black/45 text-white transition hover:bg-black/65 sm:right-3 sm:h-10 sm:w-10"
+                          aria-label="Siguiente propiedad destacada"
+                        >
+                          <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2} />
+                        </button>
+                      </>
+                    )}
                   </motion.div>
                 )}
 
@@ -342,24 +383,20 @@ export function HomePage() {
                               className={cn(
                                 "absolute inset-0 h-full w-full object-cover transition-all duration-500",
                                 selected
-                                  ? "scale-[1.06] opacity-45 group-hover:scale-100 group-hover:opacity-100"
-                                  : "opacity-28 group-hover:scale-100 group-hover:opacity-100"
+                                  ? "scale-[1.03] opacity-86 blur-[0.35px] group-hover:scale-100 group-hover:opacity-100 group-hover:blur-0"
+                                  : "opacity-76 blur-[0.6px] group-hover:scale-100 group-hover:opacity-95 group-hover:blur-0"
                               )}
                             />
-                            <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-black/80 to-black/95 transition-opacity duration-300 group-hover:opacity-0" />
+                            <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/45 to-black/55 transition-opacity duration-300 group-hover:opacity-30" />
 
-                            <div className="relative z-[1] flex h-full flex-col justify-between p-3 transition-opacity duration-300 group-hover:opacity-0">
+                            <div className="relative z-[1] flex h-full flex-col justify-between p-3 transition-opacity duration-300 group-hover:opacity-95">
                               <div>
-                                <p className="line-clamp-2 text-[11px] font-medium leading-tight text-white/92">
-                                  {property.location}
+                                <p className="rounded-sm bg-black/28 px-1.5 py-1 text-[12px] font-medium leading-snug text-white/95 backdrop-blur-[1px]">
+                                  {featuredLabel(property.publicationTitle, property.title)}
                                 </p>
                               </div>
 
-                              <div className="space-y-1">
-                                <p className="text-[32px] font-light leading-none text-[#b7dc72]">
-                                  {Math.max(0, Math.round(property.area || 0))} m²
-                                </p>
-                              </div>
+                              <div />
                             </div>
                           </motion.button>
                         );

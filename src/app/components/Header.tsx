@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router";
-import { Menu, X, User } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { usePreviewCanvas } from "../../contexts/PreviewCanvasContext";
 import { SocialHeaderDropdown } from "./SocialHeaderDropdown";
@@ -330,11 +330,7 @@ export function Header() {
                 );
               })}
             </div>
-            <div className="flex w-20 shrink-0 items-center justify-end gap-0.5 self-stretch">
-              <Link to="/login" className={iconBtnClass} aria-label="Inicio de sesión">
-                <User className="h-5 w-5" strokeWidth={1.5} />
-              </Link>
-            </div>
+            <div className="flex w-20 shrink-0 items-center justify-end gap-0.5 self-stretch" />
           </nav>
 
           <nav
@@ -378,9 +374,6 @@ export function Header() {
                   </Link>
                 );
               })}
-              <Link to="/login" className="shrink-0 p-2 text-white/85 hover:text-white" aria-label="Inicio de sesión">
-                <User className="h-[18px] w-[18px]" strokeWidth={1.5} />
-              </Link>
             </div>
           </nav>
         </div>

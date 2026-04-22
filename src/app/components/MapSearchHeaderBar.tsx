@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router";
 import { useState, useEffect, useRef, useSyncExternalStore, type CSSProperties } from "react";
-import { User, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { VITERRA_NAV_ITEMS, isActiveNavPath } from "../config/siteNav";
 import { SocialHeaderDropdown } from "./SocialHeaderDropdown";
 import { cn } from "./ui/utils";
@@ -151,14 +151,6 @@ export function MapSearchHeaderBar() {
             iconSize="sm"
             variant="compact"
           />
-          <Link
-            to="/login"
-            onClick={close}
-            className="p-2 text-white/85 hover:text-white"
-            aria-label="Inicio de sesión"
-          >
-            <User className="h-[18px] w-[18px]" strokeWidth={1.5} />
-          </Link>
           <button
             type="button"
             className="flex items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-white/90 hover:bg-white/10 sm:text-xs"
