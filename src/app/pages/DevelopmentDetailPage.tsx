@@ -24,12 +24,20 @@ import {
   Send,
 } from "lucide-react";
 import { useDevelopmentDetail } from "../hooks/useDevelopmentsCatalog";
+import { cn } from "../components/ui/utils";
+
+/** Por encima de esto se muestra “Ver más” en la descripción (detalle). */
+const DESCRIPTION_COLLAPSE_THRESHOLD = 420;
+
+const INTRO_LOCATION_BLURB =
+  "Ubicado en una de las zonas más cotizadas de mayor plusvalía de Zapopan, a 3 minutos de Andares. Ideal para profesionistas, estudiantes o inversionistas que buscan rentabilidad, ubicación y calidad de vida en una zona en constante crecimiento.";
 
 export function DevelopmentDetailPage() {
   const { id } = useParams();
   const { development, loading, error } = useDevelopmentDetail(id);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [activeTab, setActiveTab] = useState("descripcion");
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -150,6 +158,10 @@ export function DevelopmentDetailPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [isImageZoomOpen]);
 
+  useEffect(() => {
+    setDescriptionExpanded(false);
+  }, [id]);
+
   if (loading) {
     return (
       <div className="viterra-page min-h-screen flex flex-col bg-white">
@@ -214,6 +226,9 @@ export function DevelopmentDetailPage() {
 
   const statusBadgeClass =
     "border border-black/15 bg-white text-neutral-950 shadow-[0_1px_3px_rgba(0,0,0,0.12)]";
+
+  const descriptionNeedsExpand =
+    development.description.length > DESCRIPTION_COLLAPSE_THRESHOLD;
 
   return (
     <div className="viterra-page min-h-screen flex flex-col bg-slate-50">
@@ -391,15 +406,41 @@ export function DevelopmentDetailPage() {
                 {/* Descripción Tab */}
                 {activeTab === "descripcion" && (
                   <div className="space-y-4">
-                    <p className="text-base text-slate-700 leading-relaxed" style={{ fontWeight: 400 }}>
-                      {development.description}
-                    </p>
-                    <p className="text-base text-slate-700 leading-relaxed" style={{ fontWeight: 400 }}>
-                      Ubicado en una de las zonas más cotizadas de mayor plusvalía de Zapopan, a 3 minutos de
-                      Andares. Ideal para profesionistas, estudiantes o inversionistas que buscan rentabilidad,
-                      ubicación y calidad de vida en una zona en constante crecimiento.
-                    </p>
-                    
+                    <div className={cn("relative", descriptionNeedsExpand && !descriptionExpanded && "pb-1")}>
+                      <div
+                        className={cn(
+                          "space-y-4",
+                          descriptionNeedsExpand &&
+                            !descriptionExpanded &&
+                            "max-h-[min(14rem,42vh)] overflow-hidden md:max-h-[min(16rem,38vh)]"
+                        )}
+                      >
+                        <p className="text-base text-slate-700 leading-relaxed" style={{ fontWeight: 400 }}>
+                          {development.description}
+                        </p>
+                        <p className="text-base text-slate-700 leading-relaxed" style={{ fontWeight: 400 }}>
+                          {INTRO_LOCATION_BLURB}
+                        </p>
+                      </div>
+                      {descriptionNeedsExpand && !descriptionExpanded ? (
+                        <div
+                          className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white to-transparent"
+                          aria-hidden
+                        />
+                      ) : null}
+                    </div>
+                    {descriptionNeedsExpand ? (
+                      <button
+                        type="button"
+                        onClick={() => setDescriptionExpanded((e) => !e)}
+                        className="text-sm font-medium text-primary hover:text-brand-burgundy hover:underline"
+                        style={{ fontWeight: 600 }}
+                        aria-expanded={descriptionExpanded}
+                      >
+                        {descriptionExpanded ? "Ver menos" : "Ver más"}
+                      </button>
+                    ) : null}
+
                     {/* Services */}
                     <div className="mt-6 pt-6 border-t border-slate-200">
                       <h3 className="text-lg font-semibold text-slate-900 mb-4" style={{ fontWeight: 600 }}>Servicios Disponibles</h3>

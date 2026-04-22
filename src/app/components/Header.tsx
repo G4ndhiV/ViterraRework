@@ -331,9 +331,9 @@ export function Header() {
               })}
             </div>
             <div className="flex w-20 shrink-0 items-center justify-end gap-0.5 self-stretch">
-              <button type="button" className={iconBtnClass} aria-label="Cuenta">
+              <Link to="/login" className={iconBtnClass} aria-label="Inicio de sesión">
                 <User className="h-5 w-5" strokeWidth={1.5} />
-              </button>
+              </Link>
             </div>
           </nav>
 
@@ -378,9 +378,9 @@ export function Header() {
                   </Link>
                 );
               })}
-              <button type="button" className="shrink-0 p-2 text-white/85 hover:text-white" aria-label="Cuenta">
+              <Link to="/login" className="shrink-0 p-2 text-white/85 hover:text-white" aria-label="Inicio de sesión">
                 <User className="h-[18px] w-[18px]" strokeWidth={1.5} />
-              </button>
+              </Link>
             </div>
           </nav>
         </div>

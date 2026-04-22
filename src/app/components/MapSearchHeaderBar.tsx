@@ -151,9 +151,14 @@ export function MapSearchHeaderBar() {
             iconSize="sm"
             variant="compact"
           />
-          <button type="button" className="p-2 text-white/85 hover:text-white" aria-label="Cuenta">
+          <Link
+            to="/login"
+            onClick={close}
+            className="p-2 text-white/85 hover:text-white"
+            aria-label="Inicio de sesión"
+          >
             <User className="h-[18px] w-[18px]" strokeWidth={1.5} />
-          </button>
+          </Link>
           <button
             type="button"
             className="flex items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-white/90 hover:bg-white/10 sm:text-xs"
