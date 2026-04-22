@@ -24,6 +24,8 @@ export interface Property {
   image: string;
   type: string;
   status: "venta" | "alquiler";
+  /** Destacada en inicio (columna `properties.featured`; máx. 4 en admin). */
+  featured?: boolean;
   coordinates?: {
     lat: number;
     lng: number;
@@ -120,8 +122,8 @@ export function PropertyCard({
         className={cn(
           "overflow-hidden border transition-all duration-500 ease-out group",
           ed
-            ? "rounded-none border-brand-navy/12 bg-white shadow-[0_18px_44px_-22px_rgba(20,28,46,0.45)] hover:border-brand-navy/25 hover:-translate-y-0.5 md:grid md:h-[420px] md:grid-cols-[2.3fr_1fr]"
-            : "flex h-full min-h-0 flex-col rounded-none border-slate-200 bg-white hover:border-slate-300 hover:shadow-xl hover:-translate-y-1"
+            ? "rounded-none border-brand-navy/[0.08] bg-white shadow-sm hover:border-brand-navy/15 hover:shadow-md md:grid md:grid-cols-[1fr_1.08fr] md:items-stretch"
+            : "rounded-none border-slate-200 bg-white hover:border-slate-300 hover:shadow-xl hover:-translate-y-1"
         )}
       >
         <div
@@ -137,8 +139,8 @@ export function PropertyCard({
             }
           }}
           className={cn(
-            "block w-full shrink-0 text-left relative overflow-hidden cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
-            ed ? "h-64 md:h-full" : "h-64"
+            "block w-full text-left relative overflow-hidden cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+            ed ? "h-56 sm:h-64 md:h-full md:min-h-[240px]" : "h-64"
           )}
         >
           <ImageWithFallback
@@ -150,12 +152,12 @@ export function PropertyCard({
             )}
           />
           <div className="absolute top-0 left-0 right-0 h-28 bg-gradient-to-b from-black/40 via-black/10 to-transparent pointer-events-none" />
-          <div className={cn("absolute flex flex-wrap gap-1.5", ed ? "top-3.5 left-3.5" : "top-4 left-4")}>
+          <div className={cn("absolute flex flex-wrap gap-1.5", ed ? "top-3 left-3" : "top-4 left-4")}>
             <span
               className={cn(
                 "text-[10px] font-semibold uppercase tracking-[0.14em] text-primary-foreground backdrop-blur-sm border",
                 ed
-                  ? "rounded-none border-primary/25 bg-primary px-3 py-1.5 shadow-md shadow-black/25"
+                  ? "rounded-none border-primary/20 bg-primary/95 px-2.5 py-1 shadow-sm"
                   : "border-white/20 px-3 py-1.5 rounded-none"
               )}
               style={!ed ? { backgroundColor: "rgba(200, 16, 46, 0.9)", borderColor: "var(--primary)" } : undefined}
@@ -166,7 +168,7 @@ export function PropertyCard({
               className={cn(
                 "text-[10px] font-semibold uppercase tracking-[0.12em] backdrop-blur-sm border",
                 ed
-                  ? "rounded-none border-white/55 bg-white/92 px-3 py-1.5 text-brand-navy shadow-sm shadow-black/10"
+                  ? "rounded-none border-brand-navy/10 bg-white/90 px-2.5 py-1 text-brand-navy/90"
                   : "border-slate-200 bg-white/90 px-3 py-1.5 text-slate-900 rounded-none"
               )}
             >
@@ -182,7 +184,7 @@ export function PropertyCard({
             className={cn(
               "absolute z-[1] backdrop-blur-sm flex items-center justify-center transition-all duration-300 border",
               ed
-                ? "top-3.5 right-3.5 h-10 w-10 rounded-none border-white/50 bg-white/88 text-brand-navy/55 shadow-md shadow-black/15 hover:scale-105 hover:border-white/70 hover:bg-white/95 hover:text-brand-navy"
+                ? "top-3 right-3 h-9 w-9 rounded-none border-brand-navy/10 bg-white/75 text-brand-navy/40 hover:bg-white/90 hover:text-brand-navy/60"
                 : "top-4 right-4 h-10 w-10 rounded-none border-slate-200 bg-white/90 hover:scale-105 hover:bg-white"
             )}
           >
@@ -200,21 +202,21 @@ export function PropertyCard({
         <div
           className={cn(
             ed
-              ? "flex h-full flex-col border-t border-brand-navy/10 p-6 md:border-t-0 md:border-l md:p-8"
-              : "flex min-h-0 flex-1 flex-col p-6"
+              ? "flex min-h-0 min-w-0 flex-col border-t border-brand-navy/[0.06] p-6 md:border-t-0 md:border-l md:border-brand-navy/[0.06] md:py-8 md:pl-8 md:pr-7"
+              : "p-6"
           )}
         >
           <button
             type="button"
             onClick={mapSearchSelection ? handleMapSearchSurface : openPreview}
-            className="w-full text-left"
+            className={cn("w-full text-left", ed && "min-w-0")}
           >
             <h3
               className={cn(
                 "text-slate-900 mb-2 transition-colors tracking-tight",
                 ed
-                  ? "font-heading line-clamp-2 min-h-[78px] text-3xl font-semibold text-brand-navy group-hover:text-brand-burgundy"
-                  : "line-clamp-3 min-h-[5.25rem] text-xl font-semibold leading-snug hover:text-slate-700"
+                  ? "font-heading text-pretty break-words text-2xl font-light leading-snug text-brand-navy sm:text-[1.65rem] md:text-[1.7rem] group-hover:text-brand-burgundy"
+                  : "text-xl font-semibold hover:text-slate-700"
               )}
               style={!ed ? { fontWeight: 600 } : undefined}
             >
@@ -222,34 +224,29 @@ export function PropertyCard({
             </h3>
           </button>
 
-          <div className={cn("mb-4 flex items-center gap-1", ed ? "text-brand-navy/55" : "text-slate-600")}>
-            <MapPin className="w-4 h-4 shrink-0" strokeWidth={1.5} />
-            <span className={cn("text-sm", ed ? "font-normal tracking-wide" : "font-medium")} style={!ed ? { fontWeight: 500 } : undefined}>
+          <div className={cn("mb-4 flex items-start gap-1.5", ed ? "text-brand-navy/45" : "text-slate-600")}>
+            <MapPin className={cn("mt-0.5 shrink-0", ed ? "h-3.5 w-3.5" : "w-4 h-4")} strokeWidth={1.5} />
+            <span
+              className={cn(
+                ed ? "min-w-0 text-[13px] font-light leading-relaxed tracking-wide" : "text-sm font-medium"
+              )}
+              style={!ed ? { fontWeight: 500 } : undefined}
+            >
               {property.location}
             </span>
           </div>
 
-          <div className={cn("mb-6 flex items-center gap-5", ed ? "text-brand-navy/55" : "text-slate-600")}>
+          <div className={cn("mb-6 flex flex-wrap items-center gap-x-5 gap-y-1", ed ? "text-brand-navy/40" : "text-slate-600")}>
             <div className="flex items-center gap-1.5">
-              <Bed className="w-4 h-4" strokeWidth={1.5} />
-              <span
-                className={cn(
-                  "text-sm font-light tabular-nums",
-                  ed && "font-heading tracking-normal"
-                )}
-              >
-                {habitacionesLabel(property.bedrooms)}
+              <Bed className={cn(ed ? "h-3.5 w-3.5" : "w-4 h-4")} strokeWidth={1.5} />
+              <span className={cn("tabular-nums", ed ? "text-[11px] font-normal uppercase tracking-[0.12em]" : "text-sm font-light")}>
+                {property.bedrooms} Beds
               </span>
             </div>
             <div className="flex items-center gap-1.5">
-              <Bath className="w-4 h-4" strokeWidth={1.5} />
-              <span
-                className={cn(
-                  "text-sm font-light tabular-nums",
-                  ed && "font-heading tracking-normal"
-                )}
-              >
-                {banosLabel(property.bathrooms)}
+              <Bath className={cn(ed ? "h-3.5 w-3.5" : "w-4 h-4")} strokeWidth={1.5} />
+              <span className={cn("tabular-nums", ed ? "text-[11px] font-normal uppercase tracking-[0.12em]" : "text-sm font-light")}>
+                {property.bathrooms} Baths
               </span>
             </div>
           </div>
@@ -258,16 +255,16 @@ export function PropertyCard({
             className={cn(
               "flex gap-4 border-t pt-5",
               ed
-                ? "mt-auto flex-col items-stretch border-brand-navy/10"
-                : "mt-auto items-center justify-between border-slate-200"
+                ? "mt-auto flex-col items-stretch border-brand-navy/[0.06]"
+                : "items-center justify-between border-slate-200"
             )}
           >
-            <div className={ed ? "min-w-0 space-y-1" : undefined}>
+            <div className={ed ? "min-w-0 space-y-0.5" : undefined}>
               <p
                 className={cn(
                   "text-slate-900 tabular-nums",
                   ed
-                    ? "font-heading text-[44px] font-light leading-none tracking-tight text-brand-navy"
+                    ? "font-tertiary text-3xl font-light leading-none tracking-tight text-brand-navy sm:text-4xl"
                     : "text-2xl font-semibold"
                 )}
                 style={!ed ? { fontWeight: 700 } : undefined}
@@ -275,7 +272,7 @@ export function PropertyCard({
                 ${property.price.toLocaleString()}
               </p>
               {property.status === "alquiler" && (
-                <p className={cn("text-xs font-medium not-italic", ed ? "mt-0.5 font-heading text-brand-navy/55" : "text-slate-500")} style={!ed ? { fontWeight: 500 } : undefined}>
+                <p className={cn("text-xs font-medium not-italic", ed ? "font-heading text-brand-navy/45" : "text-slate-500")} style={!ed ? { fontWeight: 500 } : undefined}>
                   / mes
                 </p>
               )}
@@ -283,10 +280,10 @@ export function PropertyCard({
             {ed ? (
               <Link
                 to={`/propiedades/${property.id}`}
-                className="mt-3 inline-flex w-fit shrink-0 items-center gap-2 border-b border-brand-navy/35 pb-1 text-[11px] font-medium uppercase tracking-[0.16em] text-brand-navy transition-colors hover:border-primary hover:text-primary"
+                className="mt-4 inline-flex w-fit shrink-0 items-center gap-2 border-b border-brand-navy/20 pb-0.5 text-[10px] font-medium uppercase tracking-[0.2em] text-brand-navy/80 transition-colors hover:border-primary hover:text-primary"
               >
                 Ver detalle
-                <ArrowRight className="h-3.5 w-3.5" />
+                <ArrowRight className="h-3 w-3" strokeWidth={2} />
               </Link>
             ) : mapSearchSelection ? (
               <div className="flex flex-wrap items-center justify-end gap-2">

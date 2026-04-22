@@ -3,6 +3,9 @@ import type { Property } from "../components/PropertyCard";
 
 const nowIso = () => new Date().toISOString();
 
+/** Máximo de propiedades destacadas en la portada (inicio). */
+export const MAX_FEATURED_PROPERTIES = 4;
+
 function appStatusFromDb(s: string): "venta" | "alquiler" {
   const t = s.trim().toLowerCase();
   if (t.includes("alquiler") || t.includes("rent") || t === "renta") return "alquiler";
@@ -110,6 +113,7 @@ export function rowToProperty(row: PropertyRow): Property {
     image: primary,
     type: row.type ?? "",
     status: appStatusFromDb(row.status),
+    featured: Boolean(row.featured),
     coordinates:
       row.lat != null && row.lng != null
         ? { lat: row.lat, lng: row.lng }
@@ -182,62 +186,58 @@ export async function insertProperty(client: SupabaseClient, p: Property, explic
     reference_code: p.referenceCode?.trim() || null,
     public_url: p.publicUrl?.trim() || null,
     deleted_at: null,
-    publication_title: p.publicationTitle?.trim() || null,
+    publication_title: null,
     featured: p.featured ?? false,
-    surface_land: p.surfaceLand ?? null,
-    expenses: p.expenses ?? null,
-    age: p.age ?? null,
-    parking_spaces: p.parkingSpaces != null ? p.parkingSpaces : null,
+    surface_land: null,
+    expenses: null,
+    age: null,
+    parking_spaces: null,
     property_type_tokko_id: null,
+    total_surface: null,
+    roofed_surface: null,
+    semiroofed_surface: null,
+    unroofed_surface: null,
+    front_measure: null,
+    depth_measure: null,
+    floors_amount: null,
+    situation: null,
+    orientation: null,
+    half_bathrooms: null,
+    credit_eligible: null,
+    tags: [] as string[],
   };
   return client.from("properties").insert(row);
 }
 
 export async function updateProperty(client: SupabaseClient, p: Property) {
   const ts = nowIso();
-  const imgs =
-    p.galleryImages !== undefined
-      ? [...p.galleryImages]
-      : p.image
-        ? [p.image]
-        : [];
+  const imgs = p.image ? [p.image] : [];
+  return client
+    .from("properties")
+    .update({
+      title: p.title,
+      price: p.price,
+      location: p.location || null,
+      bedrooms: p.bedrooms,
+      bathrooms: p.bathrooms,
+      area: p.area,
+      image: p.image || null,
+      type: p.type || null,
+      status: dbStatusFromApp(p.status),
+      lat: p.coordinates?.lat ?? null,
+      lng: p.coordinates?.lng ?? null,
+      images: imgs,
+      updated_at: ts,
+      synced_at: ts,
+      featured: p.featured ?? false,
+      payload: { source: "viterra_admin", lastEdit: ts } as Record<string, unknown>,
+    })
+    .eq("id", p.id);
+}
 
-  const patch: Record<string, unknown> = {
-    title: p.title,
-    price: p.price,
-    location: p.location || null,
-    bedrooms: p.bedrooms,
-    bathrooms: p.bathrooms,
-    area: p.area,
-    image: p.image || null,
-    type: p.type || null,
-    status: dbStatusFromApp(p.status),
-    lat: p.coordinates?.lat ?? null,
-    lng: p.coordinates?.lng ?? null,
-    colony: p.colony?.trim() || null,
-    amenities: p.amenities ?? [],
-    services: p.services ?? [],
-    additional_features: p.additionalFeatures ?? [],
-    images: imgs,
-    updated_at: ts,
-    synced_at: ts,
-    payload: { source: "viterra_admin", lastEdit: ts } as Record<string, unknown>,
-  };
-
-  if (p.publicationTitle !== undefined) patch.publication_title = p.publicationTitle.trim() || null;
-  if (p.fullAddress !== undefined) patch.full_address = p.fullAddress.trim() || null;
-  if (p.description !== undefined) patch.description = p.description.trim() || null;
-  if (p.richDescription !== undefined) patch.rich_description = p.richDescription.trim() || null;
-  if (p.referenceCode !== undefined) patch.reference_code = p.referenceCode.trim() || null;
-  if (p.publicUrl !== undefined) patch.public_url = p.publicUrl.trim() || null;
-  if (p.surfaceLand !== undefined) patch.surface_land = p.surfaceLand ?? null;
-  if (p.expenses !== undefined) patch.expenses = p.expenses ?? null;
-  if (p.age !== undefined) patch.age = p.age ?? null;
-  if (p.parkingSpaces !== undefined) patch.parking_spaces = p.parkingSpaces ?? null;
-  if (p.featured !== undefined) patch.featured = p.featured;
-  if (p.developmentTokkoId !== undefined) patch.development_tokko_id = p.developmentTokkoId.trim() || null;
-
-  return client.from("properties").update(patch).eq("id", p.id);
+export async function updatePropertyFeatured(client: SupabaseClient, id: string, featured: boolean) {
+  const ts = nowIso();
+  return client.from("properties").update({ featured, updated_at: ts, synced_at: ts }).eq("id", id);
 }
 
 export async function softDeleteProperty(client: SupabaseClient, id: string) {

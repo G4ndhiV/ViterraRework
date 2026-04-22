@@ -13,6 +13,7 @@ import { cn } from "../ui/utils";
 import { copyPublicPageUrl } from "../../lib/copyPublicLink";
 import type { Property } from "../PropertyCard";
 import { Download, Link2 } from "lucide-react";
+import { MAX_FEATURED_PROPERTIES } from "../../lib/supabaseProperties";
 
 type Props = {
   open: boolean;
@@ -22,6 +23,8 @@ type Props = {
   /** Id que se asignará al crear (calculado en el padre) */
   newId: string;
   onSave: (property: Property) => void;
+  /** Propiedades destacadas excluyendo la ficha actual (edit) o todas (crear). */
+  otherFeaturedCount: number;
 };
 
 const defaultImage =
@@ -34,6 +37,7 @@ export function PropertyFormDialog({
   property,
   newId,
   onSave,
+  otherFeaturedCount,
 }: Props) {
   const [draft, setDraft] = useState<Property | null>(null);
 
@@ -53,6 +57,7 @@ export function PropertyFormDialog({
         image: defaultImage,
         type: "Apartamento",
         status: "venta",
+        featured: false,
         coordinates: { lat: 20.676208, lng: -103.34721 },
         amenities: [],
         services: [],
@@ -68,6 +73,13 @@ export function PropertyFormDialog({
       window.alert("Indica un título para la propiedad.");
       return;
     }
+    const wasFeatured = mode === "edit" && property ? Boolean(property.featured) : false;
+    if (draft.featured && !wasFeatured && otherFeaturedCount >= MAX_FEATURED_PROPERTIES) {
+      window.alert(
+        `Solo pueden destacarse hasta ${MAX_FEATURED_PROPERTIES} propiedades en la portada. Quita una estrella en otra ficha e inténtalo de nuevo.`
+      );
+      return;
+    }
     onSave({
       ...draft,
       id: mode === "create" ? newId : property?.id ?? draft.id,
@@ -75,6 +87,7 @@ export function PropertyFormDialog({
       bedrooms: Number(draft.bedrooms) || 0,
       bathrooms: Number(draft.bathrooms) || 0,
       area: Number(draft.area) || 0,
+      featured: Boolean(draft.featured),
     });
     onOpenChange(false);
   };
@@ -298,6 +311,27 @@ export function PropertyFormDialog({
                 style={{ fontWeight: 500 }}
                 placeholder="https://…"
               />
+            </div>
+            <div className="flex items-start gap-3 rounded-xl border border-slate-200/90 bg-slate-50/80 px-4 py-3">
+              <input
+                id="viterra-property-featured"
+                type="checkbox"
+                checked={Boolean(draft.featured)}
+                disabled={
+                  !draft.featured &&
+                  otherFeaturedCount >= MAX_FEATURED_PROPERTIES
+                }
+                onChange={(e) =>
+                  setDraft((d) => (d ? { ...d, featured: e.target.checked } : d))
+                }
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300"
+              />
+              <label htmlFor="viterra-property-featured" className="cursor-pointer text-sm text-slate-700" style={{ fontWeight: 500 }}>
+                Destacar en la portada (inicio)
+                <span className="mt-1 block text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                  Máximo {MAX_FEATURED_PROPERTIES} propiedades. Otras destacadas ahora: {otherFeaturedCount}.
+                </span>
+              </label>
             </div>
           </div>
         </form>

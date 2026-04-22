@@ -1,17 +1,18 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { PropertyCard } from "../components/PropertyCard";
 import { SearchBar, SearchFilters } from "../components/SearchBar";
 import { useCatalogProperties } from "../hooks/useCatalogProperties";
-import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
 import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
 import { Reveal } from "../components/Reveal";
 import { cn } from "../components/ui/utils";
+import { MAX_FEATURED_PROPERTIES } from "../lib/supabaseProperties";
 
 function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?: "dark" | "light" }) {
   return (
@@ -35,21 +36,35 @@ export function HomePage() {
   const { content } = useSiteContent();
   const h = content.home;
   const { properties, loading: propertiesLoading } = useCatalogProperties();
-  const featuredProperties = properties.slice(0, 6);
-  const [carouselIndex, setCarouselIndex] = useState(0);
+  const featuredProperties = useMemo(
+    () => properties.filter((p) => p.featured).slice(0, MAX_FEATURED_PROPERTIES),
+    [properties]
+  );
+  const [activeFeaturedId, setActiveFeaturedId] = useState<string | null>(null);
+  const activeFeaturedProperty = useMemo(
+    () =>
+      featuredProperties.find((p) => p.id === activeFeaturedId) ??
+      featuredProperties[0] ??
+      null,
+    [featuredProperties, activeFeaturedId]
+  );
 
   useEffect(() => {
-    if (featuredProperties.length === 0) return;
-    setCarouselIndex((i) => Math.min(i, featuredProperties.length - 1));
-  }, [featuredProperties.length]);
-
-  const goPrev = () => {
-    setCarouselIndex((prev) => (prev - 1 + featuredProperties.length) % featuredProperties.length);
-  };
-
-  const goNext = () => {
-    setCarouselIndex((prev) => (prev + 1) % featuredProperties.length);
-  };
+    if (featuredProperties.length === 0) {
+      setActiveFeaturedId(null);
+      return;
+    }
+    if (!activeFeaturedId || !featuredProperties.some((p) => p.id === activeFeaturedId)) {
+      setActiveFeaturedId(featuredProperties[0].id);
+    }
+  }, [featuredProperties, activeFeaturedId]);
+  const catalogPriceSlices = useMemo(
+    () => ({
+      venta: properties.filter((p) => p.status === "venta").map((p) => p.price),
+      alquiler: properties.filter((p) => p.status === "alquiler").map((p) => p.price),
+    }),
+    [properties]
+  );
 
   const handleSearch = (filters: SearchFilters) => {
     const params = new URLSearchParams();
@@ -191,14 +206,9 @@ export function HomePage() {
       <PreviewSectionChrome blockId="home-search" label="Búsqueda">
       <section
         id="busqueda"
-        className="scroll-fade-exit-white relative scroll-mt-8 min-h-[72vh] md:min-h-[78vh] flex flex-col justify-center py-20 md:py-28 overflow-hidden border-b border-brand-navy/20"
+        className="relative scroll-mt-8 flex min-h-[100svh] flex-col justify-center border-b border-brand-navy/20 py-10 md:py-12"
       >
-        {/* Entre hero y búsqueda: cristal oscuro en lugar de línea blanca */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 z-[6] h-[3px] bg-black/45 backdrop-blur-xl backdrop-saturate-150 border-b border-white/[0.07] shadow-[0_6px_24px_-4px_rgba(0,0,0,0.55)]"
-        />
-        <div className="absolute inset-0 z-0">
+        <div className="absolute inset-0 z-0 overflow-hidden">
           <img
             src={h.searchImage}
             alt=""
@@ -208,31 +218,33 @@ export function HomePage() {
           <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/88 via-black/55 to-black/80" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20 pointer-events-none" />
         </div>
+        {/* Velo radial: oscurece el centro (donde están filtros y texto) sin “tapar” todo el encuadre */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_135%_92%_at_50%_58%,rgb(0_0_0/0.78)_0%,rgb(0_0_0/0.42)_48%,rgb(0_0_0/0.14)_72%,transparent_100%)]"
+        />
 
-        <div className="relative z-10 mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
-          <Reveal className="mb-12 md:mb-14" y={28}>
+        <div className="relative z-10 mx-auto w-full max-w-5xl overflow-visible px-4 sm:px-6 lg:px-8">
+          <Reveal className="mb-5 md:mb-6" y={28}>
             <div>
               <SectionKicker tone="light">{h.searchKicker}</SectionKicker>
-              <h2 className="font-heading font-light text-3xl md:text-4xl lg:text-[2.35rem] text-white tracking-tight text-center mt-8 leading-tight drop-shadow-sm">
+              <h2 className="font-heading font-light mt-4 text-center text-2xl leading-tight tracking-tight text-white [text-shadow:0_2px_28px_rgb(0_0_0/0.55),0_1px_2px_rgb(0_0_0/0.4)] sm:text-3xl md:text-4xl lg:text-[2.2rem]">
                 {h.searchTitle}
               </h2>
-              <p className="font-heading text-center text-base md:text-lg not-italic text-white/80 mt-4 max-w-xl mx-auto leading-relaxed font-light">
+              <p className="font-heading mx-auto mt-2 max-w-xl text-center text-sm font-light not-italic leading-relaxed text-white/90 [text-shadow:0_1px_18px_rgb(0_0_0/0.5)] md:text-base">
                 {h.searchSubtitle}
               </p>
             </div>
           </Reveal>
-          <Reveal delay={0.12} y={20}>
+          <Reveal delay={0.06} y={16}>
             <motion.div
               initial={reduceMotion ? false : { opacity: 0.92, y: 8 }}
               whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.35 }}
               transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              className="mx-auto max-w-4xl"
             >
-              <SearchBar
-                onSearch={handleSearch}
-                variant="premium"
-                className="border border-white/20 bg-white/98 backdrop-blur-sm p-6 md:p-9 shadow-[0_24px_64px_-18px_rgba(0,0,0,0.55)]"
-              />
+              <SearchBar onSearch={handleSearch} variant="ambient" catalogPriceSlices={catalogPriceSlices} />
             </motion.div>
           </Reveal>
         </div>
@@ -269,69 +281,93 @@ export function HomePage() {
             </Link>
           </Reveal>
 
-          <div className="mx-auto max-w-5xl">
+          <div className="mx-auto max-w-6xl">
             {propertiesLoading ? (
               <p className="text-center text-sm text-brand-navy/60" style={{ fontWeight: 500 }}>
                 Cargando propiedades…
               </p>
             ) : featuredProperties.length === 0 ? (
               <p className="text-center text-sm text-brand-navy/60" style={{ fontWeight: 500 }}>
-                Próximamente publicaremos propiedades destacadas.
+                No hay propiedades destacadas en este momento.
               </p>
             ) : (
-              <>
+              <div className="space-y-5 md:space-y-6">
+                {activeFeaturedProperty && (
+                  <motion.div
+                    key={activeFeaturedProperty.id}
+                    initial={reduceMotion ? false : { opacity: 0, y: 20 }}
+                    whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+                    viewport={{ once: true, amount: 0.2 }}
+                    transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+                    className="mx-auto h-[360px] w-full max-w-5xl sm:h-[390px] md:h-[420px]"
+                  >
+                    <div className="h-full [&>article]:h-full">
+                      <PropertyCard property={activeFeaturedProperty} variant="editorial" />
+                    </div>
+                  </motion.div>
+                )}
+
                 <motion.div
-                  key={featuredProperties[carouselIndex].id}
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+                  whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.3 }}
+                  transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+                  className="relative"
                 >
-                  <PropertyCard property={featuredProperties[carouselIndex]} variant="editorial" />
-                </motion.div>
+                  <div className="overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <div className="mx-auto flex w-max gap-2.5 md:gap-3">
+                      {featuredProperties.map((property) => {
+                        const selected = property.id === activeFeaturedProperty?.id;
+                        return (
+                          <motion.button
+                            key={property.id}
+                            type="button"
+                            onMouseEnter={() => setActiveFeaturedId(property.id)}
+                            onFocus={() => setActiveFeaturedId(property.id)}
+                            onClick={() => setActiveFeaturedId(property.id)}
+                            whileHover={reduceMotion ? undefined : { y: -2 }}
+                            whileTap={reduceMotion ? undefined : { scale: 0.99 }}
+                            className={cn(
+                              "group relative h-44 w-[130px] shrink-0 overflow-hidden border text-left transition-all duration-300 md:h-48 md:w-[146px]",
+                              selected
+                                ? "border-primary/60 bg-black text-white shadow-[0_12px_30px_-20px_rgba(8,12,22,0.85)]"
+                                : "border-white/15 bg-black text-white/90 hover:border-white/35"
+                            )}
+                            aria-label={`Show featured property ${property.title}`}
+                            aria-pressed={selected}
+                          >
+                            <img
+                              src={property.image}
+                              alt=""
+                              className={cn(
+                                "absolute inset-0 h-full w-full object-cover transition-all duration-500",
+                                selected
+                                  ? "scale-[1.06] opacity-45 group-hover:scale-100 group-hover:opacity-100"
+                                  : "opacity-28 group-hover:scale-100 group-hover:opacity-100"
+                              )}
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-black/80 to-black/95 transition-opacity duration-300 group-hover:opacity-0" />
 
-                <div className="mt-8 flex items-center justify-between gap-4">
-                  <motion.button
-                    type="button"
-                    onClick={goPrev}
-                    whileHover={reduceMotion ? undefined : { scale: 1.06 }}
-                    whileTap={reduceMotion ? undefined : { scale: 0.94 }}
-                    transition={{ type: "spring", stiffness: 420, damping: 22 }}
-                    className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-brand-navy/20 bg-white text-brand-navy outline-none transition-colors hover:border-brand-navy/40 hover:bg-brand-navy/[0.04] hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 active:border-brand-navy/30"
-                    aria-label="Propiedad anterior"
-                  >
-                    <ChevronLeft className="h-5 w-5" strokeWidth={1.75} />
-                  </motion.button>
+                            <div className="relative z-[1] flex h-full flex-col justify-between p-3 transition-opacity duration-300 group-hover:opacity-0">
+                              <div>
+                                <p className="line-clamp-2 text-[11px] font-medium leading-tight text-white/92">
+                                  {property.location}
+                                </p>
+                              </div>
 
-                  <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-2">
-                    {featuredProperties.map((property, index) => (
-                      <motion.button
-                        key={property.id}
-                        type="button"
-                        onClick={() => setCarouselIndex(index)}
-                        whileHover={reduceMotion ? undefined : { scale: 1.15 }}
-                        whileTap={reduceMotion ? undefined : { scale: 0.9 }}
-                        className={cn(
-                          "h-1.5 shrink-0 cursor-pointer rounded-full outline-none transition-[width,background-color] duration-300 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2",
-                          index === carouselIndex ? "w-8 bg-primary" : "w-3 bg-brand-navy/25 hover:bg-brand-navy/45"
-                        )}
-                        aria-label={`Ir a propiedad ${index + 1}`}
-                      />
-                    ))}
+                              <div className="space-y-1">
+                                <p className="text-[32px] font-light leading-none text-[#b7dc72]">
+                                  {Math.max(0, Math.round(property.area || 0))} m²
+                                </p>
+                              </div>
+                            </div>
+                          </motion.button>
+                        );
+                      })}
+                    </div>
                   </div>
-
-                  <motion.button
-                    type="button"
-                    onClick={goNext}
-                    whileHover={reduceMotion ? undefined : { scale: 1.06 }}
-                    whileTap={reduceMotion ? undefined : { scale: 0.94 }}
-                    transition={{ type: "spring", stiffness: 420, damping: 22 }}
-                    className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-brand-navy/20 bg-white text-brand-navy outline-none transition-colors hover:border-brand-navy/40 hover:bg-brand-navy/[0.04] hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 active:border-brand-navy/30"
-                    aria-label="Siguiente propiedad"
-                  >
-                    <ChevronRight className="h-5 w-5" strokeWidth={1.75} />
-                  </motion.button>
-                </div>
-              </>
+                </motion.div>
+              </div>
             )}
           </div>
 

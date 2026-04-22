@@ -28,6 +28,7 @@ export function RentPage() {
     () => properties.filter((p) => p.status === "alquiler"),
     [properties]
   );
+  const catalogPrices = useMemo(() => rentProperties.map((p) => p.price), [rentProperties]);
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
   const [sortBy, setSortBy] = useState("newest");
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
@@ -180,7 +181,7 @@ export function RentPage() {
               viewport={{ once: true, amount: 0.35 }}
               transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
             >
-              <SearchBar onSearch={handleSearch} defaultStatus="alquiler" />
+              <SearchBar onSearch={handleSearch} defaultStatus="alquiler" catalogPrices={catalogPrices} />
             </motion.div>
           </Reveal>
         </div>

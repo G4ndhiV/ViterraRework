@@ -35,6 +35,7 @@ import {
   Settings,
   Map as MapIcon,
   UserCircle2,
+  Star,
 } from "lucide-react";
 import { AdminSiteEditor } from "../components/admin/AdminSiteEditor";
 import { useAuth } from "../contexts/AuthContext";
@@ -89,6 +90,8 @@ import {
   insertProperty,
   softDeleteProperty,
   updateProperty,
+  updatePropertyFeatured,
+  MAX_FEATURED_PROPERTIES,
 } from "../lib/supabaseProperties";
 import type { Development } from "../data/developments";
 import {
@@ -969,12 +972,49 @@ export function AdminPage() {
         toast.error("Supabase no configurado.");
         return;
       }
+      const prev = properties.find((x) => x.id === p.id);
+      const wasFeatured = Boolean(prev?.featured);
+      const otherFeatured = properties.filter((x) => x.featured && x.id !== p.id).length;
+      if (p.featured && !wasFeatured && otherFeatured >= MAX_FEATURED_PROPERTIES) {
+        toast.error(
+          `Solo pueden destacarse hasta ${MAX_FEATURED_PROPERTIES} propiedades en la portada. Quita una estrella en otra ficha e inténtalo de nuevo.`
+        );
+        return;
+      }
       const exists = properties.some((x) => x.id === p.id);
       const propRes = exists ? await updateProperty(client, p) : await insertProperty(client, p, p.id);
       if (propRes.error) {
         toast.error(propRes.error.message);
         return;
       }
+      await reloadProperties();
+    },
+    [properties, reloadProperties]
+  );
+
+  const handleTogglePropertyFeatured = useCallback(
+    async (property: Property) => {
+      const client = getSupabaseClient();
+      if (!client) {
+        toast.error("Supabase no configurado.");
+        return;
+      }
+      const next = !property.featured;
+      if (next) {
+        const featuredNow = properties.filter((x) => x.featured).length;
+        if (featuredNow >= MAX_FEATURED_PROPERTIES) {
+          toast.error(
+            `Ya hay ${MAX_FEATURED_PROPERTIES} propiedades destacadas en la portada. Quita una antes de añadir otra.`
+          );
+          return;
+        }
+      }
+      const { error } = await updatePropertyFeatured(client, property.id, next);
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      toast.success(next ? "Propiedad destacada en la portada." : "Propiedad ya no aparece destacada en la portada.");
       await reloadProperties();
     },
     [properties, reloadProperties]
@@ -1273,6 +1313,10 @@ export function AdminPage() {
   );
   const propertyLocationOptions = useMemo(
     () => Array.from(new Set(properties.map((p) => p.location).filter(Boolean))),
+    [properties]
+  );
+  const propertyFeaturedCount = useMemo(
+    () => properties.filter((p) => p.featured).length,
     [properties]
   );
 
@@ -2581,6 +2625,13 @@ export function AdminPage() {
                   <p className="text-sm text-slate-600" style={{ fontWeight: 500 }}>
                     Filtra, edita y publica propiedades del catálogo.
                   </p>
+                  <p className="mt-2 text-xs text-slate-600" style={{ fontWeight: 500 }}>
+                    Portada (inicio):{" "}
+                    <span className="font-semibold text-brand-navy">
+                      {propertyFeaturedCount}/{MAX_FEATURED_PROPERTIES}
+                    </span>{" "}
+                    destacadas (máximo {MAX_FEATURED_PROPERTIES}). Usa la estrella en la imagen, en la lista o el checkbox al editar.
+                  </p>
                 </div>
                 <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
                   <div
@@ -2791,23 +2842,43 @@ export function AdminPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredProperties.map((property) => (
                 <div key={property.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden hover:border-slate-300 transition-all group">
-                  <button
-                    type="button"
-                    onClick={() => setPropertyForm({ mode: "edit", property })}
-                    className="relative block h-48 w-full cursor-pointer overflow-hidden bg-slate-100 p-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
-                    aria-label={`Abrir ficha: ${property.title}`}
-                  >
-                    <img
-                      src={property.image}
-                      alt=""
-                      className="pointer-events-none h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                    <div className="pointer-events-none absolute top-3 right-3">
-                      <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-white/95 backdrop-blur-sm text-slate-900 border border-slate-200" style={{ fontWeight: 600 }}>
-                        {property.status.toUpperCase()}
-                      </span>
-                    </div>
-                  </button>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setPropertyForm({ mode: "edit", property })}
+                      className="relative block h-48 w-full cursor-pointer overflow-hidden bg-slate-100 p-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
+                      aria-label={`Abrir ficha: ${property.title}`}
+                    >
+                      <img
+                        src={property.image}
+                        alt=""
+                        className="pointer-events-none h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                      <div className="pointer-events-none absolute top-3 right-3">
+                        <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-white/95 backdrop-blur-sm text-slate-900 border border-slate-200" style={{ fontWeight: 600 }}>
+                          {property.status.toUpperCase()}
+                        </span>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      title={property.featured ? "Quitar de la portada (inicio)" : "Destacar en la portada (inicio)"}
+                      aria-label={property.featured ? "Quitar de la portada" : "Destacar en la portada"}
+                      aria-pressed={Boolean(property.featured)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void handleTogglePropertyFeatured(property);
+                      }}
+                      className={`absolute left-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md border shadow-sm backdrop-blur-sm transition-colors ${
+                        property.featured
+                          ? "border-amber-300/90 bg-amber-400/95 text-amber-950 hover:bg-amber-400"
+                          : "border-slate-200/90 bg-white/95 text-slate-500 hover:border-amber-200 hover:text-amber-700"
+                      }`}
+                    >
+                      <Star className="h-4 w-4" strokeWidth={2} fill={property.featured ? "currentColor" : "none"} />
+                    </button>
+                  </div>
                   
                   <div className="p-5">
                     <span className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-2 block" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>
@@ -2894,7 +2965,7 @@ export function AdminPage() {
             {propertyInventoryView === "list" && filteredProperties.length > 0 && (
               <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_8px_32px_-10px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02]">
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[720px]">
+                  <table className="w-full min-w-[800px]">
                     <thead className="border-b border-slate-200/90 bg-gradient-to-r from-slate-50/95 to-white">
                       <tr>
                         <th
@@ -2926,6 +2997,12 @@ export function AdminPage() {
                           style={{ fontWeight: 600 }}
                         >
                           Precio
+                        </th>
+                        <th
+                          className="font-heading px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                          style={{ fontWeight: 600 }}
+                        >
+                          Inicio
                         </th>
                         <th
                           className="font-heading px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
@@ -2975,6 +3052,22 @@ export function AdminPage() {
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-slate-900 sm:px-6 sm:py-4" style={{ fontWeight: 700 }}>
                             ${property.price.toLocaleString()}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-center sm:px-6 sm:py-4">
+                            <button
+                              type="button"
+                              title={property.featured ? "Quitar de la portada" : "Destacar en la portada"}
+                              aria-label={property.featured ? "Quitar de la portada" : "Destacar en la portada"}
+                              aria-pressed={Boolean(property.featured)}
+                              onClick={() => void handleTogglePropertyFeatured(property)}
+                              className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
+                                property.featured
+                                  ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                                  : "border-slate-200 bg-white text-slate-400 hover:border-amber-200 hover:text-amber-700"
+                              }`}
+                            >
+                              <Star className="h-4 w-4" strokeWidth={2} fill={property.featured ? "currentColor" : "none"} />
+                            </button>
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-right sm:px-6 sm:py-4">
                             <div className="flex items-center justify-end gap-1">
@@ -3639,6 +3732,11 @@ export function AdminPage() {
           property={propertyForm?.mode === "edit" ? propertyForm.property : null}
           newId={newPropertyDraftId}
           onSave={handleSaveProperty}
+          otherFeaturedCount={
+            propertyForm?.mode === "edit" && propertyForm.property
+              ? properties.filter((x) => x.featured && x.id !== propertyForm.property.id).length
+              : properties.filter((x) => x.featured).length
+          }
         />
       </div>
 
