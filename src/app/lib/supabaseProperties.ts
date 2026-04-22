@@ -3,6 +3,9 @@ import type { Property } from "../components/PropertyCard";
 
 const nowIso = () => new Date().toISOString();
 
+/** Máximo de propiedades destacadas en la portada (inicio). */
+export const MAX_FEATURED_PROPERTIES = 4;
+
 function appStatusFromDb(s: string): "venta" | "alquiler" {
   const t = s.trim().toLowerCase();
   if (t.includes("alquiler") || t.includes("rent") || t === "renta") return "alquiler";
@@ -49,6 +52,7 @@ export function rowToProperty(row: PropertyRow): Property {
     image: primary,
     type: row.type ?? "",
     status: appStatusFromDb(row.status),
+    featured: Boolean(row.featured),
     coordinates:
       row.lat != null && row.lng != null
         ? { lat: row.lat, lng: row.lng }
@@ -96,12 +100,24 @@ export async function insertProperty(client: SupabaseClient, p: Property, explic
     public_url: null,
     deleted_at: null,
     publication_title: null,
-    featured: false,
+    featured: p.featured ?? false,
     surface_land: null,
     expenses: null,
     age: null,
     parking_spaces: null,
     property_type_tokko_id: null,
+    total_surface: null,
+    roofed_surface: null,
+    semiroofed_surface: null,
+    unroofed_surface: null,
+    front_measure: null,
+    depth_measure: null,
+    floors_amount: null,
+    situation: null,
+    orientation: null,
+    half_bathrooms: null,
+    credit_eligible: null,
+    tags: [] as string[],
   };
   return client.from("properties").insert(row);
 }
@@ -126,9 +142,15 @@ export async function updateProperty(client: SupabaseClient, p: Property) {
       images: imgs,
       updated_at: ts,
       synced_at: ts,
+      featured: p.featured ?? false,
       payload: { source: "viterra_admin", lastEdit: ts } as Record<string, unknown>,
     })
     .eq("id", p.id);
+}
+
+export async function updatePropertyFeatured(client: SupabaseClient, id: string, featured: boolean) {
+  const ts = nowIso();
+  return client.from("properties").update({ featured, updated_at: ts, synced_at: ts }).eq("id", id);
 }
 
 export async function softDeleteProperty(client: SupabaseClient, id: string) {

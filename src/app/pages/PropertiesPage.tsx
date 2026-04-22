@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useSearchParams } from "react-router";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
@@ -11,6 +11,13 @@ import { SlidersHorizontal, Building2, Map, LayoutGrid, MapPinned } from "lucide
 export function PropertiesPage() {
   const [searchParams] = useSearchParams();
   const { properties } = useCatalogProperties();
+  const catalogPriceSlices = useMemo(
+    () => ({
+      venta: properties.filter((p) => p.status === "venta").map((p) => p.price),
+      alquiler: properties.filter((p) => p.status === "alquiler").map((p) => p.price),
+    }),
+    [properties]
+  );
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
   const [sortBy, setSortBy] = useState("newest");
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
@@ -116,7 +123,7 @@ export function PropertiesPage() {
 
       {/* Search Section */}
       <section className="relative z-20 -mt-16 max-w-7xl mx-auto px-6 lg:px-8 w-full mb-16">
-        <SearchBar onSearch={handleSearch} />
+        <SearchBar onSearch={handleSearch} catalogPriceSlices={catalogPriceSlices} />
       </section>
 
       {/* Results Section */}

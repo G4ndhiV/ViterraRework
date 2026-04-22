@@ -313,6 +313,29 @@ function developmentTokkoIdFromProperty(item: Record<string, unknown>): string |
   return rec ? pickTokkoId(rec) : null;
 }
 
+/** Tokko u otros tenants: boolean explícito o string numérico. */
+function creditEligibleFromItem(item: Record<string, unknown>): boolean | null {
+  const keys = [
+    "credit_eligible",
+    "accept_credit",
+    "bank_credit",
+    "mortgage_accepted",
+    "is_bank_credit",
+    "financing_available",
+    "accepts_bank_credit",
+  ];
+  for (const k of keys) {
+    const v = item[k];
+    if (v === undefined || v === null || v === "") continue;
+    if (typeof v === "boolean") return v;
+    if (typeof v === "number") return v !== 0;
+    const s = String(v).trim().toLowerCase();
+    if (s === "true" || s === "1" || s === "yes" || s === "si" || s === "sí") return true;
+    if (s === "false" || s === "0" || s === "no") return false;
+  }
+  return null;
+}
+
 function mapPropertyRow(item: Record<string, unknown>): Record<string, unknown> {
   const tokko_id = pickTokkoId(item);
   if (!tokko_id) throw new Error("Property sin id Tokko");
@@ -333,6 +356,13 @@ function mapPropertyRow(item: Record<string, unknown>): Record<string, unknown> 
     ...tagEntries.filter((e) => e.type != null && e.type !== 1 && e.type !== 2 && e.type !== 3).map((e) => e.name),
     ...customTagNamesList(item.custom_tags),
   ];
+  const tags = [
+    ...new Set(
+      [...tagEntries.map((e) => e.name), ...customTagNamesList(item.custom_tags)]
+        .map((t) => t.trim())
+        .filter(Boolean),
+    ),
+  ];
 
   const suite = num(item.suite_amount);
   const rooms = num(item.room_amount);
@@ -342,10 +372,14 @@ function mapPropertyRow(item: Record<string, unknown>): Record<string, unknown> 
   const bath = num(item.bathroom_amount) ?? 0;
   const toilet = num(item.toilet_amount) ?? 0;
   const bathrooms = Math.round(bath + toilet);
+  const halfBathrooms = Math.round(num(item.toilet_amount) ?? 0);
 
   const totalSurf = num(item.total_surface);
+  const roofedSurf = num(item.roofed_surface);
+  const semiRoofedSurf = num(item.semiroofed_surface ?? item.semi_roofed_surface);
+  const unroofedSurf = num(item.unroofed_surface);
   const landSurf = num(item.surface);
-  const area = totalSurf ?? landSurf ?? num(item.livable_area) ?? num(item.covered_surface) ?? 0;
+  const area = totalSurf ?? landSurf ?? num(item.livable_area) ?? num(item.covered_surface) ?? roofedSurf ?? 0;
 
   const pubTitle = str(item.publication_title ?? item.title ?? item.name ?? item.fake_address) ?? "";
   const colony = str(loc?.name) ?? "";
@@ -368,8 +402,20 @@ function mapPropertyRow(item: Record<string, unknown>): Record<string, unknown> 
     full_address,
     bedrooms,
     bathrooms,
+    half_bathrooms: halfBathrooms,
     area,
+    total_surface: totalSurf,
+    roofed_surface: roofedSurf,
+    semiroofed_surface: semiRoofedSurf,
+    unroofed_surface: unroofedSurf,
     surface_land: landSurf,
+    front_measure: num(item.front_measure ?? item.lot_front ?? item.front),
+    depth_measure: num(item.depth_measure ?? item.lot_depth ?? item.depth),
+    floors_amount: num(item.floors_amount) != null ? Math.round(num(item.floors_amount)!) : null,
+    situation: str(item.situation),
+    orientation: num(item.orientation) != null ? Math.round(num(item.orientation)!) : null,
+    credit_eligible: creditEligibleFromItem(item),
+    tags,
     image,
     images,
     property_type_tokko_id: propertyTypeTokkoIdFromItem(item),
@@ -386,7 +432,7 @@ function mapPropertyRow(item: Record<string, unknown>): Record<string, unknown> 
     reference_code: str(item.reference_code),
     public_url: str(item.public_url),
     deleted_at: parseTs(item.deleted_at),
-    featured: Boolean(item.is_starred_on_web),
+    // `featured` lo controla el admin (inicio); no sobrescribir en cada sync de Tokko.
     expenses: num(item.expenses),
     age: num(item.age) != null ? Math.round(num(item.age)!) : null,
     parking_spaces: num(item.parking_lot_amount) != null ? Math.round(num(item.parking_lot_amount)!) : null,

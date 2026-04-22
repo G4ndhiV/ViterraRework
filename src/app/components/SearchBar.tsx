@@ -1,17 +1,25 @@
 import { Search } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useSearchParams } from "react-router";
 import { cn } from "./ui/utils";
+import {
+  SearchBarCatalogPriceRange,
+  type SearchBarCatalogPriceRangeHandle,
+} from "./SearchBarCatalogPriceRange";
 
 interface SearchBarProps {
   onSearch?: (filters: SearchFilters) => void;
   className?: string;
-  /** premium: bordes rectos, tipografía manual Viterra (Poppins) */
-  variant?: "default" | "premium";
+  /** premium: bordes rectos, tipografía manual Viterra (Poppins) · ambient: sobre fondo oscuro, solo líneas (landing) */
+  variant?: "default" | "premium" | "ambient";
   /** Si la URL no define `status`, se usa este valor (p. ej. alquiler en /renta). */
   defaultStatus?: "" | "alquiler" | "venta";
   /** Enlace a dibujar zona en mapa (`/propiedades/mapa`). */
   showMapZoneLink?: boolean;
+  /** Precios del catálogo (MXN). Vacío si usas `catalogPriceSlices`. */
+  catalogPrices?: number[];
+  /** Precios por operación: si ambos tienen datos, se muestra toggle Venta / Alquiler para el dominio del slider. */
+  catalogPriceSlices?: { venta: number[]; alquiler: number[] };
 }
 
 export interface SearchFilters {
@@ -37,8 +45,11 @@ export function SearchBar({
   variant = "default",
   defaultStatus = "",
   showMapZoneLink = true,
+  catalogPrices,
+  catalogPriceSlices,
 }: SearchBarProps) {
   const [searchParams] = useSearchParams();
+  const [priceOp, setPriceOp] = useState<"venta" | "alquiler">("venta");
   const [filters, setFilters] = useState<SearchFilters>({
     query: "",
     type: "",
@@ -48,6 +59,25 @@ export function SearchBar({
   });
 
   const isPremium = variant === "premium";
+  const isAmbient = variant === "ambient";
+
+  const { effectiveCatalogPrices, showPriceOperationToggle } = useMemo(() => {
+    if (catalogPriceSlices) {
+      const v = catalogPriceSlices.venta.filter((n) => Number.isFinite(n) && n >= 0);
+      const a = catalogPriceSlices.alquiler.filter((n) => Number.isFinite(n) && n >= 0);
+      if (v.length > 0 && a.length > 0) {
+        return { effectiveCatalogPrices: priceOp === "venta" ? v : a, showPriceOperationToggle: true };
+      }
+      if (v.length > 0) return { effectiveCatalogPrices: v, showPriceOperationToggle: false };
+      if (a.length > 0) return { effectiveCatalogPrices: a, showPriceOperationToggle: false };
+      return { effectiveCatalogPrices: [] as number[], showPriceOperationToggle: false };
+    }
+    const flat = catalogPrices?.filter((n) => Number.isFinite(n) && n >= 0) ?? [];
+    return { effectiveCatalogPrices: flat, showPriceOperationToggle: false };
+  }, [catalogPriceSlices, catalogPrices, priceOp]);
+
+  const showCatalogPriceRange = effectiveCatalogPrices.length > 0;
+  const catalogRangeRef = useRef<SearchBarCatalogPriceRangeHandle>(null);
 
   useEffect(() => {
     const fromUrl = searchParams.get("status") || "";
@@ -60,7 +90,14 @@ export function SearchBar({
     };
 
     setFilters(urlFilters);
+    if (urlFilters.status === "alquiler") setPriceOp("alquiler");
+    else if (urlFilters.status === "venta") setPriceOp("venta");
   }, [searchParams, defaultStatus]);
+
+  const setPriceOperation = (op: "venta" | "alquiler") => {
+    setPriceOp(op);
+    setFilters((f) => ({ ...f, status: op, minPrice: "", maxPrice: "" }));
+  };
 
   const mapZoneHref = useMemo(() => {
     const s = filters.status || defaultStatus;
@@ -70,42 +107,72 @@ export function SearchBar({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSearch?.(filters);
+    const pricePatch = catalogRangeRef.current?.getPriceFilterPatch() ?? {};
+    const next = { ...filters, ...pricePatch };
+    setFilters(next);
+    onSearch?.(next);
   };
 
   const labelClass = cn(
     "block mb-2 uppercase tracking-[0.16em]",
-    isPremium ? "text-[10px] text-brand-navy/60 font-medium" : "text-sm font-medium text-slate-700"
+    isAmbient && "mb-3 text-[10px] font-medium text-white/75",
+    isPremium && !isAmbient && "text-[10px] text-brand-navy/60 font-medium",
+    !isPremium && !isAmbient && "text-sm font-medium text-slate-700"
+  );
+
+  const ambientField = cn(
+    "box-border w-full border-0 border-b border-white/55 bg-transparent px-0 text-sm text-white placeholder:text-white/55",
+    "h-11 pb-2.5 pt-1 outline-none transition-[border-color,box-shadow] duration-200 focus-visible:border-primary focus-visible:shadow-[0_1px_0_0_rgb(200_16_46_/_0.85)] focus-visible:ring-0",
+    "[text-shadow:0_1px_2px_rgb(0_0_0/0.45)]"
   );
 
   const fieldClass = cn(
-    fieldBase,
-    isPremium
+    !isAmbient && fieldBase,
+    isAmbient && ambientField,
+    isPremium && !isAmbient
       ? "rounded-none border-brand-navy/20 bg-brand-canvas text-brand-navy placeholder:text-brand-navy/45 focus-visible:border-brand-navy focus-visible:ring-brand-navy/20"
-      : "rounded-lg border-slate-300 focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+      : !isPremium && !isAmbient && "rounded-lg border-slate-300 focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
   );
 
+  const selectChevronStyle = isAmbient
+    ? {
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-opacity='0.65' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+      }
+    : isPremium
+      ? {
+          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23525252' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+        }
+      : undefined;
+
   const btnClass = cn(
-    CONTROL_H,
-    "inline-flex w-full shrink-0 items-center justify-center gap-2 text-sm font-medium transition-colors",
-    isPremium
-      ? "rounded-none bg-primary px-5 text-white tracking-[0.12em] text-[11px] uppercase hover:bg-brand-red-hover focus-visible:ring-1 focus-visible:ring-brand-burgundy focus-visible:ring-offset-2"
-      : "rounded-lg bg-primary px-5 text-white hover:bg-brand-red-hover"
+    !isAmbient && CONTROL_H,
+    isAmbient && "h-11 min-h-[2.75rem]",
+    "inline-flex w-full shrink-0 items-center justify-center gap-2 font-medium transition-colors",
+    isAmbient &&
+      "rounded-none border border-primary/70 bg-primary/[0.14] px-5 text-[11px] uppercase tracking-[0.14em] text-white shadow-[0_2px_14px_rgb(0_0_0/0.4),0_0_0_1px_rgb(200_16_46_/_0.25)_inset] hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-[0_4px_20px_rgb(200_16_46_/_0.35)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+    isPremium &&
+      !isAmbient &&
+      "rounded-none bg-primary px-5 text-white tracking-[0.12em] text-[11px] uppercase hover:bg-brand-red-hover focus-visible:ring-1 focus-visible:ring-brand-burgundy focus-visible:ring-offset-2",
+    !isPremium && !isAmbient && "rounded-lg bg-primary px-5 text-sm text-white hover:bg-brand-red-hover"
   );
 
   return (
     <form
       onSubmit={handleSubmit}
       className={cn(
-        "min-w-0 w-full border bg-white px-5 py-6 sm:px-6 sm:py-7 md:px-8 md:py-8",
-        isPremium ? "border-white/25 md:rounded-sm" : "rounded-lg border-slate-200",
+        "min-w-0 w-full overflow-visible",
+        isAmbient && "border-0 bg-transparent p-0 shadow-none",
+        !isAmbient && "border bg-white px-5 py-6 sm:px-6 sm:py-7 md:px-8 md:py-8",
+        isPremium && !isAmbient && "border-white/25 md:rounded-sm",
+        !isPremium && !isAmbient && "rounded-lg border-slate-200",
         className
       )}
     >
       <div
         className={cn(
           "grid grid-cols-1 gap-4 sm:gap-4",
-          "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-4"
+          "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5",
+          isAmbient && "gap-y-5 lg:gap-y-0"
         )}
       >
         <div className="min-w-0 lg:min-w-[12rem]">
@@ -126,15 +193,9 @@ export function SearchBar({
             onChange={(e) => setFilters({ ...filters, type: e.target.value })}
             className={cn(
               fieldClass,
-              "cursor-pointer appearance-none bg-[length:12px] bg-[right_1rem_center] bg-no-repeat pr-10"
+              "cursor-pointer appearance-none bg-[length:12px] bg-[right_0.25rem_center] bg-no-repeat pr-9"
             )}
-            style={
-              isPremium
-                ? {
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23525252' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
-                  }
-                : undefined
-            }
+            style={selectChevronStyle}
           >
             <option value="">Todos</option>
             <option value="casa">Casa</option>
@@ -152,15 +213,9 @@ export function SearchBar({
             onChange={(e) => setFilters({ ...filters, status: e.target.value })}
             className={cn(
               fieldClass,
-              "cursor-pointer appearance-none bg-[length:12px] bg-[right_1rem_center] bg-no-repeat pr-10"
+              "cursor-pointer appearance-none bg-[length:12px] bg-[right_0.25rem_center] bg-no-repeat pr-9"
             )}
-            style={
-              isPremium
-                ? {
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23525252' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
-                  }
-                : undefined
-            }
+            style={selectChevronStyle}
           >
             <option value="">Todos</option>
             <option value="venta">Venta</option>
@@ -173,7 +228,7 @@ export function SearchBar({
             Buscar
           </label>
           <button type="submit" className={cn(btnClass, "lg:w-full")}>
-            <Search className="h-5 w-5 shrink-0 opacity-95" strokeWidth={1.5} aria-hidden />
+            <Search className={cn("h-5 w-5 shrink-0", isAmbient ? "opacity-80" : "opacity-95")} strokeWidth={1.5} aria-hidden />
             <span>Buscar</span>
           </button>
         </div>
@@ -182,8 +237,10 @@ export function SearchBar({
       {showMapZoneLink && (
         <div
           className={cn(
-            "mt-6 flex justify-center border-t pt-6",
-            isPremium ? "border-brand-navy/10" : "border-slate-200"
+            "mt-5 flex justify-center border-t pt-5",
+            isAmbient && "border-white/15",
+            isPremium && !isAmbient && "border-brand-navy/10",
+            !isPremium && !isAmbient && "border-slate-200"
           )}
         >
           <Link
@@ -191,16 +248,19 @@ export function SearchBar({
             aria-label="Ir a la búsqueda en mapa"
             className={cn(
               "group font-heading text-[15px] tracking-tight transition-colors duration-200 sm:text-base",
-              "text-brand-navy"
+              isAmbient ? "text-white/90" : "text-brand-navy"
             )}
-            style={{ fontWeight: 600 }}
+            style={{ fontWeight: isAmbient ? 500 : 600 }}
           >
             <span
               className={cn(
                 "border-b border-current pb-0.5 transition-[border-color,color] duration-200",
-                isPremium
-                  ? "border-brand-navy/30 group-hover:border-primary group-hover:text-primary"
-                  : "border-slate-400 group-hover:border-primary group-hover:text-primary"
+                isAmbient &&
+                  "border-white/40 text-white/90 group-hover:border-white group-hover:text-white",
+                isPremium &&
+                  !isAmbient &&
+                  "border-brand-navy/30 group-hover:border-primary group-hover:text-primary",
+                !isPremium && !isAmbient && "border-slate-400 group-hover:border-primary group-hover:text-primary"
               )}
             >
               Explorar en mapa
@@ -209,33 +269,92 @@ export function SearchBar({
         </div>
       )}
 
-      <div
-        className={cn(
-          "mt-6 grid grid-cols-1 gap-4 border-t pt-6 md:grid-cols-2 md:gap-6",
-          isPremium ? "border-brand-navy/10" : "border-slate-200"
-        )}
-      >
-        <div>
-          <label className={labelClass}>Precio mínimo</label>
-          <input
-            type="number"
-            placeholder="$0"
-            value={filters.minPrice}
-            onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
-            className={fieldClass}
-          />
+      {showPriceOperationToggle && (
+        <div className={cn("mt-4 flex justify-center", isAmbient && "mt-3")}>
+          <div
+            role="group"
+            aria-label="Operación para rango de precio"
+            className={cn(
+              "inline-flex rounded-full border p-0.5 text-[11px] font-semibold uppercase tracking-[0.14em]",
+              isAmbient ? "border-white/20 bg-black/25" : "border-slate-200 bg-slate-50"
+            )}
+          >
+            <button
+              type="button"
+              onClick={() => setPriceOperation("venta")}
+              className={cn(
+                "rounded-full px-4 py-2 transition-colors",
+                priceOp === "venta"
+                  ? isAmbient
+                    ? "bg-white text-brand-navy"
+                    : "bg-brand-navy text-white"
+                  : isAmbient
+                    ? "text-white/70 hover:text-white"
+                    : "text-slate-600 hover:text-slate-900"
+              )}
+            >
+              Venta
+            </button>
+            <button
+              type="button"
+              onClick={() => setPriceOperation("alquiler")}
+              className={cn(
+                "rounded-full px-4 py-2 transition-colors",
+                priceOp === "alquiler"
+                  ? isAmbient
+                    ? "bg-white text-brand-navy"
+                    : "bg-brand-navy text-white"
+                  : isAmbient
+                    ? "text-white/70 hover:text-white"
+                    : "text-slate-600 hover:text-slate-900"
+              )}
+            >
+              Alquiler
+            </button>
+          </div>
         </div>
-        <div>
-          <label className={labelClass}>Precio máximo</label>
-          <input
-            type="number"
-            placeholder="Sin límite"
-            value={filters.maxPrice}
-            onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
-            className={fieldClass}
-          />
+      )}
+
+      {showCatalogPriceRange ? (
+        <SearchBarCatalogPriceRange
+          ref={catalogRangeRef}
+          prices={effectiveCatalogPrices}
+          minPrice={filters.minPrice}
+          maxPrice={filters.maxPrice}
+          onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
+          variant={variant}
+        />
+      ) : (
+        <div
+          className={cn(
+            "mt-5 grid grid-cols-1 gap-4 border-t pt-5 md:grid-cols-2 md:gap-x-6",
+            isAmbient && "border-white/15",
+            isPremium && !isAmbient && "border-brand-navy/10",
+            !isPremium && !isAmbient && "border-slate-200"
+          )}
+        >
+          <div>
+            <label className={labelClass}>Precio mínimo (MXN)</label>
+            <input
+              type="number"
+              placeholder="Ej. 500000"
+              value={filters.minPrice}
+              onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
+              className={fieldClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Precio máximo (MXN)</label>
+            <input
+              type="number"
+              placeholder="Ej. 15000000"
+              value={filters.maxPrice}
+              onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
+              className={fieldClass}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </form>
   );
 }

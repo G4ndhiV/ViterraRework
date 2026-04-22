@@ -28,6 +28,7 @@ export function SalePage() {
     () => properties.filter((p) => p.status === "venta"),
     [properties]
   );
+  const catalogPrices = useMemo(() => saleProperties.map((p) => p.price), [saleProperties]);
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
   const [sortBy, setSortBy] = useState("newest");
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
@@ -180,7 +181,7 @@ export function SalePage() {
               viewport={{ once: true, amount: 0.35 }}
               transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
             >
-              <SearchBar onSearch={handleSearch} defaultStatus="venta" />
+              <SearchBar onSearch={handleSearch} defaultStatus="venta" catalogPrices={catalogPrices} />
             </motion.div>
           </Reveal>
         </div>
