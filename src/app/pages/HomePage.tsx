@@ -182,7 +182,7 @@ export function HomePage() {
                   onClick={scrollToSearch}
                   whileTap={reduceMotion ? undefined : { scale: 0.98 }}
                   transition={{ type: "spring", stiffness: 400, damping: 24 }}
-                  className="flex w-full max-w-sm min-w-0 items-center justify-center border-0 border-b border-white/40 bg-transparent px-2 py-4 text-center text-xs font-normal uppercase tracking-[0.22em] text-white transition-colors hover:border-white sm:w-auto sm:max-w-none sm:shrink-0 sm:px-0"
+                  className="flex w-full max-w-sm min-w-0 cursor-pointer items-center justify-center border-0 border-b border-white/40 bg-transparent px-2 py-4 text-center text-xs font-normal uppercase tracking-[0.22em] text-white transition-colors hover:border-white sm:w-auto sm:max-w-none sm:shrink-0 sm:px-0"
                 >
                   {h.heroCtaPrimary}
                 </motion.button>

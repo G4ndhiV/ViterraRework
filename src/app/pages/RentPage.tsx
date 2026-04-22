@@ -268,9 +268,9 @@ export function RentPage() {
           </Reveal>
 
           {viewMode === "grid" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 items-stretch md:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredProperties.map((property, index) => (
-                <Reveal key={property.id} delay={Math.min(index * 0.055, 0.4)} y={24}>
+                <Reveal key={property.id} className="h-full" delay={Math.min(index * 0.055, 0.4)} y={24}>
                   <PropertyCard property={property} disablePreview />
                 </Reveal>
               ))}

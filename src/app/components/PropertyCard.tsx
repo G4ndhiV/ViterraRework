@@ -30,6 +30,54 @@ export interface Property {
     lat: number;
     lng: number;
   };
+  /** Colonia/barrio (`properties.colony` en Supabase). */
+  colony?: string;
+  /** `properties.amenities` (text[]). */
+  amenities?: string[];
+  /** `properties.services` (text[]). */
+  services?: string[];
+  /** `properties.additional_features` (text[]). */
+  additionalFeatures?: string[];
+  /** Título de publicación Tokko (`publication_title`), suele ser más descriptivo que `title`. */
+  publicationTitle?: string;
+  /** Dirección completa (`full_address`). */
+  fullAddress?: string;
+  /** Descripción en texto plano (`description`). */
+  description?: string;
+  /** Descripción con HTML (`rich_description`). */
+  richDescription?: string;
+  /** Código de referencia visible al cliente (`reference_code`). */
+  referenceCode?: string;
+  /** Enlace a la ficha externa (`public_url`). */
+  publicUrl?: string;
+  /** Superficie de terreno en m² (`surface_land`). */
+  surfaceLand?: number;
+  /** Gastos / expensas (`expenses`). */
+  expenses?: number;
+  /** Antigüedad en años (`age`). */
+  age?: number;
+  /** Estacionamientos (`parking_spaces`). */
+  parkingSpaces?: number;
+  /** URLs de galería (`images`), ordenadas y sin duplicar la imagen principal. */
+  galleryImages?: string[];
+  /** Destacada en catálogo (`featured`). */
+  featured?: boolean;
+  /** Fecha ISO para mostrar antigüedad de publicación (`synced_at` o `updated_at`). */
+  listingUpdatedAt?: string;
+  /** ID Tokko del desarrollo (`development_tokko_id`); si existe, se enlaza con `developments.tokko_id`. */
+  developmentTokkoId?: string;
+}
+
+function cardHeadline(p: Property) {
+  return p.publicationTitle?.trim() || p.title;
+}
+
+function habitacionesLabel(n: number) {
+  return n === 1 ? "1 habitación" : `${n} habitaciones`;
+}
+
+function banosLabel(n: number) {
+  return n === 1 ? "1 baño" : `${n} baños`;
 }
 
 interface PropertyCardProps {
@@ -97,7 +145,7 @@ export function PropertyCard({
         >
           <ImageWithFallback
             src={property.image}
-            alt={property.title}
+            alt={cardHeadline(property)}
             className={cn(
               "w-full h-full object-cover transition-transform duration-700",
               ed ? "group-hover:scale-[1.03]" : "group-hover:scale-110"
@@ -172,7 +220,7 @@ export function PropertyCard({
               )}
               style={!ed ? { fontWeight: 600 } : undefined}
             >
-              {property.title}
+              {cardHeadline(property)}
             </h3>
           </button>
 
@@ -311,7 +359,7 @@ export function PropertyCard({
             <div className="relative flex min-h-0 flex-1 flex-col border-t-4 border-primary bg-white px-4 pb-4 pt-4 sm:px-5 sm:pb-5 sm:pt-4">
               <DialogHeader className="space-y-1 text-left">
                 <DialogTitle className="font-heading line-clamp-2 text-left text-base font-semibold leading-snug text-brand-navy sm:text-lg">
-                  {property.title}
+                  {cardHeadline(property)}
                 </DialogTitle>
                 <DialogDescription className="flex items-start gap-1.5 text-left text-xs leading-snug text-slate-600" style={{ fontWeight: 500 }}>
                   <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={1.5} />

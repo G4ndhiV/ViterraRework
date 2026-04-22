@@ -16,6 +16,45 @@ function dbStatusFromApp(s: Property["status"]): string {
   return s === "alquiler" ? "alquiler" : "venta";
 }
 
+/** Entero ≥ 0 a partir de valores que vienen de Postgres/JSON (a veces string). */
+function nonNegInt(v: number | string | null | undefined): number {
+  if (v == null || v === "") return 0;
+  const n = typeof v === "number" ? v : Number(String(v).trim());
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.round(n));
+}
+
+/** Normaliza columnas `text[]` de Postgres. */
+function textArrayCol(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((x): x is string => typeof x === "string")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function optionalPositiveNum(v: number | string | null | undefined): number | undefined {
+  if (v == null || v === "") return undefined;
+  const n = typeof v === "number" ? v : Number(String(v).trim());
+  if (!Number.isFinite(n)) return undefined;
+  return n;
+}
+
+/** URLs de galería: primero la principal, luego el resto sin duplicados. */
+function buildGalleryUrls(primary: string, images: string[]): string[] {
+  const cleaned = images.map((u) => String(u).trim()).filter(Boolean);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const push = (u: string) => {
+    if (seen.has(u)) return;
+    seen.add(u);
+    out.push(u);
+  };
+  if (primary) push(primary);
+  for (const u of cleaned) push(u);
+  return out.length ? out : primary ? [primary] : [];
+}
+
 export type PropertyRow = {
   id: string;
   tokko_id: string;
@@ -36,18 +75,40 @@ export type PropertyRow = {
   synced_at: string;
   updated_at: string;
   featured: boolean;
+  /** `public.properties.colony` (puede faltar en filas antiguas). */
+  colony?: string | null;
+  amenities?: string[] | null;
+  services?: string[] | null;
+  additional_features?: string[] | null;
+  publication_title?: string | null;
+  full_address?: string | null;
+  description?: string | null;
+  rich_description?: string | null;
+  reference_code?: string | null;
+  public_url?: string | null;
+  surface_land?: number | string | null;
+  expenses?: number | string | null;
+  age?: number | null;
+  parking_spaces?: number | null;
+  development_tokko_id?: string | null;
 };
 
+/**
+ * Convierte una fila de `public.properties` al tipo `Property` de la app.
+ * Recámaras y baños salen de las columnas **`bedrooms`** y **`bathrooms`** (no de `payload`).
+ */
 export function rowToProperty(row: PropertyRow): Property {
   const imgs = Array.isArray(row.images) ? row.images : [];
   const primary = row.image?.trim() || imgs[0] || "";
+  const pubTitle = row.publication_title?.trim();
+  const listingAt = row.synced_at || row.updated_at;
   return {
     id: row.id,
     title: row.title,
     price: Number(row.price ?? 0),
     location: row.location ?? "",
-    bedrooms: row.bedrooms ?? 0,
-    bathrooms: row.bathrooms ?? 0,
+    bedrooms: nonNegInt(row.bedrooms),
+    bathrooms: nonNegInt(row.bathrooms),
     area: Number(row.area ?? 0),
     image: primary,
     type: row.type ?? "",
@@ -57,11 +118,36 @@ export function rowToProperty(row: PropertyRow): Property {
       row.lat != null && row.lng != null
         ? { lat: row.lat, lng: row.lng }
         : undefined,
+    colony:
+      row.colony != null && String(row.colony).trim() !== ""
+        ? String(row.colony).trim()
+        : undefined,
+    amenities: textArrayCol(row.amenities),
+    services: textArrayCol(row.services),
+    additionalFeatures: textArrayCol(row.additional_features),
+    publicationTitle: pubTitle || undefined,
+    fullAddress: row.full_address?.trim() || undefined,
+    description: row.description?.trim() || undefined,
+    richDescription: row.rich_description?.trim() || undefined,
+    referenceCode: row.reference_code?.trim() || undefined,
+    publicUrl: row.public_url?.trim() || undefined,
+    surfaceLand: optionalPositiveNum(row.surface_land),
+    expenses: optionalPositiveNum(row.expenses),
+    age: row.age != null && Number.isFinite(row.age) ? Math.max(0, Math.round(row.age)) : undefined,
+    parkingSpaces: row.parking_spaces != null ? nonNegInt(row.parking_spaces) : undefined,
+    galleryImages: buildGalleryUrls(primary, imgs),
+    featured: Boolean(row.featured),
+    listingUpdatedAt: listingAt || undefined,
+    developmentTokkoId:
+      row.development_tokko_id != null && String(row.development_tokko_id).trim() !== ""
+        ? String(row.development_tokko_id).trim()
+        : undefined,
   };
 }
 
 export async function fetchCatalogProperties(client: SupabaseClient) {
   /** No filtramos por `deleted_at IS NULL`: en datos sincronizados desde Tokko a veces nunca queda NULL y el listado quedaría vacío. El borrado en admin sigue usando `softDeleteProperty`. */
+  /** `select('*')` incluye `bedrooms` y `bathrooms`; `rowToProperty` las mapea al modelo. */
   return client.from("properties").select("*").order("updated_at", { ascending: false });
 }
 
@@ -69,7 +155,8 @@ export async function insertProperty(client: SupabaseClient, p: Property, explic
   const ts = nowIso();
   const id = explicitId || p.id;
   const tokkoId = `manual_${id}`;
-  const imgs = p.image ? [p.image] : [];
+  const imgs =
+    p.galleryImages && p.galleryImages.length > 0 ? [...p.galleryImages] : p.image ? [p.image] : [];
   const row = {
     id,
     tokko_id: tokkoId,
@@ -84,20 +171,20 @@ export async function insertProperty(client: SupabaseClient, p: Property, explic
     status: dbStatusFromApp(p.status),
     lat: p.coordinates?.lat ?? null,
     lng: p.coordinates?.lng ?? null,
-    development_tokko_id: null,
+    development_tokko_id: p.developmentTokkoId?.trim() || null,
     payload: { source: "viterra_admin" } as Record<string, unknown>,
     synced_at: ts,
     updated_at: ts,
     images: imgs,
-    colony: null,
-    full_address: null,
-    description: null,
-    rich_description: null,
-    amenities: [] as string[],
-    services: [] as string[],
-    additional_features: [] as string[],
-    reference_code: null,
-    public_url: null,
+    colony: p.colony?.trim() || null,
+    full_address: p.fullAddress?.trim() || null,
+    description: p.description?.trim() || null,
+    rich_description: p.richDescription?.trim() || null,
+    amenities: [...(p.amenities ?? [])],
+    services: [...(p.services ?? [])],
+    additional_features: [...(p.additionalFeatures ?? [])],
+    reference_code: p.referenceCode?.trim() || null,
+    public_url: p.publicUrl?.trim() || null,
     deleted_at: null,
     publication_title: null,
     featured: p.featured ?? false,

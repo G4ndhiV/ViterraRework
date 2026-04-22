@@ -59,6 +59,9 @@ export function PropertyFormDialog({
         status: "venta",
         featured: false,
         coordinates: { lat: 20.676208, lng: -103.34721 },
+        amenities: [],
+        services: [],
+        additionalFeatures: [],
       });
     }
   }, [open, mode, property, newId]);

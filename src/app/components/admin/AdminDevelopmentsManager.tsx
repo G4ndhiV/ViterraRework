@@ -53,6 +53,8 @@ const emptyForm = {
   units: 1,
   deliveryDate: "",
   priceRange: "",
+  inChargePhone: "",
+  inChargeEmail: "",
 };
 
 export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Props) {
@@ -138,6 +140,8 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
       units: d.units,
       deliveryDate: d.deliveryDate,
       priceRange: d.priceRange,
+      inChargePhone: d.inChargePhone ?? "",
+      inChargeEmail: d.inChargeEmail ?? "",
     });
     setOpen(true);
   };
@@ -166,6 +170,9 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
       developmentUnits: editing?.developmentUnits ?? [],
       coordinates: editing?.coordinates ?? { lat: 20.67, lng: -103.35 },
       featured: editing?.featured ?? false,
+      inChargePhone: form.inChargePhone.trim(),
+      inChargeEmail: form.inChargeEmail.trim(),
+      tokkoId: editing?.tokkoId,
     };
     onSave(payload);
     setOpen(false);
@@ -847,6 +854,38 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                       onChange={(e) => setForm((p) => ({ ...p, units: Number(e.target.value) }))}
                     />
                   </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs uppercase text-slate-600" style={{ fontWeight: 600 }}>
+                    Teléfono de contacto (sitio web / WhatsApp)
+                  </Label>
+                  <input
+                    type="tel"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    placeholder="Ej. +52 33 1234 5678"
+                    value={form.inChargePhone}
+                    onChange={(e) => setForm((p) => ({ ...p, inChargePhone: e.target.value }))}
+                  />
+                  <p className="text-[11px] text-slate-500" style={{ fontWeight: 500 }}>
+                    Se muestra en la ficha pública y enlaza WhatsApp con el mismo número.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs uppercase text-slate-600" style={{ fontWeight: 600 }}>
+                    Correo de contacto (sitio web)
+                  </Label>
+                  <input
+                    type="email"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    placeholder="contacto@ejemplo.com"
+                    value={form.inChargeEmail}
+                    onChange={(e) => setForm((p) => ({ ...p, inChargeEmail: e.target.value }))}
+                  />
+                  <p className="text-[11px] text-slate-500" style={{ fontWeight: 500 }}>
+                    Se muestra en la barra lateral de la ficha pública.
+                  </p>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">

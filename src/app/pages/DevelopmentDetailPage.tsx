@@ -24,12 +24,20 @@ import {
   Send,
 } from "lucide-react";
 import { useDevelopmentDetail } from "../hooks/useDevelopmentsCatalog";
+import { cn } from "../components/ui/utils";
+
+/** Por encima de esto se muestra “Ver más” en la descripción (detalle). */
+const DESCRIPTION_COLLAPSE_THRESHOLD = 420;
+
+const INTRO_LOCATION_BLURB =
+  "Ubicado en una de las zonas más cotizadas de mayor plusvalía de Zapopan, a 3 minutos de Andares. Ideal para profesionistas, estudiantes o inversionistas que buscan rentabilidad, ubicación y calidad de vida en una zona en constante crecimiento.";
 
 export function DevelopmentDetailPage() {
   const { id } = useParams();
   const { development, loading, error } = useDevelopmentDetail(id);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [activeTab, setActiveTab] = useState("descripcion");
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -38,6 +46,7 @@ export function DevelopmentDetailPage() {
   });
   const [submitted, setSubmitted] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
 
@@ -91,19 +100,67 @@ export function DevelopmentDetailPage() {
       }
     };
 
-    initMap();
-
-    return () => {
-      if (mapInstanceRef.current) {
-        try {
-          mapInstanceRef.current.remove();
-        } catch (error) {
-          console.error("Error removing map:", error);
-        }
-        mapInstanceRef.current = null;
+    if (activeTab !== "ubicacion") {
+      try {
+        mapInstanceRef.current?.remove();
+      } catch (error) {
+        console.error("Error removing map:", error);
       }
+      mapInstanceRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+    let rafId: number | null = null;
+    let invalidateId: number | null = null;
+
+    const mountWhenReady = () => {
+      if (cancelled) return;
+      if (!mapRef.current) {
+        rafId = requestAnimationFrame(mountWhenReady);
+        return;
+      }
+      void initMap();
+      invalidateId = window.setTimeout(() => {
+        try {
+          mapInstanceRef.current?.invalidateSize();
+        } catch (error) {
+          console.error("Error invalidating map size:", error);
+        }
+      }, 180);
     };
-  }, [development]);
+
+    mountWhenReady();
+    return () => {
+      cancelled = true;
+      if (rafId != null) cancelAnimationFrame(rafId);
+      if (invalidateId != null) window.clearTimeout(invalidateId);
+    };
+  }, [activeTab, development]);
+
+  useEffect(() => {
+    return () => {
+      try {
+        mapInstanceRef.current?.remove();
+      } catch (error) {
+        console.error("Error removing map:", error);
+      }
+      mapInstanceRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isImageZoomOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsImageZoomOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isImageZoomOpen]);
+
+  useEffect(() => {
+    setDescriptionExpanded(false);
+  }, [id]);
 
   if (loading) {
     return (
@@ -170,6 +227,9 @@ export function DevelopmentDetailPage() {
   const statusBadgeClass =
     "border border-black/15 bg-white text-neutral-950 shadow-[0_1px_3px_rgba(0,0,0,0.12)]";
 
+  const descriptionNeedsExpand =
+    development.description.length > DESCRIPTION_COLLAPSE_THRESHOLD;
+
   return (
     <div className="viterra-page min-h-screen flex flex-col bg-slate-50">
       <Header />
@@ -189,13 +249,13 @@ export function DevelopmentDetailPage() {
       </div>
 
       {/* Main Content */}
-      <div data-reveal className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
-        <div className="grid lg:grid-cols-3 gap-8">
+      <div data-reveal className="max-w-7xl mx-auto px-6 lg:px-8 py-5">
+        <div className="grid lg:grid-cols-3 gap-6">
           {/* Left Column - Gallery and Details */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-5">
             {/* Image Gallery */}
             <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-slate-200">
-              <div className="relative h-[400px] md:h-[500px] bg-slate-200 group">
+              <div className="relative h-[320px] md:h-[360px] lg:h-[400px] bg-slate-200 group">
                 <img
                   src={development.images[currentImageIndex]}
                   alt={development.name}
@@ -230,6 +290,13 @@ export function DevelopmentDetailPage() {
                 {/* Action Buttons */}
                 <div className="absolute top-4 right-4 flex gap-2">
                   <button
+                    onClick={() => setIsImageZoomOpen(true)}
+                    className="w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all"
+                    aria-label="Ampliar imagen"
+                  >
+                    <Maximize2 className="w-5 h-5 text-slate-700" strokeWidth={1.5} />
+                  </button>
+                  <button
                     onClick={() => setIsFavorite(!isFavorite)}
                     className="w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all"
                   >
@@ -247,13 +314,13 @@ export function DevelopmentDetailPage() {
               </div>
 
               {/* Thumbnail Strip */}
-              <div className="p-4 bg-slate-50 border-t border-slate-200">
-                <div className="flex gap-2 overflow-x-auto pb-2">
+              <div className="p-3 bg-slate-50 border-t border-slate-200">
+                <div className="flex gap-2 overflow-x-auto pb-1">
                   {development.images.map((img, idx) => (
                     <button
                       key={idx}
                       onClick={() => setCurrentImageIndex(idx)}
-                      className={`relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-all ${
+                      className={`relative flex-shrink-0 h-16 w-16 rounded-lg overflow-hidden border-2 transition-all md:h-[4.5rem] md:w-[4.5rem] ${
                         idx === currentImageIndex
                           ? "border-slate-900 ring-2 ring-slate-900 ring-offset-2"
                           : "border-slate-200 hover:border-slate-400"
@@ -339,15 +406,41 @@ export function DevelopmentDetailPage() {
                 {/* Descripción Tab */}
                 {activeTab === "descripcion" && (
                   <div className="space-y-4">
-                    <p className="text-base text-slate-700 leading-relaxed" style={{ fontWeight: 400 }}>
-                      {development.description}
-                    </p>
-                    <p className="text-base text-slate-700 leading-relaxed" style={{ fontWeight: 400 }}>
-                      Ubicado en una de las zonas más cotizadas de mayor plusvalía de Zapopan, a 3 minutos de
-                      Andares. Ideal para profesionistas, estudiantes o inversionistas que buscan rentabilidad,
-                      ubicación y calidad de vida en una zona en constante crecimiento.
-                    </p>
-                    
+                    <div className={cn("relative", descriptionNeedsExpand && !descriptionExpanded && "pb-1")}>
+                      <div
+                        className={cn(
+                          "space-y-4",
+                          descriptionNeedsExpand &&
+                            !descriptionExpanded &&
+                            "max-h-[min(14rem,42vh)] overflow-hidden md:max-h-[min(16rem,38vh)]"
+                        )}
+                      >
+                        <p className="text-base text-slate-700 leading-relaxed" style={{ fontWeight: 400 }}>
+                          {development.description}
+                        </p>
+                        <p className="text-base text-slate-700 leading-relaxed" style={{ fontWeight: 400 }}>
+                          {INTRO_LOCATION_BLURB}
+                        </p>
+                      </div>
+                      {descriptionNeedsExpand && !descriptionExpanded ? (
+                        <div
+                          className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white to-transparent"
+                          aria-hidden
+                        />
+                      ) : null}
+                    </div>
+                    {descriptionNeedsExpand ? (
+                      <button
+                        type="button"
+                        onClick={() => setDescriptionExpanded((e) => !e)}
+                        className="text-sm font-medium text-primary hover:text-brand-burgundy hover:underline"
+                        style={{ fontWeight: 600 }}
+                        aria-expanded={descriptionExpanded}
+                      >
+                        {descriptionExpanded ? "Ver menos" : "Ver más"}
+                      </button>
+                    ) : null}
+
                     {/* Services */}
                     <div className="mt-6 pt-6 border-t border-slate-200">
                       <h3 className="text-lg font-semibold text-slate-900 mb-4" style={{ fontWeight: 600 }}>Servicios Disponibles</h3>
@@ -635,6 +728,28 @@ export function DevelopmentDetailPage() {
           </div>
         </div>
       </div>
+
+      {isImageZoomOpen && (
+        <div
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setIsImageZoomOpen(false)}
+        >
+          <div className="relative w-full max-w-6xl" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={development.images[currentImageIndex]}
+              alt={development.name}
+              className="max-h-[85vh] w-full rounded-lg object-contain"
+            />
+            <button
+              type="button"
+              onClick={() => setIsImageZoomOpen(false)}
+              className="absolute right-3 top-3 rounded-md bg-black/65 px-3 py-1.5 text-sm font-medium text-white hover:bg-black/80"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
 
       <Footer />
     </div>
