@@ -136,7 +136,6 @@ export function rowToProperty(row: PropertyRow): Property {
     age: row.age != null && Number.isFinite(row.age) ? Math.max(0, Math.round(row.age)) : undefined,
     parkingSpaces: row.parking_spaces != null ? nonNegInt(row.parking_spaces) : undefined,
     galleryImages: buildGalleryUrls(primary, imgs),
-    featured: Boolean(row.featured),
     listingUpdatedAt: listingAt || undefined,
     developmentTokkoId:
       row.development_tokko_id != null && String(row.development_tokko_id).trim() !== ""
@@ -149,6 +148,22 @@ export async function fetchCatalogProperties(client: SupabaseClient) {
   /** No filtramos por `deleted_at IS NULL`: en datos sincronizados desde Tokko a veces nunca queda NULL y el listado quedaría vacío. El borrado en admin sigue usando `softDeleteProperty`. */
   /** `select('*')` incluye `bedrooms` y `bathrooms`; `rowToProperty` las mapea al modelo. */
   return client.from("properties").select("*").order("updated_at", { ascending: false });
+}
+
+/** Propiedades vinculadas a un desarrollo por `development_tokko_id` (Tokko). */
+export async function fetchPropertiesByDevelopmentTokkoId(client: SupabaseClient, developmentTokkoId: string) {
+  const id = developmentTokkoId.trim();
+  if (!id) {
+    return { data: [] as Property[], error: null };
+  }
+  const res = await client
+    .from("properties")
+    .select("*")
+    .eq("development_tokko_id", id)
+    .order("updated_at", { ascending: false });
+  if (res.error) return { data: null, error: res.error };
+  const rows = (res.data ?? []) as PropertyRow[];
+  return { data: rows.map(rowToProperty), error: null };
 }
 
 export async function insertProperty(client: SupabaseClient, p: Property, explicitId: string) {
