@@ -86,7 +86,47 @@ function groupUnitsByDevelopment(rows: DevelopmentUnitRow[] | null): Map<string,
   return m;
 }
 
-export function rowToDevelopment(row: DevelopmentRow, units: DevelopmentUnit[]): Development {
+/**
+ * Cuenta propiedades por `development_tokko_id` (keys en minúsculas) para cruzar con `developments.tokko_id`.
+ */
+async function fetchLinkedPropertyCountByTokkoLower(
+  client: SupabaseClient
+): Promise<Map<string, number>> {
+  const res = await client.from("properties").select("development_tokko_id");
+  const m = new Map<string, number>();
+  if (res.error) return m;
+  for (const raw of res.data ?? []) {
+    const row = raw as { development_tokko_id?: string | null };
+    const tid = typeof row.development_tokko_id === "string" ? row.development_tokko_id.trim() : "";
+    if (!tid) continue;
+    const key = tid.toLowerCase();
+    m.set(key, (m.get(key) ?? 0) + 1);
+  }
+  return m;
+}
+
+function linkedPropertyCountForRow(row: DevelopmentRow, byTokko: Map<string, number>): number {
+  const tokko = typeof row.tokko_id === "string" ? row.tokko_id.trim() : "";
+  if (!tokko) return 0;
+  return byTokko.get(tokko.toLowerCase()) ?? 0;
+}
+
+/** Prioridad: unidades del catálogo `properties`; si no hay vínculo, inventario manual; luego columna `units`. */
+function resolveDisplayedUnits(
+  row: DevelopmentRow,
+  manualUnits: DevelopmentUnit[],
+  linkedPropertyCount: number
+): number {
+  if (linkedPropertyCount > 0) return linkedPropertyCount;
+  if (manualUnits.length > 0) return manualUnits.length;
+  return row.units ?? 0;
+}
+
+export function rowToDevelopment(
+  row: DevelopmentRow,
+  units: DevelopmentUnit[],
+  linkedPropertyCount = 0
+): Development {
   const imgs = Array.isArray(row.images) ? row.images : [];
   const primary = row.image?.trim() || imgs[0] || "";
   const status = (row.status ?? "Disponible") as Development["status"];
@@ -101,7 +141,7 @@ export function rowToDevelopment(row: DevelopmentRow, units: DevelopmentUnit[]):
     image: primary,
     images: imgs.length > 0 ? imgs : primary ? [primary] : [],
     status,
-    units: row.units ?? units.length,
+    units: resolveDisplayedUnits(row, units, linkedPropertyCount),
     deliveryDate: row.delivery_date ?? "",
     priceRange: row.price_range ?? "",
     amenities: Array.isArray(row.amenities) ? row.amenities : [],
@@ -134,10 +174,15 @@ export async function fetchDevelopmentsWithUnits(
   if (rows.length === 0) return { data: [] as Development[], error: null };
 
   const ids = rows.map((r) => r.id);
-  const unitRes = await client.from("development_units").select("*").in("development_id", ids);
+  const [unitRes, linkedByTokko] = await Promise.all([
+    client.from("development_units").select("*").in("development_id", ids),
+    fetchLinkedPropertyCountByTokkoLower(client),
+  ]);
   if (unitRes.error) return { data: [] as Development[], error: unitRes.error };
   const byDev = groupUnitsByDevelopment((unitRes.data ?? []) as DevelopmentUnitRow[]);
-  const data = rows.map((r) => rowToDevelopment(r, byDev.get(r.id) ?? []));
+  const data = rows.map((r) =>
+    rowToDevelopment(r, byDev.get(r.id) ?? [], linkedPropertyCountForRow(r, linkedByTokko))
+  );
   return { data, error: null };
 }
 
@@ -152,10 +197,14 @@ export async function fetchDevelopmentById(
   if (devRes.error) return { data: null, error: devRes.error };
   const row = devRes.data as DevelopmentRow | null;
   if (!row) return { data: null, error: null };
-  const unitRes = await client.from("development_units").select("*").eq("development_id", id);
+  const [unitRes, linkedByTokko] = await Promise.all([
+    client.from("development_units").select("*").eq("development_id", id),
+    fetchLinkedPropertyCountByTokkoLower(client),
+  ]);
   if (unitRes.error) return { data: null, error: unitRes.error };
   const units = groupUnitsByDevelopment((unitRes.data ?? []) as DevelopmentUnitRow[]).get(id) ?? [];
-  return { data: rowToDevelopment(row, units), error: null };
+  const linked = linkedPropertyCountForRow(row, linkedByTokko);
+  return { data: rowToDevelopment(row, units, linked), error: null };
 }
 
 export async function upsertDevelopment(client: SupabaseClient, d: Development) {

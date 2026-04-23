@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useDevelopmentDetail } from "../hooks/useDevelopmentsCatalog";
 import { copyPublicPageUrl } from "../lib/copyPublicLink";
+import { WhatsAppGlyph } from "../components/WhatsAppGlyph";
 
 function phoneDigitsOnly(raw: string) {
   return raw.replace(/\D/g, "");
@@ -742,7 +743,7 @@ export function DevelopmentDetailPage() {
                       style={{ fontWeight: 500 }}
                     >
                       <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                        <Phone className="w-4 h-4 text-green-700" strokeWidth={1.5} />
+                        <WhatsAppGlyph className="h-4 w-4 text-[#25D366]" />
                       </div>
                       <div>
                         <p className="text-xs text-slate-500" style={{ fontWeight: 400 }}>WhatsApp</p>
@@ -752,7 +753,7 @@ export function DevelopmentDetailPage() {
                   ) : (
                     <div className="flex items-center gap-3 text-sm text-slate-400" style={{ fontWeight: 500 }}>
                       <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
-                        <Phone className="w-4 h-4 text-slate-400" strokeWidth={1.5} />
+                        <WhatsAppGlyph className="h-4 w-4 text-slate-400" />
                       </div>
                       <div>
                         <p className="text-xs text-slate-500" style={{ fontWeight: 400 }}>WhatsApp</p>

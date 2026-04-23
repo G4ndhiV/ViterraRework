@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import {
   ArchiveRestore,
   Building2,
   Calendar,
   Check,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Edit,
   Globe2,
   History,
@@ -20,7 +22,7 @@ import {
   Users,
 } from "lucide-react";
 import { User, UserHistoryEntry, UserPermission, UserRole } from "../../contexts/AuthContext";
-import type { Lead } from "../../data/leads";
+import { labelForLeadStatus, type CustomKanbanStage, type Lead } from "../../data/leads";
 import {
   Dialog,
   DialogClose,
@@ -42,6 +44,7 @@ import {
 import { cn } from "../ui/utils";
 import { foldSearchText } from "../../lib/searchText";
 import type { UserGroup } from "../../lib/userGroups";
+import { DEFAULT_PIPELINE_GROUP_ID, loadPipelineByGroup } from "../../lib/pipelineByGroup";
 import { UserGroupsPanel } from "./UserGroupsPanel";
 
 const userReadonlyFieldClass =
@@ -148,6 +151,16 @@ function formatUserHistoryDate(iso: string) {
   });
 }
 
+function getValidUserPictureSrc(raw: string | undefined): string {
+  const v = (raw ?? "").trim();
+  if (!v) return "";
+  const lowered = v.toLowerCase();
+  if (lowered === "null" || lowered === "undefined") return "";
+  if (v.startsWith("data:image/")) return v;
+  if (/^https?:\/\//i.test(v)) return v;
+  return "";
+}
+
 const historyTypeBadgeLabel: Record<UserHistoryEntry["type"], string> = {
   created: "Alta",
   updated: "Actualización",
@@ -157,10 +170,26 @@ const historyTypeBadgeLabel: Record<UserHistoryEntry["type"], string> = {
   reactivated: "Reactivación",
 };
 
+const interestLabel: Record<Lead["interest"], string> = {
+  compra: "Compra",
+  venta: "Venta",
+  alquiler: "Alquiler",
+  asesoria: "Asesoría",
+};
+
+function formatLeadShortDate(iso: string | undefined) {
+  if (!iso) return "—";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "—";
+  return new Date(t).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
+}
+
 interface Props {
   currentUser: User;
   users: User[];
   leads: Lead[];
+  /** Etapas personalizadas del pipeline para mostrar el nombre de etapa en las cards. */
+  customKanbanStages?: CustomKanbanStage[];
   userGroups?: UserGroup[];
   onViewLead?: (lead: Lead) => void;
   onUserGroupsChange?: (groups: UserGroup[]) => void;
@@ -196,6 +225,7 @@ export function AdminUsersManager({
   currentUser,
   users,
   leads,
+  customKanbanStages = [],
   userGroups = [],
   onViewLead,
   onUserGroupsChange,
@@ -261,8 +291,15 @@ export function AdminUsersManager({
 
   useEffect(() => {
     if (!focusUser) return;
-    const u = users.find((x) => x.id === focusUser.id);
-    if (u) setSelectedUser(u);
+    const targetId = focusUser.id.trim().toLowerCase();
+    const u = users.find((x) => x.id.trim().toLowerCase() === targetId);
+    if (u) {
+      setSelectedUser(u);
+      onFocusUserConsumed?.();
+      return;
+    }
+    // Si la lista aún no está hidratada, esperamos al próximo render para no perder el foco.
+    if (users.length === 0) return;
     onFocusUserConsumed?.();
   }, [focusUser?.nonce, focusUser?.id, users, onFocusUserConsumed]);
 
@@ -308,6 +345,31 @@ export function AdminUsersManager({
       }))
       .sort((a, b) => a.name.localeCompare(b.name, "es"));
   }, [selectedUser, userGroups]);
+
+  const pipelineByGroup = useMemo(() => loadPipelineByGroup(), []);
+  const resolveLeadStatusLabel = useCallback(
+    (lead: Lead) => {
+      const customStagesForLead =
+        pipelineByGroup[lead.pipelineGroupId]?.customStages ??
+        pipelineByGroup[DEFAULT_PIPELINE_GROUP_ID]?.customStages ??
+        customKanbanStages;
+      const label = labelForLeadStatus(lead.status, customStagesForLead);
+      // Prevent exposing raw internal ids such as `custom_xxx`.
+      if (label === lead.status && lead.status.startsWith("custom_")) {
+        return "Columna personalizada";
+      }
+      return label;
+    },
+    [customKanbanStages, pipelineByGroup]
+  );
+
+  const leadsCarouselRef = useRef<HTMLDivElement>(null);
+  const scrollLeadsCarousel = useCallback((dir: "prev" | "next") => {
+    const el = leadsCarouselRef.current;
+    if (!el) return;
+    const amount = Math.min(420, Math.max(240, el.clientWidth * 0.78));
+    el.scrollBy({ left: dir === "next" ? amount : -amount, behavior: "smooth" });
+  }, []);
 
   const submitCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -655,25 +717,46 @@ export function AdminUsersManager({
                     Detalle de usuario
                   </p>
                   <div className="mt-3 flex flex-col gap-4 min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-between min-[1100px]:gap-6">
-                    <div className="min-w-0 flex-1">
-                      <DialogTitle
-                        className="font-heading truncate text-3xl leading-tight tracking-tight text-brand-navy sm:text-4xl"
-                        style={{ fontWeight: 700, textShadow: "0 1px 0 rgba(255,255,255,0.5)" }}
-                      >
-                        {selectedUser.name}
-                      </DialogTitle>
-                      <p className="mt-1.5 text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                        {selectedUser.isActive ? (
-                          <span className="text-emerald-700">Activo</span>
+                    <div className="flex min-w-0 flex-1 items-start gap-4">
+                      {getValidUserPictureSrc(selectedUser.profile.picture) ? (
+                        <img
+                          src={getValidUserPictureSrc(selectedUser.profile.picture)}
+                          alt={`Foto de ${selectedUser.name}`}
+                          className="h-20 w-20 shrink-0 rounded-xl border border-stone-200/90 bg-white object-cover shadow-sm"
+                        />
+                      ) : null}
+                      <div className="min-w-0 flex-1">
+                        <DialogTitle
+                          className="font-heading truncate text-3xl leading-tight tracking-tight text-brand-navy sm:text-4xl"
+                          style={{ fontWeight: 700, textShadow: "0 1px 0 rgba(255,255,255,0.5)" }}
+                        >
+                          {selectedUser.name}
+                        </DialogTitle>
+                        {canManageUsers ? (
+                          <div className="mt-1.5 max-w-[16rem]">
+                            <select
+                              value={selectedUser.role}
+                              onChange={(e) => {
+                                const nextRole = e.target.value as UserRole;
+                                setSelectedUser((prev) => (prev ? { ...prev, role: nextRole } : prev));
+                              }}
+                              className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-brand-navy transition-colors focus:border-primary/35 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                              style={{ fontWeight: 600 }}
+                              aria-label="Rol del usuario"
+                            >
+                              {roleOptions.map((role) => (
+                                <option key={role.value} value={role.value}>
+                                  {role.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         ) : (
-                          <span className="text-amber-800">
-                            Archivado
-                            {selectedUser.archivedAt
-                              ? ` · ${new Date(selectedUser.archivedAt).toLocaleDateString()}`
-                              : ""}
-                          </span>
+                          <p className="mt-1.5 text-sm text-slate-600" style={{ fontWeight: 600 }}>
+                            {roleOptions.find((r) => r.value === selectedUser.role)?.label ?? selectedUser.role}
+                          </p>
                         )}
-                      </p>
+                      </div>
                     </div>
                     <div className="flex w-full shrink-0 flex-col gap-2 min-[1100px]:w-auto min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-end min-[1100px]:gap-3">
                       <DialogClose asChild>
@@ -715,302 +798,330 @@ export function AdminUsersManager({
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gradient-to-b from-stone-100/95 to-stone-100/80">
                 <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
                   <div className="mx-auto w-full max-w-[min(100%,88rem)]">
-                    <div className="grid grid-cols-1 gap-8 text-sm lg:grid-cols-12 lg:items-start lg:gap-8 xl:gap-10">
-                      <div className="flex min-w-0 flex-col gap-6 lg:col-span-7">
-                        <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
-                          <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
-                            Contacto y datos personales
-                          </h3>
-                          <p className="mt-1 text-xs text-slate-500">
-                            Medios de contacto e identificación del usuario en el sistema.
-                          </p>
+                    <div className="space-y-8">
+                      <div className="grid grid-cols-1 gap-8 text-sm lg:grid-cols-12 lg:items-stretch lg:gap-8 xl:gap-10">
+                        <div className="min-w-0 lg:col-span-7">
+                          <section className="h-full rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
+                            <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
+                              Contacto y datos personales
+                            </h3>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Medios de contacto e identificación del usuario en el sistema.
+                            </p>
 
-                          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                            <div className="group rounded-2xl border border-stone-200/80 bg-gradient-to-br from-white via-white to-primary/[0.04] p-5 shadow-sm transition-shadow hover:shadow-md">
-                              <div className="flex items-start gap-4">
-                                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary ring-1 ring-primary/15">
-                                  <Mail className="h-5 w-5" strokeWidth={1.75} aria-hidden />
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                    Correo
-                                  </p>
-                                  <a
-                                    href={`mailto:${encodeURIComponent(selectedUser.email)}`}
-                                    className="mt-1 block break-all text-[15px] text-primary transition-colors hover:underline"
-                                    style={{ fontWeight: 600 }}
-                                  >
-                                    {selectedUser.email}
-                                  </a>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="group rounded-2xl border border-stone-200/80 bg-gradient-to-br from-white via-white to-brand-navy/[0.06] p-5 shadow-sm transition-shadow hover:shadow-md">
-                              <div className="flex items-start gap-4">
-                                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-navy/10 text-brand-navy ring-1 ring-brand-navy/15">
-                                  <Phone className="h-5 w-5" strokeWidth={1.75} aria-hidden />
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                    Teléfono
-                                  </p>
-                                  {selectedUser.profile.phone ? (
+                            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                              <div className="group rounded-2xl border border-stone-200/80 bg-gradient-to-br from-white via-white to-primary/[0.04] p-5 shadow-sm transition-shadow hover:shadow-md">
+                                <div className="flex items-start gap-4">
+                                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary ring-1 ring-primary/15">
+                                    <Mail className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                      Correo
+                                    </p>
                                     <a
-                                      href={`tel:${selectedUser.profile.phone.replace(/\s/g, "")}`}
-                                      className="mt-1 block text-[15px] text-brand-navy transition-colors group-hover:text-primary"
+                                      href={`mailto:${encodeURIComponent(selectedUser.email)}`}
+                                      className="mt-1 block break-all text-[15px] text-primary transition-colors hover:underline"
                                       style={{ fontWeight: 600 }}
                                     >
-                                      {selectedUser.profile.phone}
+                                      {selectedUser.email}
                                     </a>
-                                  ) : (
-                                    <p className="mt-1 text-[15px] text-slate-400" style={{ fontWeight: 500 }}>
-                                      Sin capturar
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="group rounded-2xl border border-stone-200/80 bg-gradient-to-br from-white via-white to-brand-navy/[0.06] p-5 shadow-sm transition-shadow hover:shadow-md">
+                                <div className="flex items-start gap-4">
+                                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-navy/10 text-brand-navy ring-1 ring-brand-navy/15">
+                                    <Phone className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                      Teléfono
                                     </p>
-                                  )}
+                                    {selectedUser.profile.phone ? (
+                                      <a
+                                        href={`tel:${selectedUser.profile.phone.replace(/\s/g, "")}`}
+                                        className="mt-1 block text-[15px] text-brand-navy transition-colors group-hover:text-primary"
+                                        style={{ fontWeight: 600 }}
+                                      >
+                                        {selectedUser.profile.phone}
+                                      </a>
+                                    ) : (
+                                      <p className="mt-1 text-[15px] text-slate-400" style={{ fontWeight: 500 }}>
+                                        Sin capturar
+                                      </p>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
 
-                          <div className="mt-6 border-t border-stone-200/80 pt-6">
-                            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                              Identificación y domicilio
-                            </p>
-                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                              <div className="space-y-1.5">
-                                <Label className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
-                                  ID interno
-                                </Label>
-                                <div className={userReadonlyFieldClass} style={{ fontWeight: 500 }}>
-                                  <span className="font-mono text-slate-800">{selectedUser.id}</span>
+                            <div className="mt-6 border-t border-stone-200/80 pt-6">
+                              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                                Identificación y domicilio
+                              </p>
+                              <div className="grid gap-4 sm:grid-cols-2">
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                                    Dirección
+                                  </Label>
+                                  <div className={userReadonlyFieldClass} style={{ fontWeight: 500 }}>
+                                    {selectedUser.profile.address || "—"}
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="space-y-1.5">
-                                <Label className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
-                                  Dirección
-                                </Label>
-                                <div className={userReadonlyFieldClass} style={{ fontWeight: 500 }}>
-                                  {selectedUser.profile.address || "—"}
-                                </div>
-                              </div>
-                              <div className="space-y-1.5">
-                                <Label className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
-                                  Fecha de nacimiento
-                                </Label>
-                                <div className={userReadonlyFieldClass} style={{ fontWeight: 500 }}>
-                                  {selectedUser.profile.birthDate || "—"}
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                                    Fecha de nacimiento
+                                  </Label>
+                                  <div className={userReadonlyFieldClass} style={{ fontWeight: 500 }}>
+                                    {selectedUser.profile.birthDate || "—"}
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        </section>
+                          </section>
+                        </div>
 
-                        {canManageUsers && (
-                          <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
+                        <aside className="min-w-0 lg:sticky lg:top-2 lg:col-span-5 lg:self-start">
+                          <section className="h-full rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
                             <div className="flex items-center gap-2">
                               <Shield className="h-4 w-4 text-brand-navy" strokeWidth={1.75} />
                               <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
-                                Rol y permisos
+                                Rol, permisos y equipos
                               </h3>
                             </div>
                             <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                              Define el rol y los módulos a los que puede acceder. Guarda con el botón superior
-                              derecho.
+                              Resumen de accesos y equipos del usuario seleccionado.
                             </p>
-                            <div className="mt-4 space-y-1.5">
-                              <Label className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
-                                Rol
-                              </Label>
-                              <select
-                                value={selectedUser.role}
-                                onChange={(e) => {
-                                  const nextRole = e.target.value as UserRole;
-                                  setSelectedUser((prev) => (prev ? { ...prev, role: nextRole } : prev));
-                                }}
-                                className="w-1/2 max-w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-brand-navy transition-colors focus:border-primary/35 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                                style={{ fontWeight: 600 }}
-                                aria-label="Rol del usuario"
-                              >
-                                {roleOptions.map((role) => (
-                                  <option key={role.value} value={role.value}>
-                                    {role.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <p className="mb-1 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Módulos
-                            </p>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              {permissionCards.map((card) => {
-                                const on = selectedUser.permissions.includes(card.value);
-                                const CardIcon = card.Icon;
-                                return (
-                                  <button
-                                    key={card.value}
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedUser((prev) => {
-                                        if (!prev) return prev;
-                                        return {
-                                          ...prev,
-                                          permissions: on
-                                            ? prev.permissions.filter((p) => p !== card.value)
-                                            : [...prev.permissions, card.value],
-                                        };
-                                      });
-                                    }}
-                                    className={cn(
-                                      "relative flex w-full flex-col gap-1 rounded-xl border p-3.5 text-left transition-all",
-                                      on
-                                        ? "border-primary/45 bg-gradient-to-br from-primary/[0.08] via-white to-white shadow-sm ring-1 ring-primary/25"
-                                        : "border-stone-200/90 bg-stone-50/30 hover:border-stone-300 hover:bg-white"
-                                    )}
-                                  >
-                                    <div className="flex items-start justify-between gap-2">
-                                      <span
+
+                            {canManageUsers && (
+                              <>
+                                <p className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  Configurar módulos
+                                </p>
+                                <div className="grid gap-2">
+                                  {permissionCards.map((card) => {
+                                    const on = selectedUser.permissions.includes(card.value);
+                                    const CardIcon = card.Icon;
+                                    return (
+                                      <button
+                                        key={card.value}
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedUser((prev) => {
+                                            if (!prev) return prev;
+                                            return {
+                                              ...prev,
+                                              permissions: on
+                                                ? prev.permissions.filter((p) => p !== card.value)
+                                                : [...prev.permissions, card.value],
+                                            };
+                                          });
+                                        }}
                                         className={cn(
-                                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1",
+                                          "relative flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all",
                                           on
-                                            ? "bg-primary/15 text-primary ring-primary/20"
-                                            : "bg-stone-100 text-slate-600 ring-stone-200/80"
+                                            ? "border-primary/45 bg-primary/[0.05] ring-1 ring-primary/20"
+                                            : "border-stone-200/90 bg-stone-50/30 hover:border-stone-300 hover:bg-white"
                                         )}
                                       >
-                                        <CardIcon className="h-4 w-4" strokeWidth={1.75} />
-                                      </span>
-                                      {on ? (
-                                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white shadow-sm">
-                                          <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+                                        <span
+                                          className={cn(
+                                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ring-1",
+                                            on
+                                              ? "bg-primary/15 text-primary ring-primary/20"
+                                              : "bg-stone-100 text-slate-600 ring-stone-200/80"
+                                          )}
+                                        >
+                                          <CardIcon className="h-4 w-4" strokeWidth={1.75} />
                                         </span>
-                                      ) : (
-                                        <span className="h-6 w-6 shrink-0 rounded-full border border-stone-200 bg-white" />
-                                      )}
-                                    </div>
-                                    <span className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
-                                      {card.label}
-                                    </span>
-                                    <span className="text-[11px] leading-snug text-slate-500">
-                                      {card.description}
-                                    </span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </section>
-                        )}
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
+                                            {card.label}
+                                          </p>
+                                          <p className="text-[11px] text-slate-500">{card.description}</p>
+                                        </div>
+                                        {on ? (
+                                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white shadow-sm">
+                                            <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+                                          </span>
+                                        ) : (
+                                          <span className="h-6 w-6 shrink-0 rounded-full border border-stone-200 bg-white" />
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            )}
 
-                        {!canManageUsers && (
-                          <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
-                            <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
-                              Rol y permisos
-                            </h3>
-                            <p className="mt-2 text-sm text-slate-600">
-                              <span className="text-slate-500">Rol:</span>{" "}
-                              <span style={{ fontWeight: 600 }} className="text-brand-navy">
-                                {roleOptions.find((r) => r.value === selectedUser.role)?.label}
-                              </span>
-                            </p>
-                            <p className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Módulos
-                            </p>
-                            <div className="flex flex-wrap gap-2">
+                            <div className="mt-5">
+                              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                Módulos con acceso
+                              </p>
                               {selectedUser.permissions.length === 0 ? (
-                                <p className="text-sm text-slate-500">Sin permisos adicionales.</p>
+                                <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50/50 px-4 py-6 text-sm text-slate-500">
+                                  Sin permisos adicionales.
+                                </p>
                               ) : (
-                                selectedUser.permissions.map((perm) => {
-                                  const meta = permissionCards.find((c) => c.value === perm);
-                                  return (
-                                    <span
-                                      key={perm}
-                                      className="inline-flex items-center rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-medium text-brand-navy"
+                                <ul className="grid gap-3 md:grid-cols-2">
+                                  {selectedUser.permissions.map((perm) => {
+                                    const meta = permissionCards.find((c) => c.value === perm);
+                                    const CardIcon = meta?.Icon ?? Shield;
+                                    return (
+                                      <li
+                                        key={perm}
+                                        className="rounded-xl border border-primary/35 bg-white px-4 py-3 shadow-sm"
+                                      >
+                                        <div className="flex items-center gap-3">
+                                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm border border-primary/35 bg-primary/[0.04] text-primary">
+                                            <CardIcon className="h-5 w-5" strokeWidth={1.9} />
+                                          </span>
+                                          <div className="min-w-0">
+                                            <p className="text-[1.05rem] leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
+                                              {meta?.label ?? perm}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              )}
+                            </div>
+
+                            <div className="mt-6 border-t border-stone-200/80 pt-5">
+                              <h4 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                                Equipos del usuario
+                              </h4>
+                              <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                                {selectedUserGroups.length === 0
+                                  ? "No pertenece a ningún grupo."
+                                  : `Pertenece a ${selectedUserGroups.length} grupo${selectedUserGroups.length === 1 ? "" : "s"}.`}
+                              </p>
+                              {selectedUserGroups.length === 0 ? (
+                                <p className="mt-4 rounded-xl border border-dashed border-stone-200 bg-stone-50/50 px-4 py-8 text-center text-sm text-slate-500">
+                                  Sin equipos asignados.
+                                </p>
+                              ) : (
+                                <ul className="mt-4 space-y-2">
+                                  {selectedUserGroups.map((group) => (
+                                    <li
+                                      key={group.id}
+                                      className="rounded-xl border border-stone-200/90 bg-stone-50/40 px-4 py-3 text-sm text-slate-800 ring-1 ring-stone-100"
                                     >
-                                      {meta?.label ?? perm}
-                                    </span>
-                                  );
-                                })
+                                      <p className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
+                                        {group.name}
+                                      </p>
+                                      <p className="text-xs text-slate-500">
+                                        {group.isLeader ? "Líder del grupo" : "Miembro"}
+                                      </p>
+                                    </li>
+                                  ))}
+                                </ul>
                               )}
                             </div>
                           </section>
-                        )}
-
-                        <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
-                          <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
-                            Equipos del usuario
-                          </h3>
-                          <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                            {selectedUserGroups.length === 0
-                              ? "No pertenece a ningun grupo."
-                              : `Pertenece a ${selectedUserGroups.length} grupo${selectedUserGroups.length === 1 ? "" : "s"}.`}
-                          </p>
-                          {selectedUserGroups.length === 0 ? (
-                            <p className="mt-4 rounded-xl border border-dashed border-stone-200 bg-stone-50/50 px-4 py-8 text-center text-sm text-slate-500">
-                              Sin equipos asignados.
-                            </p>
-                          ) : (
-                            <ul className="mt-4 space-y-2">
-                              {selectedUserGroups.map((group) => (
-                                <li
-                                  key={group.id}
-                                  className="rounded-xl border border-stone-200/90 bg-stone-50/40 px-4 py-3 text-sm text-slate-800 ring-1 ring-stone-100"
-                                >
-                                  <p className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
-                                    {group.name}
-                                  </p>
-                                  <p className="text-xs text-slate-500">
-                                    {group.isLeader ? "Lider del grupo" : "Miembro"}
-                                  </p>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </section>
-
+                        </aside>
                       </div>
 
-                      <aside className="lg:sticky lg:top-2 lg:col-span-5 lg:self-start">
-                        <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
-                          <h3 className="flex items-center gap-2 text-sm text-slate-700" style={{ fontWeight: 600 }}>
-                            <Users className="h-4 w-4 text-primary" strokeWidth={1.9} aria-hidden />
-                            Leads asignados
-                          </h3>
-                          <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                            Total: {selectedUserAssignedLeads.length} lead{selectedUserAssignedLeads.length === 1 ? "" : "s"}.
+                      <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <h3 className="flex items-center gap-2 text-sm text-slate-700" style={{ fontWeight: 600 }}>
+                              <Users className="h-4 w-4 text-primary" strokeWidth={1.9} aria-hidden />
+                              Leads asignados
+                            </h3>
+                            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                              Total: {selectedUserAssignedLeads.length} lead{selectedUserAssignedLeads.length === 1 ? "" : "s"}.
+                            </p>
+                          </div>
+                          {selectedUserAssignedLeads.length > 0 ? (
+                            <div className="flex shrink-0 items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-9 w-9 rounded-lg border-stone-200"
+                                onClick={() => scrollLeadsCarousel("prev")}
+                                aria-label="Ver leads anteriores"
+                              >
+                                <ChevronLeft className="h-4 w-4" strokeWidth={2} />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-9 w-9 rounded-lg border-stone-200"
+                                onClick={() => scrollLeadsCarousel("next")}
+                                aria-label="Ver leads siguientes"
+                              >
+                                <ChevronRight className="h-4 w-4" strokeWidth={2} />
+                              </Button>
+                            </div>
+                          ) : null}
+                        </div>
+
+                        {selectedUserAssignedLeads.length === 0 ? (
+                          <p className="mt-4 rounded-xl border border-dashed border-stone-200 bg-stone-50/50 px-4 py-10 text-center text-sm text-slate-500">
+                            Este usuario no tiene leads asignados.
                           </p>
-                          <div className="mt-4 space-y-3">
-                            {selectedUserAssignedLeads.length === 0 ? (
-                              <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50/50 px-4 py-8 text-center text-sm text-slate-500">
-                                Este usuario no tiene leads asignados.
-                              </p>
-                            ) : (
-                              <ul className="space-y-2">
-                                {selectedUserAssignedLeads.map((lead) => (
-                                  <li
+                        ) : (
+                          <div className="relative mt-4">
+                            <div
+                              ref={leadsCarouselRef}
+                              className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 pl-0.5 pr-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-stone-300/90"
+                            >
+                              {selectedUserAssignedLeads.map((lead) => {
+                                const statusLabel = resolveLeadStatusLabel(lead);
+                                const body = (
+                                  <>
+                                    <p className="line-clamp-2 min-h-[2.5rem] text-sm text-brand-navy" style={{ fontWeight: 700 }}>
+                                      {lead.name}
+                                    </p>
+                                    <p className="mt-1 truncate text-xs text-slate-600">{lead.email || "—"}</p>
+                                    <p className="mt-0.5 truncate text-xs text-slate-500">
+                                      {lead.phone || "Sin teléfono"}
+                                    </p>
+                                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                                      <span className="inline-flex max-w-full items-center rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                                        {statusLabel}
+                                      </span>
+                                      <span className="inline-flex items-center rounded-md border border-stone-200/90 bg-stone-50 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                                        {interestLabel[lead.interest]}
+                                      </span>
+                                    </div>
+                                    <p className="mt-3 text-[10px] text-slate-400">
+                                      Actualizado {formatLeadShortDate(lead.updatedAt || lead.lastContact || lead.createdAt)}
+                                    </p>
+                                  </>
+                                );
+                                return (
+                                  <div
                                     key={lead.id}
-                                    className="rounded-xl border border-stone-200/90 bg-stone-50/40 px-4 py-3 text-sm text-slate-800 ring-1 ring-stone-100"
+                                    className="w-[min(100%,18rem)] shrink-0 snap-start"
                                   >
                                     {onViewLead ? (
                                       <button
                                         type="button"
                                         onClick={() => onViewLead(lead)}
-                                        className="text-left text-sm text-primary underline decoration-primary/35 underline-offset-4 transition-colors hover:text-primary/85"
-                                        style={{ fontWeight: 700 }}
+                                        className="flex h-full w-full flex-col rounded-xl border border-stone-200/90 bg-gradient-to-b from-white to-stone-50/50 p-4 text-left shadow-sm ring-1 ring-stone-100 transition hover:border-primary/30 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/25"
                                         title="Abrir detalle del lead"
                                       >
-                                        {lead.name}
+                                        {body}
                                       </button>
                                     ) : (
-                                      <p className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
-                                        {lead.name}
-                                      </p>
+                                      <div className="flex h-full w-full flex-col rounded-xl border border-stone-200/90 bg-stone-50/40 p-4 ring-1 ring-stone-100">
+                                        {body}
+                                      </div>
                                     )}
-                                    <p className="text-xs text-slate-500">{lead.email}</p>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </section>
-                      </aside>
+                        )}
+                      </section>
                     </div>
                   </div>
                 </div>

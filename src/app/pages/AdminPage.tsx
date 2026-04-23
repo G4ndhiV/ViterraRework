@@ -37,7 +37,7 @@ import {
   UserCircle2,
 } from "lucide-react";
 import { AdminSiteEditor } from "../components/admin/AdminSiteEditor";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth, type User } from "../contexts/AuthContext";
 import {
   Lead,
   LEAD_STATUS_LABEL,
@@ -58,6 +58,7 @@ import { toast } from "sonner";
 import {
   appendClientActivity,
   CLIENTS_STORAGE_KEY,
+  findClientForLeadContact,
   newClientId,
   normalizeStoredClient,
   normalizeEmailKey,
@@ -102,6 +103,9 @@ import { PropertyMap } from "../components/PropertyMap";
 import { AdminDevelopmentsManager } from "../components/admin/AdminDevelopmentsManager";
 import { AdminCompanySettings } from "../components/admin/AdminCompanySettings";
 import { AdminUsersManager } from "../components/admin/AdminUsersManager";
+import { AdminUserProfilePanel } from "../components/admin/AdminUserProfilePanel";
+import { AdvisorDashboard } from "../components/admin/AdvisorDashboard";
+import { GroupLeaderDashboard } from "../components/admin/GroupLeaderDashboard";
 import { PipelineStageReorderRow } from "../components/admin/PipelineStageReorderRow";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
@@ -148,13 +152,36 @@ type TabType =
   | "properties"
   | "developments"
   | "company"
-  | "messages";
+  | "messages"
+  | "profile";
 
 function dashboardTimeGreetingEs(): string {
   const h = new Date().getHours();
   if (h >= 6 && h < 12) return "Buenos días";
   if (h >= 12 && h < 20) return "Buenas tardes";
   return "Buenas noches";
+}
+
+/** Lead asignado al usuario CRM (id o nombre mostrado). */
+function leadAssignedToCrmUser(lead: Lead, u: User): boolean {
+  const uid = lead.assignedToUserId?.trim().toLowerCase();
+  const crmId = u.id.trim().toLowerCase();
+  if (uid && crmId && uid === crmId) return true;
+  const at = foldSearchText(lead.assignedTo);
+  const nm = foldSearchText(u.name);
+  if (!at || !nm) return false;
+  return at.includes(nm) || nm.includes(at);
+}
+
+/** Asesor o líder activo cuyo nombre o correo coincide con la búsqueda (texto ya normalizado). */
+function teamMemberMatchesFoldedQuery(u: User, q: string): boolean {
+  if (u.role !== "asesor" && u.role !== "lider_grupo") return false;
+  if (!u.isActive || !q) return false;
+  return (
+    foldSearchText(u.name).includes(q) ||
+    foldSearchText(u.email).includes(q) ||
+    foldSearchText(u.email.split("@")[0] ?? "").includes(q)
+  );
 }
 
 export function AdminPage() {
@@ -231,6 +258,10 @@ export function AdminPage() {
     null
   );
   const [deletePropertyId, setDeletePropertyId] = useState<string | null>(null);
+  const isGroupLeader = user?.role === "lider_grupo";
+  const isAdvisor = user?.role === "asesor";
+  const canAccessCompanyModule = !isAdvisor;
+  const canManageInventory = !isAdvisor;
   // Verificar autenticación y cargar datos
   useEffect(() => {
     if (!authReady) return;
@@ -385,24 +416,39 @@ export function AdminPage() {
     () => (user ? getAllowedPipelineGroupIds(user, userGroups) : [DEFAULT_PIPELINE_GROUP_ID]),
     [user, userGroups]
   );
+  const visiblePipelineGroupIds = useMemo(
+    () =>
+      isGroupLeader
+        ? allowedPipelineGroupIds.filter((groupId) => groupId !== DEFAULT_PIPELINE_GROUP_ID)
+        : allowedPipelineGroupIds,
+    [isGroupLeader, allowedPipelineGroupIds]
+  );
 
   useEffect(() => {
     if (!user) return;
     setActivePipelineGroupId((prev) => {
-      if (allowedPipelineGroupIds.includes(prev)) return prev;
+      if (visiblePipelineGroupIds.includes(prev)) return prev;
       const key = pipelineContextStorageKey(user.id);
       const saved = localStorage.getItem(key);
-      if (saved && allowedPipelineGroupIds.includes(saved)) return saved;
-      return allowedPipelineGroupIds[0] ?? DEFAULT_PIPELINE_GROUP_ID;
+      if (saved && visiblePipelineGroupIds.includes(saved)) return saved;
+      return visiblePipelineGroupIds[0] ?? "";
     });
-  }, [user, allowedPipelineGroupIds]);
+  }, [user, visiblePipelineGroupIds]);
 
   useEffect(() => {
     if (!user) return;
+    if (!activePipelineGroupId) return;
     localStorage.setItem(pipelineContextStorageKey(user.id), activePipelineGroupId);
   }, [user, activePipelineGroupId]);
 
   useEffect(() => {
+    if (!isAdvisor) return;
+    if (activeTab !== "company") return;
+    setActiveTab("dashboard");
+  }, [isAdvisor, activeTab]);
+
+  useEffect(() => {
+    if (!activePipelineGroupId) return;
     setPipelineByGroup((prev) => {
       if (prev[activePipelineGroupId]) return prev;
       return {
@@ -456,12 +502,46 @@ export function AdminPage() {
     [userGroups]
   );
 
+  const pipelineGroupsVisibleToLeader = useMemo(() => {
+    if (!isGroupLeader) return [];
+    return visiblePipelineGroupIds
+      .map((groupId) => userGroups.find((group) => group.id === groupId))
+      .filter((group): group is UserGroup => !!group);
+  }, [isGroupLeader, visiblePipelineGroupIds, userGroups]);
+
+  const advisorsByGroupId = useMemo(() => {
+    const grouped: Record<string, User[]> = {};
+    for (const group of pipelineGroupsVisibleToLeader) {
+      const advisors = group.memberIds
+        .map((memberId) => users.find((member) => member.id === memberId))
+        .filter((member): member is User => !!member && member.isActive && member.role === "asesor")
+        .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" }));
+      grouped[group.id] = advisors;
+    }
+    return grouped;
+  }, [pipelineGroupsVisibleToLeader, users]);
+
+  const allowedLeadAssigneeUserIds = useMemo(() => {
+    if (!user || user.role !== "lider_grupo") return undefined;
+    if (!activePipelineGroupId) return [];
+    const activeGroup = userGroups.find(
+      (group) => group.id === activePipelineGroupId && group.leaderId === user.id
+    );
+    if (!activeGroup) return [];
+    const ids = activeGroup.memberIds.filter((memberId) => {
+      const member = users.find((u) => u.id === memberId);
+      return !!member && member.isActive && member.role === "asesor";
+    });
+    return ids;
+  }, [user, activePipelineGroupId, userGroups, users]);
+
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
 
   const requestDeleteProperty = (id: string) => {
+    if (!canManageInventory) return;
     setDeletePropertyId(id);
   };
 
@@ -775,13 +855,26 @@ export function AdminPage() {
         return false;
       });
       const actorName = user?.name?.trim() || "Sistema CRM";
+      const leadPropertyIds = lead.relatedPropertyId ? [lead.relatedPropertyId] : [];
+      const leadDevelopmentIds = lead.relatedDevelopmentId ? [lead.relatedDevelopmentId] : [];
 
       if (existing) {
-        if (existing.linkedLeadIds.includes(lead.id)) return prev;
+        const nextLinkedLeadIds = existing.linkedLeadIds.includes(lead.id)
+          ? existing.linkedLeadIds
+          : [...existing.linkedLeadIds, lead.id];
+        const nextPropertyIds = [...new Set([...existing.propertyIds, ...leadPropertyIds])];
+        const nextDevelopmentIds = [...new Set([...existing.developmentIds, ...leadDevelopmentIds])];
+        const changed =
+          nextLinkedLeadIds.length !== existing.linkedLeadIds.length ||
+          nextPropertyIds.length !== existing.propertyIds.length ||
+          nextDevelopmentIds.length !== existing.developmentIds.length;
+        if (!changed) return prev;
         const linked = appendClientActivity(
           {
             ...existing,
-            linkedLeadIds: [...existing.linkedLeadIds, lead.id],
+            linkedLeadIds: nextLinkedLeadIds,
+            propertyIds: nextPropertyIds,
+            developmentIds: nextDevelopmentIds,
             updatedAt: new Date().toISOString(),
           },
           {
@@ -801,8 +894,8 @@ export function AdminPage() {
           name: lead.name,
           email: lead.email,
           phone: lead.phone,
-          propertyIds: [],
-          developmentIds: [],
+          propertyIds: leadPropertyIds,
+          developmentIds: leadDevelopmentIds,
           linkedLeadIds: [lead.id],
           primaryOwnerUserId: lead.assignedToUserId || user?.id || "",
           createdAt: now,
@@ -904,6 +997,7 @@ export function AdminPage() {
 
   const handleSaveProperty = useCallback(
     async (p: Property) => {
+      if (!canManageInventory) return;
       const client = getSupabaseClient();
       if (!client) {
         toast.error("Supabase no configurado.");
@@ -917,7 +1011,7 @@ export function AdminPage() {
       }
       await reloadProperties();
     },
-    [properties, reloadProperties]
+    [properties, reloadProperties, canManageInventory]
   );
 
   const leadsForUser = useMemo(() => filterLeadsForUser(leads, user), [leads, user]);
@@ -929,11 +1023,26 @@ export function AdminPage() {
 
   const assigneeFilterOptions = useMemo(() => {
     const options = new Map<string, string>();
+    const leaderGroupMemberIds =
+      user?.role === "lider_grupo" && activePipelineGroupId
+        ? (() => {
+            const group = userGroups.find((g) => g.id === activePipelineGroupId && g.leaderId === user.id);
+            return group ? new Set(group.memberIds) : new Set<string>();
+          })()
+        : null;
+
     for (const u of users) {
       if (!u.isActive) continue;
+      if (leaderGroupMemberIds && !leaderGroupMemberIds.has(u.id)) continue;
       options.set(u.id, u.name || u.email || "Asesor");
     }
     for (const lead of leadsInActivePipeline) {
+      if (
+        leaderGroupMemberIds &&
+        (!lead.assignedToUserId || !leaderGroupMemberIds.has(lead.assignedToUserId))
+      ) {
+        continue;
+      }
       if (lead.assignedToUserId && !options.has(lead.assignedToUserId)) {
         options.set(lead.assignedToUserId, lead.assignedTo || "Asesor");
         continue;
@@ -946,7 +1055,7 @@ export function AdminPage() {
     return [...options.entries()]
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
-  }, [users, leadsInActivePipeline]);
+  }, [users, leadsInActivePipeline, user, activePipelineGroupId, userGroups]);
 
   const openLeadDetail = useCallback(
     (lead: Lead, mode: "view" | "edit") => {
@@ -956,18 +1065,43 @@ export function AdminPage() {
     [leads]
   );
 
-  const handleViewTeamMember = useCallback((userId: string) => {
+  const handleViewTeamMember = useCallback((userId: string, fallbackName?: string) => {
+    const normalizedId = userId.trim().toLowerCase();
+    let targetUser =
+      normalizedId.length > 0
+        ? users.find((candidate) => candidate.id.trim().toLowerCase() === normalizedId)
+        : undefined;
+
+    if (!targetUser && fallbackName?.trim()) {
+      const normalizedNeedle = foldSearchText(fallbackName);
+      targetUser = users.find((candidate) => {
+        const candidateName = foldSearchText(candidate.name);
+        const candidateEmail = foldSearchText(candidate.email);
+        const candidateEmailUser = foldSearchText(candidate.email.split("@")[0] ?? "");
+        return (
+          candidateName === normalizedNeedle ||
+          candidateEmail === normalizedNeedle ||
+          candidateEmailUser === normalizedNeedle
+        );
+      });
+    }
+
+    if (!targetUser) {
+      window.alert("No se encontró el detalle del asesor para este cliente.");
+      return;
+    }
+
     pendingReturnFromUserDetailRef.current = {
       tab: activeTab,
       companySubtab,
       leadsView,
       leadDialog: leadDialog ? { lead: leadDialog.lead, mode: leadDialog.mode } : null,
     };
-    setUsersPanelFocus({ id: userId, nonce: Date.now() });
+    setUsersPanelFocus({ id: targetUser.id, nonce: Date.now() });
     setActiveTab("company");
     setCompanySubtab("users");
     setLeadDialog(null);
-  }, [activeTab, companySubtab, leadsView, leadDialog]);
+  }, [activeTab, companySubtab, leadsView, leadDialog, users]);
 
   const handleUserDetailClosed = useCallback(() => {
     const ctx = pendingReturnFromUserDetailRef.current;
@@ -993,11 +1127,27 @@ export function AdminPage() {
     [user]
   );
 
-  const handleRegisterClientFromLead = useCallback((lead: Lead) => {
-    setLeadDialog(null);
-    setActiveTab("clients");
-    setSeedClientFromLead({ lead, nonce: Date.now() });
-  }, []);
+  const handleRegisterClientFromLead = useCallback(
+    (lead: Lead) => {
+      if (user?.role === "asesor") {
+        const existing = findClientForLeadContact(clients, lead.email, lead.phone);
+        if (existing) {
+          setLeadDialog(null);
+          setActiveTab("clients");
+          setFocusClient({ id: existing.id, nonce: Date.now() });
+          return;
+        }
+        toast.info(
+          "Aún no hay ficha de cliente para este contacto. Un administrador o líder de grupo puede crearla desde Clientes."
+        );
+        return;
+      }
+      setLeadDialog(null);
+      setActiveTab("clients");
+      setSeedClientFromLead({ lead, nonce: Date.now() });
+    },
+    [user?.role, clients]
+  );
 
   const handleFocusClientConsumed = useCallback(() => setFocusClient(null), []);
   const handleSeedClientFromLeadConsumed = useCallback(() => setSeedClientFromLead(null), []);
@@ -1029,7 +1179,8 @@ export function AdminPage() {
       !q ||
       foldSearchText(lead.name).includes(q) ||
       foldSearchText(lead.email).includes(q) ||
-      foldSearchText(lead.phone).includes(q);
+      foldSearchText(lead.phone).includes(q) ||
+      users.some((u) => teamMemberMatchesFoldedQuery(u, q) && leadAssignedToCrmUser(lead, u));
     const matchesStatus = statusFilter === "all" || lead.status === statusFilter;
     const selectedAssigneeLabel = assigneeFilterOptions.find((opt) => opt.value === assigneeFilter)?.label ?? "";
     const selectedAssigneeName = selectedAssigneeLabel.replace(/\s+\(sin usuario vinculado\)\s*$/i, "").trim();
@@ -1308,52 +1459,76 @@ export function AdminPage() {
         keywords: ["desarrollos", "proyectos", "desarrollo"],
         action: () => setActiveTab("developments"),
       },
-      {
-        id: "company-users",
-        title: "Mi empresa · Usuarios",
-        description: "Administración de usuarios y permisos",
-        keywords: ["usuarios", "mi empresa", "permisos", "roles", "equipo"],
-        action: () => {
-          setActiveTab("company");
-          setCompanySubtab("users");
-        },
-      },
-      {
-        id: "company-site",
-        title: "Mi empresa · Editar sitio",
-        description: "Editor visual del sitio web",
-        keywords: ["editar sitio", "sitio", "web", "editor", "contenido"],
-        action: () => {
-          setActiveTab("company");
-          setCompanySubtab("site");
-        },
-      },
-      {
-        id: "company-pipeline",
-        title: "Mi empresa · Pipeline de leads",
-        description: "Configura estados y orden del pipeline",
-        keywords: ["estados", "columnas", "pipeline de leads", "kanban", "orden"],
-        action: () => {
-          setActiveTab("company");
-          setCompanySubtab("leadStages");
-        },
-      },
-      {
-        id: "company-settings",
-        title: "Mi empresa · Configuración",
-        description: "Espacio de trabajo, copias de seguridad y datos locales",
-        keywords: ["configuración", "ajustes", "respaldo", "localStorage", "mi empresa"],
-        action: () => {
-          setActiveTab("company");
-          setCompanySubtab("settings");
-        },
-      },
+      ...(canAccessCompanyModule
+        ? (isGroupLeader
+        ? [
+            {
+              id: "company-pipeline",
+              title: "Pipeline de ventas",
+              description: "Grupos asignados y configuración de columnas",
+              keywords: ["pipeline", "ventas", "grupos", "columnas", "kanban"],
+              action: () => {
+                setActiveTab("company");
+                setCompanySubtab("leadStages");
+              },
+            },
+          ]
+        : [
+            {
+              id: "company-users",
+              title: "Mi empresa · Usuarios",
+              description: "Administración de usuarios y permisos",
+              keywords: ["usuarios", "mi empresa", "permisos", "roles", "equipo"],
+              action: () => {
+                setActiveTab("company");
+                setCompanySubtab("users");
+              },
+            },
+            {
+              id: "company-site",
+              title: "Mi empresa · Editar sitio",
+              description: "Editor visual del sitio web",
+              keywords: ["editar sitio", "sitio", "web", "editor", "contenido"],
+              action: () => {
+                setActiveTab("company");
+                setCompanySubtab("site");
+              },
+            },
+            {
+              id: "company-pipeline",
+              title: "Mi empresa · Pipeline de leads",
+              description: "Configura estados y orden del pipeline",
+              keywords: ["estados", "columnas", "pipeline de leads", "kanban", "orden"],
+              action: () => {
+                setActiveTab("company");
+                setCompanySubtab("leadStages");
+              },
+            },
+            {
+              id: "company-settings",
+              title: "Mi empresa · Configuración",
+              description: "Espacio de trabajo, copias de seguridad y datos locales",
+              keywords: ["configuración", "ajustes", "respaldo", "localStorage", "mi empresa"],
+              action: () => {
+                setActiveTab("company");
+                setCompanySubtab("settings");
+              },
+            },
+          ])
+        : []),
       {
         id: "messages",
         title: "Mensajes",
         description: "Accesos al centro de mensajes",
         keywords: ["mensajes", "contacto", "correo"],
         action: () => setActiveTab("messages"),
+      },
+      {
+        id: "profile",
+        title: "Mi perfil",
+        description: "Datos en tokko_users, contacto y payload",
+        keywords: ["perfil", "cuenta", "datos", "tokko", "correo", "teléfono", "foto"],
+        action: () => setActiveTab("profile"),
       },
       {
         id: "site-home",
@@ -1384,7 +1559,7 @@ export function AdminPage() {
         action: () => navigate("/contacto"),
       },
     ],
-    [navigate, canAccessClients]
+    [navigate, canAccessClients, isGroupLeader, canAccessCompanyModule]
   );
 
   const headerSearchValue = adminHeaderQuery;
@@ -1534,16 +1709,21 @@ export function AdminPage() {
                   <Building2 className="h-4 w-4" strokeWidth={activeTab === "developments" ? 2 : 1.75} />
                   Desarrollos
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("company")}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                    activeTab === "company" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  <Briefcase className="h-4 w-4" strokeWidth={activeTab === "company" ? 2 : 1.75} />
-                  Mi empresa
-                </button>
+                {canAccessCompanyModule && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("company");
+                      if (isGroupLeader) setCompanySubtab("leadStages");
+                    }}
+                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                      activeTab === "company" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    <Briefcase className="h-4 w-4" strokeWidth={activeTab === "company" ? 2 : 1.75} />
+                    {isGroupLeader ? "Pipeline de ventas" : "Mi empresa"}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setActiveTab("messages")}
@@ -1556,21 +1736,49 @@ export function AdminPage() {
                 </button>
           </nav>
         </div>
-        <div className="border-t border-white/15 px-5 py-4">
-          <p className="truncate text-sm text-white" style={{ fontWeight: 600 }}>{user.name}</p>
-          <p className="truncate text-[11px] uppercase tracking-[0.08em] text-white/65">
-            {roleLabelEs(user.role)}
-          </p>
+        <div className="border-t border-white/15 px-4 py-4">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setActiveTab("profile")}
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/25 bg-white/10 text-white transition hover:bg-white/20",
+                activeTab === "profile" && "ring-2 ring-white/40"
+              )}
+              title="Abrir mi perfil"
+              aria-label="Abrir mi perfil"
+            >
+              {user.profile.picture ? (
+                <img
+                  src={user.profile.picture}
+                  alt={`Foto de ${user.name}`}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <UserIcon className="h-5 w-5" strokeWidth={1.75} />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("profile")}
+              className="min-w-0 flex-1 text-left"
+              title="Mi perfil"
+            >
+              <p className="truncate text-sm text-white" style={{ fontWeight: 600 }}>
+                {user.name}
+              </p>
+              <p className="truncate text-[11px] uppercase tracking-[0.08em] text-white/65">
+                {roleLabelEs(user.role)}
+              </p>
+            </button>
+          </div>
         </div>
       </aside>
 
-      <div
-        data-reveal
-        className="viterra-reveal-off px-4 pb-4 pt-4 sm:px-6 sm:pt-4 lg:pl-[16.5rem] lg:pr-8"
-      >
+      <div className="transform-none px-4 pb-4 pt-4 sm:px-6 sm:pt-4 lg:pl-[16.5rem] lg:pr-8">
         {activeTab === "dashboard" && (
           <header
-            className="sticky top-3 z-50 overflow-visible rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white/95 via-white/95 to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.22)] ring-1 ring-slate-900/[0.04] backdrop-blur-md"
+            className="relative z-20 mb-6 overflow-visible rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white/95 via-white/95 to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.22)] ring-1 ring-slate-900/[0.04] backdrop-blur-md"
           >
             <div
               className="h-1.5 w-full shrink-0 bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
@@ -1599,7 +1807,11 @@ export function AdminPage() {
                       : ""}
                   </h2>
                   <p className="mt-1.5 max-w-xl text-xs leading-relaxed text-slate-600 sm:text-sm" style={{ fontWeight: 500 }}>
-                    Bienvenido al panel. Aquí ves el resumen de leads, propiedades y el pulso del negocio.
+                    {isAdvisor
+                      ? "Tu desempeño comercial, embudo de leads e inventario del catálogo."
+                      : isGroupLeader
+                        ? "Vista de equipo del pipeline activo: ventas por asesor, conversión, inventario y proyección del mes."
+                        : "Bienvenido al panel. Aquí ves el resumen de leads, propiedades y el pulso del negocio."}
                   </p>
                 </div>
 
@@ -1733,13 +1945,19 @@ export function AdminPage() {
               { id: "agenda", label: "Agenda", icon: Calendar },
               { id: "properties", label: "Propiedades", icon: Home },
               { id: "developments", label: "Desarrollos", icon: Building2 },
-              { id: "company", label: "Mi empresa", icon: Briefcase },
+              ...(canAccessCompanyModule
+                ? [{ id: "company", label: isGroupLeader ? "Pipeline de ventas" : "Mi empresa", icon: Briefcase }]
+                : []),
               { id: "messages", label: "Mensajes", icon: MessageSquare },
+              { id: "profile", label: "Perfil", icon: UserIcon },
             ].map((item) => (
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setActiveTab(item.id as TabType)}
+                onClick={() => {
+                  setActiveTab(item.id as TabType);
+                  if (item.id === "company" && isGroupLeader) setCompanySubtab("leadStages");
+                }}
                 className={`flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${
                   activeTab === item.id ? "bg-brand-navy text-white" : "bg-slate-50 text-slate-700"
                 }`}
@@ -1754,6 +1972,21 @@ export function AdminPage() {
         {/* Dashboard Tab */}
         {activeTab === "dashboard" && (
           <div className="space-y-8">
+            {isAdvisor ? (
+              <AdvisorDashboard
+                leads={leadsForUser}
+                properties={properties}
+                customStages={customKanbanStages}
+              />
+            ) : isGroupLeader ? (
+              <GroupLeaderDashboard
+                leads={leadsInActivePipeline}
+                properties={properties}
+                customStages={customKanbanStages}
+                users={users}
+              />
+            ) : (
+              <>
             {/* Stats Cards - Elegantes y minimalistas */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
               <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
@@ -1872,85 +2105,8 @@ export function AdminPage() {
                 </ResponsiveContainer>
               </div>
             </div>
-
-            {/* Recent Activity */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="rounded-2xl border border-slate-200/80 bg-white/95 p-6 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.08)] ring-1 ring-black/[0.02]">
-                <div className="mb-6 flex items-center justify-between">
-                  <h3 className="font-heading text-base text-brand-navy" style={{ fontWeight: 600 }}>Actividad Reciente</h3>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("leads")}
-                    className="flex items-center gap-1 text-sm font-medium text-slate-600 transition-colors hover:text-brand-navy"
-                    style={{ fontWeight: 500 }}
-                  >
-                    Ver todos
-                    <ChevronRight className="h-4 w-4" strokeWidth={2} />
-                  </button>
-                </div>
-                <div className="space-y-1">
-                  {leadsForUser.slice(0, 5).map((lead) => (
-                    <button
-                      key={lead.id}
-                      type="button"
-                      onClick={() => openLeadDetail(lead, "view")}
-                      className="flex w-full items-center justify-between rounded-lg p-3 text-left transition-colors hover:bg-slate-50"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-900" style={{ fontWeight: 600 }}>{lead.name}</p>
-                        <p className="mt-0.5 text-xs text-slate-500" style={{ fontWeight: 500 }}>{lead.email}</p>
-                      </div>
-                      <span
-                        className="shrink-0 rounded-md px-2.5 py-1 text-xs font-medium"
-                        style={{ fontWeight: 600, ...stageHexToChipStyle(resolveStageHex(lead.status)) }}
-                      >
-                        {resolveStatusLabel(lead.status)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200/80 bg-white/95 p-6 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.08)] ring-1 ring-black/[0.02]">
-                <div className="mb-6 flex items-center justify-between">
-                  <h3 className="font-heading text-base text-brand-navy" style={{ fontWeight: 600 }}>Propiedades Destacadas</h3>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("properties")}
-                    className="flex items-center gap-1 text-sm font-medium text-slate-600 transition-colors hover:text-brand-navy"
-                    style={{ fontWeight: 500 }}
-                  >
-                    Ver todas
-                    <ChevronRight className="h-4 w-4" strokeWidth={2} />
-                  </button>
-                </div>
-                <div className="space-y-1">
-                  {properties.slice(0, 5).map((property) => (
-                    <div key={property.id} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="w-14 h-14 rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
-                          <img
-                            src={property.image}
-                            alt={property.title}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-slate-900" style={{ fontWeight: 600 }}>{property.title}</p>
-                          <p className="text-xs text-slate-500 mt-0.5" style={{ fontWeight: 500 }}>{property.location}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-slate-900" style={{ fontWeight: 600 }}>${property.price.toLocaleString()}</p>
-                        <span className="text-xs text-slate-500 uppercase tracking-wide" style={{ fontWeight: 500, letterSpacing: '0.05em' }}>
-                          {property.status}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+              </>
+            )}
           </div>
         )}
 
@@ -1982,11 +2138,6 @@ export function AdminPage() {
                     <p className="mt-2.5 text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
                       Administra y da seguimiento a tus clientes potenciales con vista Kanban o tabla.
                     </p>
-                    {user.role === "asesor" && (
-                      <p className="mt-3 rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-xs text-amber-900/90" style={{ fontWeight: 500 }}>
-                        Solo ves los leads asignados a tu usuario.
-                      </p>
-                    )}
                   </div>
 
                   <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
@@ -2041,7 +2192,7 @@ export function AdminPage() {
                     />
                     <input
                       type="search"
-                      placeholder="Buscar por nombre, correo o teléfono…"
+                      placeholder="Buscar por contacto, teléfono o asesor / líder…"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="h-full min-h-[2.75rem] w-full rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-4 text-sm text-brand-navy shadow-sm transition-all placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
@@ -2049,8 +2200,8 @@ export function AdminPage() {
                       autoComplete="off"
                     />
                   </div>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-stretch">
-                  <div className="relative sm:w-[min(100%,260px)]">
+                  <div className="flex flex-row flex-nowrap items-stretch gap-2 overflow-x-auto pb-0.5 sm:gap-3">
+                  <div className="relative min-w-[10.5rem] flex-1 basis-0">
                     <Users
                       className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
                       strokeWidth={1.75}
@@ -2059,7 +2210,7 @@ export function AdminPage() {
                       id="crm-pipeline-group"
                       value={activePipelineGroupId}
                       onChange={(e) => setActivePipelineGroupId(e.target.value)}
-                      className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                      className="h-full min-h-[2.75rem] w-full min-w-0 appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15 md:min-w-[17rem]"
                       style={{ fontWeight: 500 }}
                     >
                       {allowedPipelineGroupIds.map((id) => (
@@ -2072,7 +2223,7 @@ export function AdminPage() {
                       <ChevronDown className="h-4 w-4" strokeWidth={2} />
                     </span>
                   </div>
-                  <div className="relative sm:w-[min(100%,220px)]">
+                  <div className="relative min-w-[10.5rem] flex-1 basis-0">
                     <UserIcon
                       className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-400"
                       strokeWidth={1.75}
@@ -2080,10 +2231,10 @@ export function AdminPage() {
                     <select
                       value={assigneeFilter}
                       onChange={(e) => setAssigneeFilter(e.target.value)}
-                      className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-10 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                      className="h-full min-h-[2.75rem] w-full min-w-0 appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-10 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15 md:min-w-[14rem]"
                       style={{ fontWeight: 500 }}
                     >
-                      <option value="all">Todos los asesores</option>
+                      <option value="all">{user.role === "lider_grupo" ? "Asesores de mi grupo" : "Todos los asesores"}</option>
                       {assigneeFilterOptions.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
@@ -2094,7 +2245,7 @@ export function AdminPage() {
                       <ChevronDown className="h-4 w-4" strokeWidth={2} />
                     </span>
                   </div>
-                  <div className="relative sm:w-[min(100%,230px)]">
+                  <div className="relative min-w-[10.5rem] flex-1 basis-0">
                     <Calendar
                       className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-400"
                       strokeWidth={1.75}
@@ -2104,7 +2255,7 @@ export function AdminPage() {
                       onChange={(e) =>
                         setCreatedRangeFilter(e.target.value as "all" | "1m" | "3m" | "6m" | "1y" | "custom")
                       }
-                      className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-10 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                      className="h-full min-h-[2.75rem] w-full min-w-0 appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-10 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15 md:min-w-[12rem]"
                       style={{ fontWeight: 500 }}
                     >
                       <option value="all">Cualquier fecha</option>
@@ -2118,7 +2269,7 @@ export function AdminPage() {
                       <ChevronDown className="h-4 w-4" strokeWidth={2} />
                     </span>
                   </div>
-                  <div className="relative sm:w-[min(100%,220px)]">
+                  <div className="relative min-w-[10.5rem] flex-1 basis-0">
                     <Filter
                       className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-400"
                       strokeWidth={1.75}
@@ -2126,7 +2277,7 @@ export function AdminPage() {
                     <select
                       value={statusFilter}
                       onChange={(e) => setStatusFilter(e.target.value)}
-                      className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-10 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                      className="h-full min-h-[2.75rem] w-full min-w-0 appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-10 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15 md:min-w-[12rem]"
                       style={{ fontWeight: 500 }}
                     >
                       <option value="all">Todos los estados</option>
@@ -2181,7 +2332,8 @@ export function AdminPage() {
               user={user}
               customKanbanStages={customKanbanStages}
               pipelineGroupId={activePipelineGroupId}
-          defaultStageId={defaultLeadStageId}
+              defaultStageId={defaultLeadStageId}
+              allowedAssigneeUserIds={allowedLeadAssigneeUserIds}
               properties={properties}
               developments={developments}
             />
@@ -2193,16 +2345,6 @@ export function AdminPage() {
                 role="alert"
               >
                 {leadsError}
-              </div>
-            )}
-
-            {!leadsLoading && leadColumnStatuses.length === 0 && (
-              <div
-                className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
-                style={{ fontWeight: 500 }}
-                role="status"
-              >
-                Este pipeline no tiene columnas todavía. Crea la primera en <code className="text-xs">Mi empresa → Pipeline de ventas</code>.
               </div>
             )}
 
@@ -2475,11 +2617,13 @@ export function AdminPage() {
             <AdminClientsManager
               currentUser={user}
               users={users}
+              userGroups={userGroups}
               clients={clients}
               onSetClients={(updater) => setClients(updater)}
               properties={properties}
               developments={developments}
               leads={leads}
+              onViewTeamMember={handleViewTeamMember}
               focusClient={focusClient}
               onFocusClientConsumed={handleFocusClientConsumed}
               seedFromLead={seedClientFromLead}
@@ -2550,18 +2694,20 @@ export function AdminPage() {
                       <MapIcon className="h-4 w-4 shrink-0" strokeWidth={2} />
                     </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNewPropertyDraftId(crypto.randomUUID());
-                      setPropertyForm({ mode: "create", property: null });
-                    }}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#C8102E] px-5 py-2.5 font-medium text-white transition-all hover:bg-[#a00d25] sm:w-auto"
-                    style={{ fontWeight: 600 }}
-                  >
-                    <Plus className="h-4.5 w-4.5" strokeWidth={2} />
-                    Nueva Propiedad
-                  </button>
+                  {canManageInventory && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewPropertyDraftId(crypto.randomUUID());
+                        setPropertyForm({ mode: "create", property: null });
+                      }}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#C8102E] px-5 py-2.5 font-medium text-white transition-all hover:bg-[#a00d25] sm:w-auto"
+                      style={{ fontWeight: 600 }}
+                    >
+                      <Plus className="h-4.5 w-4.5" strokeWidth={2} />
+                      Nueva Propiedad
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="mt-4 relative">
@@ -2716,23 +2862,38 @@ export function AdminPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredProperties.map((property) => (
                 <div key={property.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden hover:border-slate-300 transition-all group">
-                  <button
-                    type="button"
-                    onClick={() => setPropertyForm({ mode: "edit", property })}
-                    className="relative block h-48 w-full cursor-pointer overflow-hidden bg-slate-100 p-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
-                    aria-label={`Abrir ficha: ${property.title}`}
-                  >
-                    <img
-                      src={property.image}
-                      alt=""
-                      className="pointer-events-none h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                    <div className="pointer-events-none absolute top-3 right-3">
-                      <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-white/95 backdrop-blur-sm text-slate-900 border border-slate-200" style={{ fontWeight: 600 }}>
-                        {property.status.toUpperCase()}
-                      </span>
+                  {canManageInventory ? (
+                    <button
+                      type="button"
+                      onClick={() => setPropertyForm({ mode: "edit", property })}
+                      className="relative block h-48 w-full cursor-pointer overflow-hidden bg-slate-100 p-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
+                      aria-label={`Abrir ficha: ${property.title}`}
+                    >
+                      <img
+                        src={property.image}
+                        alt=""
+                        className="pointer-events-none h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                      <div className="pointer-events-none absolute top-3 right-3">
+                        <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-white/95 backdrop-blur-sm text-slate-900 border border-slate-200" style={{ fontWeight: 600 }}>
+                          {property.status.toUpperCase()}
+                        </span>
+                      </div>
+                    </button>
+                  ) : (
+                    <div className="relative block h-48 w-full overflow-hidden bg-slate-100 p-0 text-left">
+                      <img
+                        src={property.image}
+                        alt=""
+                        className="pointer-events-none h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                      <div className="pointer-events-none absolute top-3 right-3">
+                        <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-white/95 backdrop-blur-sm text-slate-900 border border-slate-200" style={{ fontWeight: 600 }}>
+                          {property.status.toUpperCase()}
+                        </span>
+                      </div>
                     </div>
-                  </button>
+                  )}
                   
                   <div className="p-5">
                     <span className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-2 block" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>
@@ -2792,22 +2953,26 @@ export function AdminPage() {
                         >
                           <Eye className="h-4 w-4" strokeWidth={1.5} />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setPropertyForm({ mode: "edit", property })}
-                          className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                          title="Editar"
-                        >
-                          <Edit className="h-4 w-4" strokeWidth={1.5} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => requestDeleteProperty(property.id)}
-                          className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-                        </button>
+                        {canManageInventory && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setPropertyForm({ mode: "edit", property })}
+                              className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                              title="Editar"
+                            >
+                              <Edit className="h-4 w-4" strokeWidth={1.5} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => requestDeleteProperty(property.id)}
+                              className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2920,22 +3085,26 @@ export function AdminPage() {
                               >
                                 <Eye className="h-4 w-4" strokeWidth={1.5} />
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => setPropertyForm({ mode: "edit", property })}
-                                className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                                title="Editar"
-                              >
-                                <Edit className="h-4 w-4" strokeWidth={1.5} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => requestDeleteProperty(property.id)}
-                                className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
-                                title="Eliminar"
-                              >
-                                <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-                              </button>
+                              {canManageInventory && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPropertyForm({ mode: "edit", property })}
+                                    className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                    title="Editar"
+                                  >
+                                    <Edit className="h-4 w-4" strokeWidth={1.5} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => requestDeleteProperty(property.id)}
+                                    className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
+                                    title="Eliminar"
+                                  >
+                                    <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -2960,7 +3129,7 @@ export function AdminPage() {
                       ? "Comienza agregando tu primera propiedad al catálogo"
                       : "Prueba con otro término de búsqueda."}
                   </p>
-                  {properties.length === 0 && (
+                  {properties.length === 0 && canManageInventory && (
                     <button
                       type="button"
                       onClick={() => {
@@ -2993,7 +3162,7 @@ export function AdminPage() {
             />
           ))}
 
-        {activeTab === "company" && (
+        {activeTab === "company" && canAccessCompanyModule && (
           <div className="space-y-5">
             <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
               <div
@@ -3012,15 +3181,17 @@ export function AdminPage() {
                   Centro de administración
                 </p>
                 <h2 className="font-heading mt-2 text-2xl tracking-tight text-brand-navy sm:text-3xl" style={{ fontWeight: 700 }}>
-                  Mi empresa
+                  {isGroupLeader ? "Pipeline de ventas" : "Mi empresa"}
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
-                  Equipo, sitio, embudo comercial y ajustes del espacio de trabajo. Elige un área para continuar.
+                  {isGroupLeader
+                    ? "Gestiona tus grupos asignados y configura las columnas del pipeline de cada equipo."
+                    : "Equipo, sitio, embudo comercial y ajustes del espacio de trabajo. Elige un área para continuar."}
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-4">
+            {!isGroupLeader && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-4">
               {(
                 [
                   {
@@ -3089,7 +3260,7 @@ export function AdminPage() {
                   </button>
                 );
               })}
-            </div>
+            </div>}
 
             <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_16px_48px_-28px_rgba(20,28,46,0.14)] ring-1 ring-black/[0.03]">
               {companySubtab === "users" && user && (
@@ -3098,6 +3269,7 @@ export function AdminPage() {
                     currentUser={user}
                     users={users}
                     leads={leads}
+                    customKanbanStages={customKanbanStages}
                     userGroups={userGroups}
                     onUserGroupsChange={handleUserGroupsChange}
                     onViewLead={(lead) => {
@@ -3153,38 +3325,97 @@ export function AdminPage() {
               )}
               {companySubtab === "leadStages" && (
                 <div className="flex flex-col gap-6 p-5 md:p-8">
-                  <div className="flex flex-col gap-4 rounded-xl border border-slate-200/80 bg-slate-50/50 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                        Grupo de trabajo
-                      </p>
-                      <p className="mt-0.5 text-sm text-brand-navy" style={{ fontWeight: 600 }}>
-                        {pipelineGroupLabel(activePipelineGroupId)}
-                      </p>
-                    </div>
-                    {allowedPipelineGroupIds.length > 1 ? (
-                      <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:min-w-[240px]">
-                        <label htmlFor="pipeline-config-group" className="text-[11px] font-medium text-slate-500">
-                          Configurar pipeline para
-                        </label>
-                        <select
-                          id="pipeline-config-group"
-                          value={activePipelineGroupId}
-                          onChange={(e) => setActivePipelineGroupId(e.target.value)}
-                          className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-navy focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                          style={{ fontWeight: 500 }}
-                        >
-                          {allowedPipelineGroupIds.map((id) => (
-                            <option key={id} value={id}>
-                              {pipelineGroupLabel(id)}
-                            </option>
-                          ))}
-                        </select>
+                  {isGroupLeader && (
+                    <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_24px_50px_-24px_rgba(20,28,46,0.26)]">
+                      <div className="border-b border-slate-200/80 bg-gradient-to-r from-slate-50 via-white to-slate-50/60 px-5 py-4">
+                        <h4 className="flex items-center gap-2 text-base text-brand-navy" style={{ fontWeight: 700 }}>
+                          <Users className="h-4 w-4 text-primary" strokeWidth={1.9} aria-hidden />
+                          Tus grupos y asesores
+                        </h4>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Selecciona un asesor para abrir su detalle o cambia de grupo para configurar su pipeline.
+                        </p>
                       </div>
-                    ) : null}
-                  </div>
+                      {pipelineGroupsVisibleToLeader.length === 0 ? (
+                        <div className="p-5">
+                          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-3 text-sm text-slate-600">
+                            No tienes grupos asignados por ahora. Contacta a un administrador para vincular grupos.
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid gap-3 p-5 lg:grid-cols-2">
+                          {pipelineGroupsVisibleToLeader.map((group) => {
+                            const advisors = advisorsByGroupId[group.id] ?? [];
+                            const isActiveGroup = activePipelineGroupId === group.id;
+                            return (
+                              <article
+                                key={group.id}
+                                className={cn(
+                                  "rounded-xl border bg-white p-4 transition-shadow",
+                                  isActiveGroup
+                                    ? "border-primary/40 shadow-[0_14px_30px_-20px_rgba(199,34,56,0.7)] ring-1 ring-primary/20"
+                                    : "border-slate-200/80 shadow-[0_8px_24px_-16px_rgba(20,28,46,0.2)]"
+                                )}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm text-brand-navy" style={{ fontWeight: 700 }}>
+                                      {group.name}
+                                    </p>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      {advisors.length} asesor{advisors.length === 1 ? "" : "es"}
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActivePipelineGroupId(group.id)}
+                                    className={cn(
+                                      "shrink-0 rounded-md border px-2.5 py-1 text-[11px] transition",
+                                      isActiveGroup
+                                        ? "border-primary/35 bg-primary/10 text-primary"
+                                        : "border-slate-200 bg-slate-50 text-slate-600 hover:border-primary/25 hover:text-primary"
+                                    )}
+                                    style={{ fontWeight: 600 }}
+                                  >
+                                    {isActiveGroup ? "Grupo activo" : "Activar grupo"}
+                                  </button>
+                                </div>
 
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {advisors.length > 0 ? (
+                                    advisors.map((advisor) => (
+                                      <button
+                                        type="button"
+                                        key={advisor.id}
+                                        onClick={() => handleViewTeamMember(advisor.id, advisor.name)}
+                                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200/90 bg-slate-50 px-2.5 py-1.5 text-left text-[11px] text-slate-700 transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                                      >
+                                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/12 text-[10px] text-primary">
+                                          {(advisor.name || advisor.email || "?").trim().charAt(0).toUpperCase()}
+                                        </span>
+                                        <span className="max-w-[10rem] truncate" style={{ fontWeight: 600 }}>
+                                          {advisor.name || advisor.email}
+                                        </span>
+                                      </button>
+                                    ))
+                                  ) : (
+                                    <span className="text-xs text-slate-500">Sin asesores activos en este grupo.</span>
+                                  )}
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </section>
+                  )}
+
+                  {!activePipelineGroupId ? (
+                    <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-600">
+                      No hay un grupo de trabajo asignado para configurar pipeline.
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                     <div className="max-w-2xl">
                       <p className="text-[11px] uppercase tracking-[0.14em] text-primary" style={{ fontWeight: 600 }}>
                         Embudo comercial
@@ -3221,15 +3452,10 @@ export function AdminPage() {
                         Agregar columna
                       </button>
                     </div>
-                  </div>
-
-                  {!canConfigureActivePipeline && (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                      Solo el administrador o el líder de este grupo pueden modificar las columnas del pipeline.
                     </div>
                   )}
 
-                  <section className="rounded-2xl border border-slate-200/70 bg-slate-50/40 p-5">
+                  {activePipelineGroupId && <section className="rounded-2xl border border-slate-200/70 bg-slate-50/40 p-5">
                     <div>
                       <h4 className="text-base text-brand-navy" style={{ fontWeight: 600 }}>Orden de columnas del pipeline</h4>
                       <p className="mt-1 text-sm text-slate-500">
@@ -3287,9 +3513,6 @@ export function AdminPage() {
                                       <p className="text-sm text-brand-navy" style={{ fontWeight: 600 }}>
                                         {stageLabel}
                                       </p>
-                                      <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] uppercase tracking-[0.08em] text-primary">
-                                        Columna
-                                      </span>
                                     </div>
                                     <p className="mt-1 text-xs text-slate-500">
                                       Clave: {stageId} · {leadsInStage} lead{leadsInStage === 1 ? "" : "s"} en esta etapa
@@ -3389,7 +3612,7 @@ export function AdminPage() {
                       })}
                     </div>
                     </DndProvider>
-                  </section>
+                  </section>}
                 </div>
               )}
             </section>
@@ -3427,6 +3650,16 @@ export function AdminPage() {
                 </a>
               </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === "profile" && (
+          <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-b from-white via-white to-slate-50/90 p-6 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.12)] sm:p-8">
+            <div
+              className="pointer-events-none absolute -right-16 top-0 h-40 w-40 rounded-full bg-gradient-to-br from-primary/[0.08] to-transparent blur-2xl"
+              aria-hidden
+            />
+            <AdminUserProfilePanel />
           </div>
         )}
 
@@ -3552,7 +3785,7 @@ export function AdminPage() {
               ? `${propertyForm.mode}-${propertyForm.property?.id ?? "new"}`
               : "closed"
           }
-          open={!!propertyForm && activeTab === "properties"}
+          open={!!propertyForm && activeTab === "properties" && canManageInventory}
           onOpenChange={(o) => {
             if (!o) setPropertyForm(null);
           }}

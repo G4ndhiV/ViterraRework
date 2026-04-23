@@ -30,6 +30,11 @@ import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { cn } from "../ui/utils";
 import { AdminDevelopmentsMap } from "./AdminDevelopmentsMap";
+import { ImageGalleryEditor } from "./ImageGalleryEditor";
+import { useAuth } from "../../contexts/AuthContext";
+
+const DEFAULT_DEV_IMAGE =
+  "https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1280&q=80";
 
 interface Props {
   developments: Development[];
@@ -48,7 +53,7 @@ const emptyForm = {
   fullAddress: "",
   type: "",
   description: "",
-  image: "",
+  images: [] as string[],
   status: "Disponible" as DevelopmentStatus,
   units: 1,
   deliveryDate: "",
@@ -58,6 +63,8 @@ const emptyForm = {
 };
 
 export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Props) {
+  const { user } = useAuth();
+  const readOnly = user?.role === "asesor";
   const [editing, setEditing] = useState<Development | null>(null);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -135,7 +142,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
       fullAddress: d.fullAddress,
       type: d.type,
       description: d.description,
-      image: d.image,
+      images: d.images?.length ? [...d.images] : d.image ? [d.image] : [],
       status: d.status,
       units: d.units,
       deliveryDate: d.deliveryDate,
@@ -150,6 +157,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
     e.preventDefault();
     if (!form.name.trim() || !form.location.trim() || !form.type.trim()) return;
     const id = editing?.id ?? newDevelopmentId;
+    const gallery = form.images.length > 0 ? form.images : [DEFAULT_DEV_IMAGE];
     const payload: Development = {
       id,
       name: form.name.trim(),
@@ -158,8 +166,8 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
       fullAddress: form.fullAddress.trim() || form.location.trim(),
       type: form.type.trim(),
       description: form.description.trim() || "Sin descripción",
-      image: form.image.trim() || "https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1280&q=80",
-      images: editing?.images?.length ? editing.images : [form.image.trim() || "https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1280&q=80"],
+      image: gallery[0] ?? DEFAULT_DEV_IMAGE,
+      images: gallery,
       status: form.status,
       units: Math.max(1, Number(form.units) || 1),
       deliveryDate: form.deliveryDate.trim() || "Por definir",
@@ -241,15 +249,17 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                 <MapIcon className="h-4 w-4 shrink-0" strokeWidth={2} />
               </button>
             </div>
-            <button
-              type="button"
-              onClick={openCreate}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#C8102E] px-5 py-2.5 font-medium text-white transition-all hover:bg-[#a00d25] sm:w-auto"
-              style={{ fontWeight: 600 }}
-            >
-              <Plus className="h-4.5 w-4.5" strokeWidth={2} />
-              Nuevo Desarrollo
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={openCreate}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#C8102E] px-5 py-2.5 font-medium text-white transition-all hover:bg-[#a00d25] sm:w-auto"
+                style={{ fontWeight: 600 }}
+              >
+                <Plus className="h-4.5 w-4.5" strokeWidth={2} />
+                Nuevo Desarrollo
+              </button>
+            )}
           </div>
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-5">
@@ -506,24 +516,28 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                         >
                           <Eye className="h-4 w-4" strokeWidth={1.5} />
                         </a>
-                        <button
-                          type="button"
-                          onClick={() => openEdit(development)}
-                          className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                          title="Editar"
-                        >
-                          <Edit className="h-4 w-4" strokeWidth={1.5} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (window.confirm("¿Eliminar este desarrollo?")) onDelete(development.id);
-                          }}
-                          className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-                        </button>
+                        {!readOnly && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openEdit(development)}
+                              className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                              title="Editar"
+                            >
+                              <Edit className="h-4 w-4" strokeWidth={1.5} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm("¿Eliminar este desarrollo?")) onDelete(development.id);
+                              }}
+                              className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -541,12 +555,29 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
             key={development.id}
             className="bg-white border border-slate-200 rounded-lg overflow-hidden hover:border-slate-300 transition-all group"
           >
-            <button
-              type="button"
-              onClick={() => openEdit(development)}
-              className="relative block h-48 w-full cursor-pointer overflow-hidden bg-slate-100 p-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
-              aria-label={`Abrir ficha: ${development.name}`}
-            >
+            {readOnly ? (
+              <div className="relative block h-48 w-full overflow-hidden bg-slate-100 p-0 text-left">
+                <img
+                  src={development.image}
+                  alt=""
+                  className="pointer-events-none h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+                <div className="pointer-events-none absolute top-3 right-3">
+                  <span
+                    className="px-2.5 py-1 rounded-md text-xs font-semibold bg-white/95 backdrop-blur-sm text-slate-900 border border-slate-200"
+                    style={{ fontWeight: 600 }}
+                  >
+                    {development.status.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => openEdit(development)}
+                className="relative block h-48 w-full cursor-pointer overflow-hidden bg-slate-100 p-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
+                aria-label={`Abrir ficha: ${development.name}`}
+              >
               <img
                 src={development.image}
                 alt=""
@@ -560,7 +591,8 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                   {development.status.toUpperCase()}
                 </span>
               </div>
-            </button>
+              </button>
+            )}
 
             <div className="p-5">
               <span
@@ -620,24 +652,28 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                   >
                     <Download className="h-4 w-4" strokeWidth={1.5} />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => openEdit(development)}
-                    className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                    title="Editar"
-                  >
-                    <Edit className="h-4 w-4" strokeWidth={1.5} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (window.confirm("¿Eliminar este desarrollo?")) onDelete(development.id);
-                    }}
-                    className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
-                    title="Eliminar"
-                  >
-                    <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-                  </button>
+                  {!readOnly && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => openEdit(development)}
+                        className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                        title="Editar"
+                      >
+                        <Edit className="h-4 w-4" strokeWidth={1.5} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm("¿Eliminar este desarrollo?")) onDelete(development.id);
+                        }}
+                        className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                      </button>
+                    </>
+                  )}
                   <a
                     href={`/desarrollos/${development.id}`}
                     target="_blank"
@@ -669,7 +705,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                 ? "Comienza agregando tu primer desarrollo al catálogo"
                 : "Prueba con otro término de búsqueda."}
             </p>
-            {developments.length === 0 && (
+            {developments.length === 0 && !readOnly && (
               <button
                 type="button"
                 onClick={openCreate}
@@ -695,32 +731,32 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
         >
           <div className="h-0.5 shrink-0 bg-gradient-to-r from-brand-gold/90 via-primary to-brand-burgundy/90" aria-hidden />
           <form id="viterra-development-form" onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
-            <div className="shrink-0 border-b border-stone-200/80 bg-stone-50/90 px-4 py-4 sm:px-5">
+            <div className="shrink-0 border-b border-stone-200/80 bg-stone-50/90 px-3 py-2.5 sm:px-4 sm:py-3">
               <DialogHeader className="gap-0 p-0 text-left">
-                <p className="text-[11px] text-slate-500" style={{ fontWeight: 500 }}>
+                <p className="text-[10px] text-slate-500" style={{ fontWeight: 500 }}>
                   <span className="text-primary/90">Panel admin</span>
                   <span className="text-slate-400"> · </span>
                   Desarrollos
                 </p>
-                <div className="mt-3 flex flex-col gap-4 min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-between min-[1100px]:gap-6">
-                  <div className="min-w-0 flex-1 space-y-1">
+                <div className="mt-1.5 flex flex-col gap-2 min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-between min-[1100px]:gap-4">
+                  <div className="min-w-0 flex-1 space-y-0.5">
                     <DialogTitle
-                      className="font-heading text-2xl leading-tight tracking-tight text-brand-navy sm:text-3xl"
+                      className="font-heading text-xl leading-tight tracking-tight text-brand-navy sm:text-2xl"
                       style={{ fontWeight: 700 }}
                     >
                       {editing ? "Editar desarrollo" : "Nuevo desarrollo"}
                     </DialogTitle>
-                    <DialogDescription className="text-sm text-slate-600" style={{ fontWeight: 500 }}>
+                    <DialogDescription className="text-xs text-slate-600" style={{ fontWeight: 500 }}>
                       Completa los datos del desarrollo. La ficha será visible en el sitio público.
                     </DialogDescription>
                   </div>
-                  <div className="flex w-full shrink-0 flex-col gap-2 min-[1100px]:w-auto min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-end min-[1100px]:gap-3">
-                    <div className="flex items-center gap-1 min-[1100px]:mr-1">
+                  <div className="flex w-full shrink-0 flex-col gap-1.5 min-[1100px]:w-auto min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-end min-[1100px]:gap-2">
+                    <div className="flex items-center gap-1 min-[1100px]:mr-0.5">
                       <Button
                         type="button"
                         variant="outline"
                         size="icon"
-                        className="h-10 w-10 shrink-0 border-stone-300 bg-white text-slate-600 hover:bg-stone-50 hover:text-slate-800"
+                        className="h-9 w-9 shrink-0 border-stone-300 bg-white text-slate-600 hover:bg-stone-50 hover:text-slate-800"
                         title="Copiar enlace público"
                         aria-label="Copiar enlace público"
                         onClick={() =>
@@ -733,7 +769,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                         type="button"
                         variant="outline"
                         size="icon"
-                        className="h-10 w-10 shrink-0 border-stone-300 bg-white text-slate-600 hover:bg-stone-50 hover:text-slate-800"
+                        className="h-9 w-9 shrink-0 border-stone-300 bg-white text-slate-600 hover:bg-stone-50 hover:text-slate-800"
                         title="Exportar información (próximamente)"
                         aria-label="Exportar información"
                       >
@@ -744,7 +780,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                       <Button
                         type="button"
                         variant="outline"
-                        className="h-10 w-fit shrink-0 border-stone-300 bg-white px-4 text-slate-700 hover:bg-stone-50 hover:text-slate-800"
+                        className="h-9 w-fit shrink-0 border-stone-300 bg-white px-3 text-sm text-slate-700 hover:bg-stone-50 hover:text-slate-800"
                         style={{ fontWeight: 600 }}
                       >
                         Cerrar
@@ -752,7 +788,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                     </DialogClose>
                     <Button
                       type="submit"
-                      className="h-10 w-full min-w-[10rem] bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-brand-red-hover min-[1100px]:w-auto"
+                      className="h-9 w-full min-w-[10rem] bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-brand-red-hover min-[1100px]:w-auto"
                     >
                       {editing ? "Guardar cambios" : "Crear desarrollo"}
                     </Button>
@@ -761,177 +797,215 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
               </DialogHeader>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
-              <div className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs uppercase text-slate-600" style={{ fontWeight: 600 }}>
-                      Nombre
-                    </Label>
-                    <input
-                      required
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                      placeholder="Ej. Residencial Bosque Real"
-                      value={form.name}
-                      onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs uppercase text-slate-600" style={{ fontWeight: 600 }}>
-                      Tipo
-                    </Label>
-                    <input
-                      required
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                      placeholder="Conjunto residencial, torre..."
-                      value={form.type}
-                      onChange={(e) => setForm((p) => ({ ...p, type: e.target.value }))}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs uppercase text-slate-600" style={{ fontWeight: 600 }}>
-                      Ubicación
-                    </Label>
-                    <input
-                      required
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                      value={form.location}
-                      onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs uppercase text-slate-600" style={{ fontWeight: 600 }}>
-                      Colonia
-                    </Label>
-                    <input
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                      value={form.colony}
-                      onChange={(e) => setForm((p) => ({ ...p, colony: e.target.value }))}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs uppercase text-slate-600" style={{ fontWeight: 600 }}>
-                    Dirección completa
-                  </Label>
-                  <input
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                    value={form.fullAddress}
-                    onChange={(e) => setForm((p) => ({ ...p, fullAddress: e.target.value }))}
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5 sm:px-4 sm:py-3 lg:px-6">
+              <div className="mx-auto grid max-w-[120rem] grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-[min(100%,26rem)_minmax(0,1fr)] xl:gap-x-6 xl:gap-y-3 xl:items-start">
+                <div className="min-w-0 space-y-3 xl:sticky xl:top-1 xl:col-start-1 xl:row-start-1 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto xl:pr-1">
+                  <ImageGalleryEditor
+                    segment="hero"
+                    variant="featured"
+                    label="Galería"
+                    hint="La primera imagen es la portada en listados y en la ficha pública."
+                    disabled={readOnly}
+                    images={form.images}
+                    onChange={(next) => setForm((p) => ({ ...p, images: next }))}
                   />
+                  <div className="rounded-xl border border-slate-200/90 bg-white p-3 shadow-[0_6px_24px_-10px_rgba(20,28,46,0.1)] sm:p-3.5">
+                    <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2 sm:gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
+                          Estatus
+                        </Label>
+                        <select
+                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm"
+                          style={{ fontWeight: 500 }}
+                          disabled={readOnly}
+                          value={form.status}
+                          onChange={(e) => setForm((p) => ({ ...p, status: e.target.value as DevelopmentStatus }))}
+                        >
+                          {statuses.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
+                          Unidades
+                        </Label>
+                        <input
+                          type="number"
+                          min={1}
+                          className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
+                          style={{ fontWeight: 500 }}
+                          disabled={readOnly}
+                          value={form.units}
+                          onChange={(e) => setForm((p) => ({ ...p, units: Number(e.target.value) }))}
+                        />
+                      </div>
+                      <div className="col-span-1 grid grid-cols-2 gap-2 sm:gap-3 min-[400px]:col-span-2">
+                        <div className="min-w-0 space-y-1">
+                          <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
+                            Tel. (web / WhatsApp)
+                          </Label>
+                          <input
+                            type="tel"
+                            className="w-full min-w-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                            style={{ fontWeight: 500 }}
+                            disabled={readOnly}
+                            placeholder="+52…"
+                            value={form.inChargePhone}
+                            onChange={(e) => setForm((p) => ({ ...p, inChargePhone: e.target.value }))}
+                          />
+                        </div>
+                        <div className="min-w-0 space-y-1">
+                          <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
+                            Entrega
+                          </Label>
+                          <input
+                            className="w-full min-w-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                            style={{ fontWeight: 500 }}
+                            disabled={readOnly}
+                            value={form.deliveryDate}
+                            onChange={(e) => setForm((p) => ({ ...p, deliveryDate: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs uppercase text-slate-600" style={{ fontWeight: 600 }}>
-                      Estatus
-                    </Label>
-                    <select
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                      value={form.status}
-                      onChange={(e) => setForm((p) => ({ ...p, status: e.target.value as DevelopmentStatus }))}
-                    >
-                      {statuses.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
+                <section
+                  className={cn(
+                    "min-w-0 space-y-2.5 rounded-xl border border-slate-200/90 bg-white p-3 shadow-[0_6px_24px_-10px_rgba(20,28,46,0.1)] sm:p-3.5 xl:col-start-2 xl:row-start-1",
+                    "xl:max-h-[min(36rem,calc(100dvh-13rem))] xl:overflow-y-auto xl:pr-1"
+                  )}
+                >
+                  <div>
+                    <h3 className="font-heading text-base text-brand-navy sm:text-lg" style={{ fontWeight: 700 }}>
+                      Datos del desarrollo
+                    </h3>
+                    <p className="mt-0.5 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
+                      Identificación, ubicación, contacto, comercial y descripción pública.
+                    </p>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs uppercase text-slate-600" style={{ fontWeight: 600 }}>
-                      Unidades
+
+                  <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
+                        Nombre
+                      </Label>
+                      <input
+                        required
+                        className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
+                        style={{ fontWeight: 500 }}
+                        placeholder="Ej. Residencial Bosque Real"
+                        value={form.name}
+                        onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
+                        Tipo
+                      </Label>
+                      <input
+                        required
+                        className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
+                        style={{ fontWeight: 500 }}
+                        placeholder="Conjunto, torre…"
+                        value={form.type}
+                        onChange={(e) => setForm((p) => ({ ...p, type: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
+                        Ubicación
+                      </Label>
+                      <input
+                        required
+                        className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
+                        style={{ fontWeight: 500 }}
+                        value={form.location}
+                        onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
+                        Colonia
+                      </Label>
+                      <input
+                        className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
+                        style={{ fontWeight: 500 }}
+                        value={form.colony}
+                        onChange={(e) => setForm((p) => ({ ...p, colony: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
+                      Dirección completa
                     </Label>
                     <input
-                      type="number"
-                      min={1}
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                      value={form.units}
-                      onChange={(e) => setForm((p) => ({ ...p, units: Number(e.target.value) }))}
+                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
+                      style={{ fontWeight: 500 }}
+                      value={form.fullAddress}
+                      onChange={(e) => setForm((p) => ({ ...p, fullAddress: e.target.value }))}
                     />
                   </div>
-                </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs uppercase text-slate-600" style={{ fontWeight: 600 }}>
-                    Teléfono de contacto (sitio web / WhatsApp)
-                  </Label>
-                  <input
-                    type="tel"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="Ej. +52 33 1234 5678"
-                    value={form.inChargePhone}
-                    onChange={(e) => setForm((p) => ({ ...p, inChargePhone: e.target.value }))}
-                  />
-                  <p className="text-[11px] text-slate-500" style={{ fontWeight: 500 }}>
-                    Se muestra en la ficha pública y enlaza WhatsApp con el mismo número.
-                  </p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs uppercase text-slate-600" style={{ fontWeight: 600 }}>
-                    Correo de contacto (sitio web)
-                  </Label>
-                  <input
-                    type="email"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="contacto@ejemplo.com"
-                    value={form.inChargeEmail}
-                    onChange={(e) => setForm((p) => ({ ...p, inChargeEmail: e.target.value }))}
-                  />
-                  <p className="text-[11px] text-slate-500" style={{ fontWeight: 500 }}>
-                    Se muestra en la barra lateral de la ficha pública.
-                  </p>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs uppercase text-slate-600" style={{ fontWeight: 600 }}>
-                      Entrega
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
+                      Correo (sitio web)
                     </Label>
                     <input
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                      value={form.deliveryDate}
-                      onChange={(e) => setForm((p) => ({ ...p, deliveryDate: e.target.value }))}
+                      type="email"
+                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
+                      style={{ fontWeight: 500 }}
+                      placeholder="contacto@ejemplo.com"
+                      value={form.inChargeEmail}
+                      onChange={(e) => setForm((p) => ({ ...p, inChargeEmail: e.target.value }))}
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs uppercase text-slate-600" style={{ fontWeight: 600 }}>
+
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
                       Rango de precio
                     </Label>
                     <input
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
+                      style={{ fontWeight: 500 }}
                       value={form.priceRange}
                       onChange={(e) => setForm((p) => ({ ...p, priceRange: e.target.value }))}
                     />
                   </div>
-                </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs uppercase text-slate-600" style={{ fontWeight: 600 }}>
-                    URL de imagen
-                  </Label>
-                  <input
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs"
-                    placeholder="https://..."
-                    value={form.image}
-                    onChange={(e) => setForm((p) => ({ ...p, image: e.target.value }))}
-                  />
-                </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
+                      Descripción
+                    </Label>
+                    <textarea
+                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
+                      style={{ fontWeight: 500 }}
+                      rows={4}
+                      value={form.description}
+                      onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+                    />
+                  </div>
+                </section>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs uppercase text-slate-600" style={{ fontWeight: 600 }}>
-                    Descripción
-                  </Label>
-                  <textarea
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                    rows={4}
-                    value={form.description}
-                    onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+                <div className="min-w-0 xl:col-span-2 xl:row-start-2">
+                  <ImageGalleryEditor
+                    segment="gallery"
+                    variant="featured"
+                    label="Galería"
+                    hint="La primera imagen es la portada en listados y en la ficha pública."
+                    disabled={readOnly}
+                    images={form.images}
+                    onChange={(next) => setForm((p) => ({ ...p, images: next }))}
                   />
                 </div>
               </div>

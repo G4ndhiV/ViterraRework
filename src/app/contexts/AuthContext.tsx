@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
+import { createContext, useContext, useCallback, useEffect, useMemo, useState, ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseClient } from "../lib/supabaseClient";
 import { toast } from "sonner";
@@ -30,6 +30,7 @@ export interface UserProfile {
   address: string;
   birthDate: string;
   workHistory: string[];
+  picture: string;
 }
 
 export interface User {
@@ -77,12 +78,68 @@ interface AuthContextType {
   updateUserPermissions: (id: string, role: UserRole, permissions: UserPermission[], actorName?: string) => void;
   archiveUser: (id: string, actorName?: string) => void;
   reactivateUser: (id: string, actorName?: string) => void;
+  /** Vuelve a leer la sesión y la fila `tokko_users` (tras editar el perfil en CRM, etc.). */
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const USERS_STORAGE_KEY = "viterra_admin_users";
 const PASSWORDS_STORAGE_KEY = "viterra_admin_passwords";
+
+function toStorageSafeUser(u: User): User {
+  return {
+    ...u,
+    profile: {
+      ...u.profile,
+      // Evita llenar localStorage con data URLs/base64 grandes.
+      picture: "",
+      // El historial laboral puede crecer; para sesión basta una muestra corta.
+      workHistory: Array.isArray(u.profile.workHistory) ? u.profile.workHistory.slice(0, 10) : [],
+    },
+    // Historial completo no es crítico para bootstrap de sesión.
+    history: Array.isArray(u.history) ? u.history.slice(0, 12) : [],
+  };
+}
+
+function writeUsersStorage(users: User[]) {
+  if (typeof window === "undefined") return;
+  const primaryPayload = JSON.stringify(users.map(toStorageSafeUser));
+  try {
+    localStorage.setItem(USERS_STORAGE_KEY, primaryPayload);
+    return;
+  } catch (e) {
+    if (import.meta.env.DEV) {
+      console.warn("[Viterra] localStorage lleno al guardar usuarios; usando payload mínimo.", e);
+    }
+  }
+
+  // Fallback ultra mínimo para no romper login/autenticación.
+  const minimalPayload = JSON.stringify(
+    users.map((u) => ({
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      role: u.role,
+      permissions: u.permissions,
+      isActive: u.isActive,
+      createdAt: u.createdAt,
+      updatedAt: u.updatedAt,
+      profile: { phone: "", address: "", birthDate: "", workHistory: [], picture: "" },
+      history: [],
+    }))
+  );
+  try {
+    localStorage.setItem(USERS_STORAGE_KEY, minimalPayload);
+  } catch {
+    // Último recurso: limpiar key problemática para no bloquear flujo.
+    try {
+      localStorage.removeItem(USERS_STORAGE_KEY);
+    } catch {
+      // noop
+    }
+  }
+}
 
 const defaultPermissionsByRole: Record<UserRole, UserPermission[]> = {
   admin: [
@@ -123,7 +180,7 @@ const ALL_PERMISSIONS: UserPermission[] = [
 const normalizeUser = (raw: Partial<User>): User => {
   const now = new Date().toISOString();
   const role = normalizeRole(raw.role);
-  const profile = raw.profile ?? { phone: "", address: "", birthDate: "", workHistory: [] };
+  const profile = raw.profile ?? { phone: "", address: "", birthDate: "", workHistory: [], picture: "" };
   let permissions: UserPermission[] =
     raw.permissions && raw.permissions.length > 0
       ? raw.permissions.filter((p): p is UserPermission => ALL_PERMISSIONS.includes(p as UserPermission))
@@ -142,6 +199,7 @@ const normalizeUser = (raw: Partial<User>): User => {
       address: profile.address ?? "",
       birthDate: profile.birthDate ?? "",
       workHistory: Array.isArray(profile.workHistory) ? profile.workHistory : [],
+      picture: profile.picture ?? "",
     },
     isActive: raw.isActive ?? true,
     archivedAt: raw.archivedAt,
@@ -198,6 +256,7 @@ function sessionToAppUser(session: Session): User {
         : Array.isArray(meta.workHistory)
           ? (meta.workHistory as string[])
           : [],
+      picture: String(meta.picture ?? ""),
     },
     isActive: true,
     createdAt,
@@ -238,6 +297,7 @@ function mergeTokkoRowIntoUser(base: User, row: Record<string, unknown>): User {
     (typeof row.birth_date === "string" && row.birth_date) ||
     (typeof row.birthdate === "string" && row.birthdate) ||
     base.profile.birthDate;
+  const picture = typeof row.picture === "string" ? row.picture : base.profile.picture;
 
   return normalizeUser({
     ...base,
@@ -249,6 +309,7 @@ function mergeTokkoRowIntoUser(base: User, row: Record<string, unknown>): User {
       phone,
       address,
       birthDate,
+      picture,
     },
     updatedAt: new Date().toISOString(),
   });
@@ -264,7 +325,7 @@ function directoryUserFromTokkoRow(row: Record<string, unknown>): User {
     name: email.split("@")[0] || "Usuario",
     role: "asesor",
     permissions: [],
-    profile: { phone: "", address: "", birthDate: "", workHistory: [] },
+    profile: { phone: "", address: "", birthDate: "", workHistory: [], picture: "" },
     isActive: true,
     createdAt: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(),
     updatedAt: typeof row.updated_at === "string" ? row.updated_at : new Date().toISOString(),
@@ -340,7 +401,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             updatedAt: appUser.updatedAt,
           };
         }
-        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(next));
+        writeUsersStorage(next);
         return next;
       });
     };
@@ -398,7 +459,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             );
           }
           setUsers(merged);
-          localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(merged));
+          writeUsersStorage(merged);
           void syncDirectoryAccessToTokkoUsers(merged);
         } else {
           if (import.meta.env.DEV && listRes.error) {
@@ -431,7 +492,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const persistUsers = (next: User[]) => {
     setUsers(next);
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(next));
+    writeUsersStorage(next);
     if (user) {
       const refreshed = next.find((u) => u.id === user.id);
       if (!refreshed || !refreshed.isActive) {
@@ -443,7 +504,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const persistPasswords = (next: Record<string, string>) => {
     setPasswordByUserId(next);
-    localStorage.setItem(PASSWORDS_STORAGE_KEY, JSON.stringify(next));
+    try {
+      localStorage.setItem(PASSWORDS_STORAGE_KEY, JSON.stringify(next));
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn("[Viterra] No se pudo persistir contraseñas locales por cuota:", e);
+      }
+    }
   };
 
   const appendHistory = (target: User, entry: UserHistoryEntry): User => ({
@@ -495,6 +562,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         address: input.profile?.address ?? "",
         birthDate: input.profile?.birthDate ?? "",
         workHistory: input.profile?.workHistory ?? [],
+        picture: input.profile?.picture ?? "",
       },
       isActive: true,
       createdAt: now,
@@ -581,6 +649,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  const refreshUser = useCallback(async () => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    const {
+      data: { session },
+    } = await client.auth.getSession();
+    if (!session?.user) {
+      setUser(null);
+      return;
+    }
+    let appUser = sessionToAppUser(session);
+    const { data, error } = await fetchTokkoUserRow(client, session.user.id);
+    if (!error && data) {
+      appUser = mergeTokkoRowIntoUser(appUser, data as Record<string, unknown>);
+    }
+    setUser(appUser);
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -596,8 +682,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateUserPermissions,
       archiveUser,
       reactivateUser,
+      refreshUser,
     }),
-    [user, users, authReady]
+    [user, users, authReady, refreshUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

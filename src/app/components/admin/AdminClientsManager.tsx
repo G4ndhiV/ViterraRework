@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   Building2,
-  Calendar,
-  History,
   Home,
   Link2,
   Mail,
+  Pencil,
   Phone,
   Plus,
   Search,
@@ -23,8 +22,6 @@ import {
   newClientId,
   normalizeEmailKey,
   normalizePhoneKey,
-  type ClientActivityEntry,
-  type ClientActivityType,
   type CrmClient,
 } from "../../data/clients";
 import {
@@ -41,75 +38,16 @@ import { Checkbox } from "../ui/checkbox";
 import { ScrollArea } from "../ui/scroll-area";
 import { cn } from "../ui/utils";
 import { foldSearchText } from "../../lib/searchText";
+import type { UserGroup } from "../../lib/userGroups";
+import { WhatsAppGlyph } from "../WhatsAppGlyph";
 
 const userReadonlyFieldClass =
   "w-full rounded-lg border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-sm text-brand-navy";
 
-function formatActivityDate(iso: string) {
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return iso;
-  return new Date(t).toLocaleString("es-MX", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function defaultWhatsappMessage(clientName: string): string {
+  const n = clientName.trim() || "cliente";
+  return `Hola ${n}, te contacto de Viterra para dar seguimiento a tu solicitud inmobiliaria.`;
 }
-
-function clientActivityMeta(type: ClientActivityType) {
-  const map: Record<
-    ClientActivityType,
-    { title: string; Icon: ComponentType<{ className?: string; strokeWidth?: number }>; iconClass: string; badgeClass: string }
-  > = {
-    created: {
-      title: "Alta",
-      Icon: Plus,
-      iconClass: "text-emerald-600",
-      badgeClass: "bg-emerald-100 text-emerald-700",
-    },
-    updated: {
-      title: "Actualización",
-      Icon: History,
-      iconClass: "text-amber-700",
-      badgeClass: "bg-amber-100 text-amber-700",
-    },
-    note: {
-      title: "Nota",
-      Icon: History,
-      iconClass: "text-slate-600",
-      badgeClass: "bg-slate-100 text-slate-700",
-    },
-    link_property: {
-      title: "Propiedad",
-      Icon: Home,
-      iconClass: "text-primary",
-      badgeClass: "bg-primary/10 text-primary",
-    },
-    link_development: {
-      title: "Desarrollo",
-      Icon: Building2,
-      iconClass: "text-primary",
-      badgeClass: "bg-primary/10 text-primary",
-    },
-    link_lead: {
-      title: "Lead",
-      Icon: Link2,
-      iconClass: "text-brand-navy",
-      badgeClass: "bg-stone-100 text-brand-navy",
-    },
-  };
-  return map[type];
-}
-
-const activityBadgeLabel: Record<ClientActivityType, string> = {
-  created: "Alta",
-  updated: "Cambio",
-  note: "Nota",
-  link_property: "Inmueble",
-  link_development: "Desarrollo",
-  link_lead: "Lead",
-};
 
 type Props = {
   currentUser: User;
@@ -119,19 +57,86 @@ type Props = {
   properties: Property[];
   developments: Development[];
   leads: Lead[];
+  userGroups?: UserGroup[];
   focusClient?: { id: string; nonce: number } | null;
   onFocusClientConsumed?: () => void;
   seedFromLead?: { lead: Lead; nonce: number } | null;
   onSeedFromLeadConsumed?: () => void;
+  onViewTeamMember?: (userId: string, fallbackName?: string) => void;
 };
 
 function canManageAllClients(user: User): boolean {
-  return user.role === "admin" || user.role === "lider_grupo";
+  return user.role === "admin";
 }
 
-function clientIsEditableBy(user: User, client: CrmClient): boolean {
+/** Crear/editar/guardar ficha CRM: solo admin y líder. El asesor solo consulta y puede usar WhatsApp. */
+function canModifyClientRecord(user: User): boolean {
+  return user.role !== "asesor";
+}
+
+/** Compara ids de usuario (p. ej. UUID de Supabase); insensible a mayúsculas y espacios. */
+function uidEq(a: string | undefined, b: string | undefined): boolean {
+  const x = (a ?? "").trim();
+  const y = (b ?? "").trim();
+  if (!x && !y) return true;
+  if (!x || !y) return false;
+  return x.toLowerCase() === y.toLowerCase();
+}
+
+/** Alcance de listado/detalle: admin todo; líder por leads del grupo; asesor por titular CRM o por lead vinculado asignado a él. */
+function clientVisibleToUser(
+  user: User,
+  client: CrmClient,
+  leadsById: Map<string, Lead>,
+  groupScopedLeadAssigneeIds: Set<string> | null
+): boolean {
+  if (user.role === "admin") return true;
+  if (user.role === "lider_grupo") {
+    if (!groupScopedLeadAssigneeIds || groupScopedLeadAssigneeIds.size === 0) return false;
+    return client.linkedLeadIds.some((leadId) => {
+      const assigneeId = leadsById.get(leadId)?.assignedToUserId?.trim();
+      return (
+        !!assigneeId && groupScopedLeadAssigneeIds.has(assigneeId.toLowerCase())
+      );
+    });
+  }
+  if (uidEq(client.primaryOwnerUserId, user.id)) return true;
+  return client.linkedLeadIds.some((leadId) =>
+    uidEq(leadsById.get(leadId)?.assignedToUserId, user.id)
+  );
+}
+
+/** Misma regla que la visibilidad para roles no admin: si el cliente está en tu alcance, puedes editar la ficha. */
+function clientEditableByUser(
+  user: User,
+  client: CrmClient,
+  leadsById: Map<string, Lead>,
+  groupScopedLeadAssigneeIds: Set<string> | null
+): boolean {
   if (canManageAllClients(user)) return true;
-  return client.primaryOwnerUserId === user.id;
+  return clientVisibleToUser(user, client, leadsById, groupScopedLeadAssigneeIds);
+}
+
+/** Admin y líder pueden editar fichas aunque falte el permiso explícito en el usuario. */
+function userMayEditClientRecords(user: User): boolean {
+  return (
+    user.role === "admin" ||
+    user.role === "lider_grupo" ||
+    user.permissions.includes("manage_clients")
+  );
+}
+
+function clientRowEditable(
+  user: User,
+  client: CrmClient,
+  leadsById: Map<string, Lead>,
+  groupScopedLeadAssigneeIds: Set<string> | null
+): boolean {
+  return (
+    canModifyClientRecord(user) &&
+    userMayEditClientRecords(user) &&
+    clientEditableByUser(user, client, leadsById, groupScopedLeadAssigneeIds)
+  );
 }
 
 export function AdminClientsManager({
@@ -142,10 +147,12 @@ export function AdminClientsManager({
   properties,
   developments,
   leads,
+  userGroups = [],
   focusClient,
   onFocusClientConsumed,
   seedFromLead,
   onSeedFromLeadConsumed,
+  onViewTeamMember,
 }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [propertyFilter, setPropertyFilter] = useState<string>("all");
@@ -154,18 +161,45 @@ export function AdminClientsManager({
 
   const [selected, setSelected] = useState<CrmClient | null>(null);
   const [isNew, setIsNew] = useState(false);
-  const [noteDraft, setNoteDraft] = useState("");
   const [ownerSearchQuery, setOwnerSearchQuery] = useState("");
   const [propertySearchQuery, setPropertySearchQuery] = useState("");
   const [propertyAssignmentFilter, setPropertyAssignmentFilter] = useState<"all" | "selected" | "unselected">("all");
   const [developmentSearchQuery, setDevelopmentSearchQuery] = useState("");
   const [developmentAssignmentFilter, setDevelopmentAssignmentFilter] =
     useState<"all" | "selected" | "unselected">("all");
+  const [whatsappMessageDraft, setWhatsappMessageDraft] = useState("");
+  /** Solo vista hasta pulsar «Editar» (admin / líder con derecho sobre la ficha). Altas nuevas abren ya en edición. */
+  const [isEditingClient, setIsEditingClient] = useState(false);
 
-  const scopeClients = useMemo(() => {
-    if (canManageAllClients(currentUser)) return clients;
-    return clients.filter((c) => c.primaryOwnerUserId === currentUser.id);
-  }, [clients, currentUser]);
+  const leadsById = useMemo(() => {
+    const map = new Map<string, Lead>();
+    for (const lead of leads) map.set(lead.id, lead);
+    return map;
+  }, [leads]);
+
+  const groupScopedLeadAssigneeIds = useMemo(() => {
+    if (currentUser.role !== "lider_grupo") return null;
+    const ids = new Set<string>([currentUser.id.trim().toLowerCase()]);
+    for (const group of userGroups) {
+      if (!uidEq(group.leaderId, currentUser.id)) continue;
+      for (const memberId of group.memberIds) {
+        const m = memberId.trim().toLowerCase();
+        if (m) ids.add(m);
+      }
+    }
+    return ids;
+  }, [currentUser.id, currentUser.role, userGroups]);
+
+  const clientVisibleToCurrentUser = useCallback(
+    (client: CrmClient) =>
+      clientVisibleToUser(currentUser, client, leadsById, groupScopedLeadAssigneeIds),
+    [currentUser, groupScopedLeadAssigneeIds, leadsById]
+  );
+
+  const scopeClients = useMemo(
+    () => clients.filter((client) => clientVisibleToCurrentUser(client)),
+    [clients, clientVisibleToCurrentUser]
+  );
 
   const filteredList = useMemo(() => {
     let list = scopeClients;
@@ -193,12 +227,19 @@ export function AdminClientsManager({
       if (clients.some((c) => c.linkedLeadIds.includes(lead.id))) return false;
       if (isLeadContactLinkedToClient(clients, lead.email, lead.phone)) return false;
       if (!lead.email.trim() && !lead.phone.trim()) return false;
-      if (currentUser.role === "asesor" && lead.assignedToUserId !== currentUser.id) return false;
+      if (
+        currentUser.role === "lider_grupo" &&
+        (!lead.assignedToUserId || !groupScopedLeadAssigneeIds?.has(lead.assignedToUserId))
+      ) {
+        return false;
+      }
+      if (currentUser.role === "asesor" && !uidEq(lead.assignedToUserId, currentUser.id)) return false;
       return true;
     });
-  }, [leads, clients, currentUser.role, currentUser.id]);
+  }, [leads, clients, currentUser.role, currentUser.id, groupScopedLeadAssigneeIds]);
 
   const openNew = useCallback(() => {
+    if (!canModifyClientRecord(currentUser)) return;
     const now = new Date().toISOString();
     const draft: CrmClient = {
       id: newClientId(),
@@ -222,27 +263,45 @@ export function AdminClientsManager({
       ],
     };
     setIsNew(true);
+    setIsEditingClient(true);
     setSelected(draft);
-    setNoteDraft("");
   }, [currentUser]);
 
   const openCreateFromLead = useCallback(
     (lead: Lead) => {
+      const leadPropertyIds = lead.relatedPropertyId ? [lead.relatedPropertyId] : [];
+      const leadDevelopmentIds = lead.relatedDevelopmentId ? [lead.relatedDevelopmentId] : [];
       const existing = findClientByEmailNormalized(clients, lead.email);
       if (existing) {
-        if (!canManageAllClients(currentUser) && existing.primaryOwnerUserId !== currentUser.id) {
+        if (!clientVisibleToCurrentUser(existing)) {
           window.alert(
-            "Ya existe un cliente con este correo asignado a otro asesor. Contacta a un administrador."
+            "Ya existe un cliente con este correo fuera de tu alcance. Contacta a un administrador."
           );
+          return;
+        }
+        if (!canModifyClientRecord(currentUser)) {
+          setIsNew(false);
+          setSelected({ ...existing });
           return;
         }
         setIsNew(false);
         let next = { ...existing };
-        if (!next.linkedLeadIds.includes(lead.id)) {
+        const nextLinkedLeadIds = next.linkedLeadIds.includes(lead.id)
+          ? next.linkedLeadIds
+          : [...next.linkedLeadIds, lead.id];
+        const nextPropertyIds = [...new Set([...next.propertyIds, ...leadPropertyIds])];
+        const nextDevelopmentIds = [...new Set([...next.developmentIds, ...leadDevelopmentIds])];
+        const changed =
+          nextLinkedLeadIds.length !== next.linkedLeadIds.length ||
+          nextPropertyIds.length !== next.propertyIds.length ||
+          nextDevelopmentIds.length !== next.developmentIds.length;
+        if (changed) {
           next = appendClientActivity(
             {
               ...next,
-              linkedLeadIds: [...next.linkedLeadIds, lead.id],
+              linkedLeadIds: nextLinkedLeadIds,
+              propertyIds: nextPropertyIds,
+              developmentIds: nextDevelopmentIds,
             },
             {
               type: "link_lead",
@@ -253,7 +312,13 @@ export function AdminClientsManager({
           onSetClients((prev) => prev.map((c) => (c.id === next.id ? next : c)));
         }
         setSelected(next);
-        setNoteDraft("");
+        setIsEditingClient(false);
+        return;
+      }
+      if (!canModifyClientRecord(currentUser)) {
+        window.alert(
+          "Tu rol solo permite consultar fichas de cliente. Para registrar uno nuevo, contacta a un administrador o líder de grupo."
+        );
         return;
       }
       const now = new Date().toISOString();
@@ -265,8 +330,8 @@ export function AdminClientsManager({
           name: lead.name,
           email: lead.email,
           phone: lead.phone,
-          propertyIds: [],
-          developmentIds: [],
+          propertyIds: leadPropertyIds,
+          developmentIds: leadDevelopmentIds,
           linkedLeadIds: [lead.id],
           primaryOwnerUserId: ownerId,
           createdAt: now,
@@ -290,34 +355,45 @@ export function AdminClientsManager({
         },
       ];
       setIsNew(true);
+      setIsEditingClient(true);
       setSelected(draft);
-      setNoteDraft("");
     },
-    [clients, currentUser, onSetClients]
+    [clients, currentUser, onSetClients, clientVisibleToCurrentUser]
   );
 
   useEffect(() => {
     if (!focusClient) return;
     const c = clients.find((x) => x.id === focusClient.id);
-    if (c && (canManageAllClients(currentUser) || c.primaryOwnerUserId === currentUser.id)) {
+    if (c && clientVisibleToCurrentUser(c)) {
       setIsNew(false);
+      setIsEditingClient(false);
       setSelected({ ...c });
-      setNoteDraft("");
     }
     onFocusClientConsumed?.();
-  }, [focusClient?.nonce, focusClient?.id, clients, currentUser, onFocusClientConsumed]);
+  }, [focusClient?.nonce, focusClient?.id, clients, onFocusClientConsumed, clientVisibleToCurrentUser]);
 
   useEffect(() => {
     if (!seedFromLead) return;
+    if (!canModifyClientRecord(currentUser)) {
+      onSeedFromLeadConsumed?.();
+      return;
+    }
     openCreateFromLead(seedFromLead.lead);
     onSeedFromLeadConsumed?.();
-  }, [seedFromLead?.nonce, seedFromLead?.lead, onSeedFromLeadConsumed, openCreateFromLead]);
+  }, [seedFromLead?.nonce, seedFromLead?.lead, currentUser.role, onSeedFromLeadConsumed, openCreateFromLead]);
 
   const closeDetail = () => {
     setSelected(null);
     setIsNew(false);
-    setNoteDraft("");
+    setIsEditingClient(false);
   };
+
+  const cancelEditing = useCallback(() => {
+    if (!selected || isNew) return;
+    const fresh = clients.find((x) => x.id === selected.id);
+    if (fresh) setSelected({ ...fresh });
+    setIsEditingClient(false);
+  }, [selected, isNew, clients]);
 
   useEffect(() => {
     if (!selected) return;
@@ -328,8 +404,14 @@ export function AdminClientsManager({
     setDevelopmentAssignmentFilter("all");
   }, [selected?.id]);
 
+  useLayoutEffect(() => {
+    if (!selected) return;
+    setWhatsappMessageDraft(defaultWhatsappMessage(selected.name));
+  }, [selected?.id]);
+
   const saveClient = () => {
     if (!selected) return;
+    if (!canModifyClientRecord(currentUser)) return;
     const name = selected.name.trim();
     const email = selected.email.trim();
     const phone = selected.phone.trim();
@@ -388,26 +470,6 @@ export function AdminClientsManager({
     closeDetail();
   };
 
-  const addNote = () => {
-    if (!selected || !noteDraft.trim()) return;
-    const text = noteDraft.trim();
-    setSelected((prev) =>
-      prev
-        ? appendClientActivity(prev, {
-            type: "note",
-            description: text,
-            actorName: currentUser.name,
-          })
-        : prev
-    );
-    setNoteDraft("");
-  };
-
-  const sortedActivity = useMemo(() => {
-    if (!selected) return [];
-    return [...selected.activity].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  }, [selected]);
-
   const ownerName = (client: CrmClient) => {
     const userId = client.primaryOwnerUserId?.trim() ?? "";
     if (userId) {
@@ -424,8 +486,16 @@ export function AdminClientsManager({
     return "Asesor no encontrado";
   };
 
-  const canEdit = selected ? clientIsEditableBy(currentUser, selected) : false;
+  const canEditSelected = Boolean(
+    selected && clientRowEditable(currentUser, selected, leadsById, groupScopedLeadAssigneeIds)
+  );
+  const showEditableFields = Boolean(canEditSelected && (isNew || isEditingClient));
   const canSetOwner = canManageAllClients(currentUser);
+  const selectedWhatsappDigits = selected?.phone?.replace(/\D/g, "") ?? "";
+  const selectedWhatsappHref =
+    selectedWhatsappDigits.length > 0
+      ? `https://wa.me/${selectedWhatsappDigits}?text=${encodeURIComponent(whatsappMessageDraft)}`
+      : "";
   const ownerOptionsForDetail = useMemo(() => {
     const q = foldSearchText(ownerSearchQuery);
     return users
@@ -479,15 +549,23 @@ export function AdminClientsManager({
               <p className="mt-1 text-sm text-slate-600">
                 Fichas de clientes, relación con propiedades y desarrollos, e historial de actividad.
               </p>
+              {!canModifyClientRecord(currentUser) && (
+                <p className="mt-2 text-sm text-slate-500">
+                  Como asesor puedes revisar datos y contactar por WhatsApp; crear o cambiar fichas corresponde a un
+                  administrador o líder de grupo.
+                </p>
+              )}
             </div>
-            <button
-              type="button"
-              onClick={openNew}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-hover"
-            >
-              <Plus className="h-4 w-4" />
-              Nuevo cliente
-            </button>
+            {canModifyClientRecord(currentUser) && (
+              <button
+                type="button"
+                onClick={openNew}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-hover"
+              >
+                <Plus className="h-4 w-4" />
+                Nuevo cliente
+              </button>
+            )}
           </div>
 
           <div className="mt-8 flex flex-col gap-3 border-t border-slate-200/80 pt-6">
@@ -555,7 +633,7 @@ export function AdminClientsManager({
         </div>
       </div>
 
-      {suggestedLeads.length > 0 && (
+      {canModifyClientRecord(currentUser) && suggestedLeads.length > 0 && (
         <div className="rounded-lg border border-amber-200/80 bg-amber-50/40 p-4">
           <p className="text-sm font-semibold text-amber-900">Sugerencias desde leads</p>
           <p className="mt-1 text-xs text-amber-800/90">
@@ -590,12 +668,13 @@ export function AdminClientsManager({
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Contacto</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Asesor</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Vínculos</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {filteredList.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-12 text-center text-sm text-slate-500">
+                <td colSpan={5} className="px-4 py-12 text-center text-sm text-slate-500">
                   No hay clientes que coincidan con los filtros.
                 </td>
               </tr>
@@ -607,8 +686,8 @@ export function AdminClientsManager({
                       type="button"
                       onClick={() => {
                         setIsNew(false);
+                        setIsEditingClient(false);
                         setSelected({ ...c });
-                        setNoteDraft("");
                       }}
                       className="text-left"
                     >
@@ -620,9 +699,45 @@ export function AdminClientsManager({
                     <p>{c.email}</p>
                     <p className="text-xs text-slate-500">{c.phone || "—"}</p>
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-700">{ownerName(c)}</td>
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    {c.primaryOwnerUserId && onViewTeamMember ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!c.primaryOwnerUserId) return;
+                          onViewTeamMember(c.primaryOwnerUserId, ownerName(c));
+                        }}
+                        className="text-left text-brand-navy underline decoration-brand-navy/30 underline-offset-2 transition hover:text-primary hover:decoration-primary"
+                        style={{ fontWeight: 600 }}
+                      >
+                        {ownerName(c)}
+                      </button>
+                    ) : (
+                      ownerName(c)
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-xs text-slate-600">
                     {c.propertyIds.length} prop. · {c.developmentIds.length} desv.
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {clientRowEditable(currentUser, c, leadsById, groupScopedLeadAssigneeIds) ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsNew(false);
+                          setIsEditingClient(true);
+                          setSelected({ ...c });
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-primary/35 bg-white px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/[0.06]"
+                        style={{ fontWeight: 600 }}
+                      >
+                        <Pencil className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+                        Editar
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
                   </td>
                 </tr>
               ))
@@ -658,7 +773,7 @@ export function AdminClientsManager({
                   </p>
                   <div className="mt-3 flex flex-col gap-4 min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-between">
                     <div className="min-w-0 flex-1">
-                      {canEdit ? (
+                      {showEditableFields ? (
                         <input
                           value={selected.name}
                           onChange={(e) => setSelected({ ...selected, name: e.target.value })}
@@ -684,20 +799,45 @@ export function AdminClientsManager({
                         <Button
                           type="button"
                           variant="outline"
-                          className="h-10 border-stone-300 bg-white text-slate-700 hover:bg-stone-50"
+                          className="h-10 border-stone-300 bg-white text-slate-700 hover:bg-stone-100 hover:text-slate-700"
                           style={{ fontWeight: 600 }}
                         >
                           Cerrar
                         </Button>
                       </DialogClose>
-                      {canEdit && (
+                      {canEditSelected && !isNew && !isEditingClient && (
                         <Button
                           type="button"
-                          className="h-10 bg-primary px-4 font-semibold text-primary-foreground hover:bg-brand-red-hover"
-                          onClick={saveClient}
+                          variant="outline"
+                          className="h-10 border-primary/35 bg-white px-4 font-semibold text-primary hover:bg-primary/[0.06]"
+                          style={{ fontWeight: 600 }}
+                          onClick={() => setIsEditingClient(true)}
                         >
-                          Guardar cambios
+                          <Pencil className="mr-2 h-4 w-4" strokeWidth={2} aria-hidden />
+                          Editar
                         </Button>
+                      )}
+                      {showEditableFields && (
+                        <>
+                          {!isNew && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-10 border-stone-300 bg-white text-slate-700 hover:bg-stone-100 hover:text-slate-700"
+                              style={{ fontWeight: 600 }}
+                              onClick={cancelEditing}
+                            >
+                              Cancelar edición
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            className="h-10 bg-primary px-4 font-semibold text-primary-foreground hover:bg-brand-red-hover"
+                            onClick={saveClient}
+                          >
+                            {isNew ? "Registrar cliente" : "Guardar cambios"}
+                          </Button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -729,7 +869,7 @@ export function AdminClientsManager({
                                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                                     Correo
                                   </p>
-                                  {canEdit ? (
+                                  {showEditableFields ? (
                                     <input
                                       value={selected.email}
                                       onChange={(e) => setSelected({ ...selected, email: e.target.value })}
@@ -757,7 +897,7 @@ export function AdminClientsManager({
                                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                                     Teléfono
                                   </p>
-                                  {canEdit ? (
+                                  {showEditableFields ? (
                                     <input
                                       value={selected.phone}
                                       onChange={(e) => setSelected({ ...selected, phone: e.target.value })}
@@ -780,7 +920,7 @@ export function AdminClientsManager({
                             </div>
                           </div>
 
-                          {canSetOwner && canEdit && (
+                          {canSetOwner && showEditableFields && (
                             <div className="mt-6 border-t border-stone-200/80 pt-6">
                               <Label className="text-xs text-slate-500">Asesor (asesor / líder)</Label>
                               <div className="relative mt-2 w-full max-w-md">
@@ -814,141 +954,112 @@ export function AdminClientsManager({
 
                         <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
                           <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
+                            Contactar cliente por WhatsApp
+                          </h3>
+                          <div className="mt-3 rounded-lg border border-stone-200/80 bg-stone-50/40 p-4">
+                            <Label
+                              htmlFor="client-whatsapp-message"
+                              className="text-sm text-slate-700"
+                              style={{ fontWeight: 600 }}
+                            >
+                              Mensaje (se enviará al abrir WhatsApp)
+                            </Label>
+                            <textarea
+                              id="client-whatsapp-message"
+                              value={whatsappMessageDraft}
+                              onChange={(e) => setWhatsappMessageDraft(e.target.value)}
+                              rows={4}
+                              className="mt-2 w-full resize-y rounded-md border border-stone-200 bg-white px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-emerald-500/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/15"
+                              placeholder={defaultWhatsappMessage(selected.name)}
+                            />
+                            {!selected.phone?.trim() && (
+                              <p className="mt-2 text-xs text-amber-800">
+                                Captura un teléfono en la sección de contacto para poder abrir WhatsApp.
+                              </p>
+                            )}
+                          </div>
+                          <div className="mt-4">
+                            <a
+                              href={selectedWhatsappHref || "#"}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={cn(
+                                "inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm text-white transition",
+                                selectedWhatsappHref
+                                  ? "bg-emerald-500 hover:bg-emerald-600"
+                                  : "cursor-not-allowed bg-slate-300"
+                              )}
+                              style={{ fontWeight: 700 }}
+                              aria-disabled={!selectedWhatsappHref}
+                              onClick={(e) => {
+                                if (!selectedWhatsappHref) e.preventDefault();
+                              }}
+                            >
+                              <WhatsAppGlyph className="h-5 w-5 shrink-0 text-white" />
+                              Abrir WhatsApp
+                            </a>
+                          </div>
+                        </section>
+
+                      </div>
+
+                      <aside className="lg:col-span-5 lg:sticky lg:top-2 lg:self-start">
+                        <section className="mb-6 rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
+                          <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
                             Propiedades y desarrollos
                           </h3>
                           <p className="mt-1 text-xs text-slate-500">
                             Vincula inventario relacionado con este cliente.
                           </p>
-                          {canEdit ? (
-                            <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                              <div>
-                                <p className="mb-2 text-[11px] font-semibold uppercase text-slate-500">
-                                  Propiedades
-                                </p>
-                                <div className="mb-2 space-y-2">
-                                  <div className="relative">
-                                    <Search
-                                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                                      strokeWidth={1.75}
-                                    />
-                                    <input
-                                      value={propertySearchQuery}
-                                      onChange={(e) => setPropertySearchQuery(e.target.value)}
-                                      placeholder="Buscar propiedad…"
-                                      className="h-9 w-full rounded-lg border border-stone-200 bg-white pl-9 pr-3 text-sm text-brand-navy focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                                    />
-                                  </div>
-                                  <select
-                                    value={propertyAssignmentFilter}
-                                    onChange={(e) =>
-                                      setPropertyAssignmentFilter(
-                                        e.target.value as "all" | "selected" | "unselected"
-                                      )
-                                    }
-                                    className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-brand-navy"
-                                  >
-                                    <option value="all">Todas</option>
-                                    <option value="selected">Solo vinculadas</option>
-                                    <option value="unselected">No vinculadas</option>
-                                  </select>
-                                </div>
-                                <ScrollArea className="h-40 rounded-lg border border-stone-200 p-2">
-                                  {propertyOptionsForDetail.map((p) => (
-                                    <label
-                                      key={p.id}
-                                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-stone-50"
-                                    >
-                                      <Checkbox
-                                        checked={selected.propertyIds.includes(p.id)}
-                                        onCheckedChange={(v) => {
-                                          const on = v === true;
-                                          setSelected({
-                                            ...selected,
-                                            propertyIds: on
-                                              ? [...selected.propertyIds, p.id]
-                                              : selected.propertyIds.filter((x) => x !== p.id),
-                                          });
-                                        }}
-                                      />
-                                      <span className="text-sm text-brand-navy">{p.title}</span>
-                                    </label>
-                                  ))}
-                                  {propertyOptionsForDetail.length === 0 && (
-                                    <p className="px-2 py-3 text-sm text-slate-500">Sin resultados.</p>
-                                  )}
-                                </ScrollArea>
-                              </div>
-                              <div>
-                                <p className="mb-2 text-[11px] font-semibold uppercase text-slate-500">
-                                  Desarrollos
-                                </p>
-                                <div className="mb-2 space-y-2">
-                                  <div className="relative">
-                                    <Search
-                                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                                      strokeWidth={1.75}
-                                    />
-                                    <input
-                                      value={developmentSearchQuery}
-                                      onChange={(e) => setDevelopmentSearchQuery(e.target.value)}
-                                      placeholder="Buscar desarrollo…"
-                                      className="h-9 w-full rounded-lg border border-stone-200 bg-white pl-9 pr-3 text-sm text-brand-navy focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                                    />
-                                  </div>
-                                  <select
-                                    value={developmentAssignmentFilter}
-                                    onChange={(e) =>
-                                      setDevelopmentAssignmentFilter(
-                                        e.target.value as "all" | "selected" | "unselected"
-                                      )
-                                    }
-                                    className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-brand-navy"
-                                  >
-                                    <option value="all">Todos</option>
-                                    <option value="selected">Solo vinculados</option>
-                                    <option value="unselected">No vinculados</option>
-                                  </select>
-                                </div>
-                                <ScrollArea className="h-40 rounded-lg border border-stone-200 p-2">
-                                  {developmentOptionsForDetail.map((d) => (
-                                    <label
-                                      key={d.id}
-                                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-stone-50"
-                                    >
-                                      <Checkbox
-                                        checked={selected.developmentIds.includes(d.id)}
-                                        onCheckedChange={(v) => {
-                                          const on = v === true;
-                                          setSelected({
-                                            ...selected,
-                                            developmentIds: on
-                                              ? [...selected.developmentIds, d.id]
-                                              : selected.developmentIds.filter((x) => x !== d.id),
-                                          });
-                                        }}
-                                      />
-                                      <span className="text-sm text-brand-navy">{d.name}</span>
-                                    </label>
-                                  ))}
-                                  {developmentOptionsForDetail.length === 0 && (
-                                    <p className="px-2 py-3 text-sm text-slate-500">Sin resultados.</p>
-                                  )}
-                                </ScrollArea>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="mt-4 space-y-3 text-sm text-slate-700">
+                          <div className="mt-4 space-y-3 text-sm text-slate-700">
                               <p className="text-xs font-semibold text-slate-500">Propiedades</p>
-                              <ul className="space-y-1">
+                              <div className="grid gap-2 sm:grid-cols-1">
                                 {selected.propertyIds.length === 0 ? (
-                                  <li className="text-slate-500">Ninguna vinculada.</li>
+                                  <p className="text-slate-500">Ninguna vinculada.</p>
                                 ) : (
                                   selected.propertyIds.map((id) => {
                                     const p = properties.find((x) => x.id === id);
-                                    return <li key={id}>{p?.title ?? id}</li>;
+                                    if (!p) {
+                                      return (
+                                        <article key={id} className="rounded-lg border border-stone-200/80 bg-stone-50/50 p-3">
+                                          <p className="text-sm font-medium text-brand-navy">{id}</p>
+                                        </article>
+                                      );
+                                    }
+                                    return (
+                                      <article
+                                        key={id}
+                                        className="overflow-hidden rounded-lg border border-stone-200/80 bg-white shadow-sm"
+                                      >
+                                        <div className="aspect-[16/9] w-full bg-stone-100">
+                                          {p.image ? (
+                                            <img
+                                              src={p.image}
+                                              alt={p.title}
+                                              className="h-full w-full object-cover"
+                                              loading="lazy"
+                                            />
+                                          ) : (
+                                            <div className="flex h-full w-full items-center justify-center text-xs text-slate-500">
+                                              Sin imagen
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="p-3">
+                                          <p className="text-sm font-semibold text-brand-navy">{p.title}</p>
+                                          <p className="mt-0.5 text-xs text-slate-500">{p.location || "Ubicación no definida"}</p>
+                                          <p className="mt-1 text-xs text-slate-600">
+                                            {p.status === "alquiler" ? "Alquiler" : "Venta"} · {p.type || "Tipo no definido"}
+                                          </p>
+                                          <p className="mt-1.5 text-sm font-semibold text-primary">
+                                            ${Number(p.price || 0).toLocaleString("es-MX")}
+                                          </p>
+                                        </div>
+                                      </article>
+                                    );
                                   })
                                 )}
-                              </ul>
+                              </div>
                               <p className="text-xs font-semibold text-slate-500">Desarrollos</p>
                               <ul className="space-y-1">
                                 {selected.developmentIds.length === 0 ? (
@@ -961,115 +1072,8 @@ export function AdminClientsManager({
                                 )}
                               </ul>
                             </div>
-                          )}
                         </section>
 
-                        {selected.linkedLeadIds.length > 0 && (
-                          <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
-                            <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
-                              Leads vinculados
-                            </h3>
-                            <ul className="mt-3 space-y-2">
-                              {selected.linkedLeadIds.map((lid) => {
-                                const lead = leads.find((l) => l.id === lid);
-                                return (
-                                  <li
-                                    key={lid}
-                                    className="rounded-lg border border-stone-200/80 bg-stone-50/50 px-3 py-2 text-sm"
-                                  >
-                                    {lead ? (
-                                      <>
-                                        <span className="font-medium text-brand-navy">{lead.name}</span>
-                                        <span className="text-slate-500"> · {lead.email}</span>
-                                      </>
-                                    ) : (
-                                      <span>Lead #{lid}</span>
-                                    )}
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          </section>
-                        )}
-                      </div>
-
-                      <aside className="lg:col-span-5 lg:sticky lg:top-2 lg:self-start">
-                        {canEdit && (
-                          <section className="mb-6 rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm">
-                            <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
-                              Añadir nota
-                            </h3>
-                            <textarea
-                              value={noteDraft}
-                              onChange={(e) => setNoteDraft(e.target.value)}
-                              rows={3}
-                              className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-brand-navy"
-                              placeholder="Escribe una nota interna…"
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="mt-2"
-                              onClick={addNote}
-                              disabled={!noteDraft.trim()}
-                            >
-                              Registrar nota
-                            </Button>
-                          </section>
-                        )}
-
-                        <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
-                          <h3 className="flex items-center gap-2 text-sm text-slate-700" style={{ fontWeight: 600 }}>
-                            <History className="h-4 w-4 text-primary" strokeWidth={1.9} />
-                            Actividad
-                          </h3>
-                          <div className="mt-4 space-y-3">
-                            {sortedActivity.length === 0 ? (
-                              <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50/50 px-4 py-8 text-center text-sm text-slate-500">
-                                Sin actividad registrada.
-                              </p>
-                            ) : (
-                              <div className="relative pl-8">
-                                <div className="absolute bottom-3 left-[15px] top-3 w-px bg-gradient-to-b from-primary/40 via-primary/20 to-transparent" />
-                                <div className="space-y-4">
-                                  {sortedActivity.map((entry) => {
-                                    const meta = clientActivityMeta(entry.type);
-                                    const Icon = meta.Icon;
-                                    return (
-                                      <article
-                                        key={entry.id}
-                                        className="relative rounded-xl border border-stone-200/90 bg-stone-50/40 p-4 shadow-sm"
-                                      >
-                                        <span className="absolute -left-8 top-4 inline-flex h-7 w-7 items-center justify-center rounded-full border border-stone-200 bg-white shadow-sm">
-                                          <Icon className={cn("h-3.5 w-3.5", meta.iconClass)} strokeWidth={2} />
-                                        </span>
-                                        <div className="flex flex-wrap items-center gap-2">
-                                          <p className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
-                                            {meta.title}
-                                          </p>
-                                          <span
-                                            className={cn("rounded-full px-2 py-0.5 text-[11px]", meta.badgeClass)}
-                                          >
-                                            {activityBadgeLabel[entry.type]}
-                                          </span>
-                                        </div>
-                                        <p className="mt-1.5 text-sm text-slate-700">{entry.description}</p>
-                                        <p className="mt-2 inline-flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                                          <span className="inline-flex items-center gap-1">
-                                            <Calendar className="h-3.5 w-3.5" />
-                                            {formatActivityDate(entry.createdAt)}
-                                          </span>
-                                          <span className="text-slate-400">·</span>
-                                          <span>{entry.actorName}</span>
-                                        </p>
-                                      </article>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </section>
                       </aside>
                     </div>
                   </div>

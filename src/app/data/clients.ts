@@ -134,6 +134,19 @@ export function findClientByEmailNormalized(clients: CrmClient[], email: string)
   return clients.find((c) => normalizeEmailKey(c.email) === key);
 }
 
+/** Localiza ficha CRM que corresponde al contacto del lead (email; si no, teléfono). */
+export function findClientForLeadContact(
+  clients: CrmClient[],
+  email: string,
+  phone: string
+): CrmClient | undefined {
+  const byEmail = findClientByEmailNormalized(clients, email);
+  if (byEmail) return byEmail;
+  const pk = normalizePhoneKey(phone);
+  if (!pk) return undefined;
+  return clients.find((c) => normalizePhoneKey(c.phone) === pk);
+}
+
 /** ¿Algún cliente ya usa este email o teléfono normalizado? */
 export function isLeadContactLinkedToClient(
   clients: CrmClient[],

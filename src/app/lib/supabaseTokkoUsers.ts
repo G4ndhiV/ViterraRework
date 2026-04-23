@@ -56,3 +56,35 @@ export async function upsertTokkoUserAccess(client: SupabaseClient, payload: Tok
     },
   };
 }
+
+export type TokkoUserProfilePatch = {
+  name?: string;
+  email?: string | null;
+  phone?: string | null;
+  cellphone?: string | null;
+  position?: string | null;
+  picture?: string | null;
+  branch_tokko_id?: string | null;
+  payload?: Record<string, unknown>;
+};
+
+/** Actualiza la fila `tokko_users` del usuario (perfil de Tokko/CRM). Respeta RLS. */
+export async function updateTokkoUserProfile(
+  client: SupabaseClient,
+  userId: string,
+  patch: TokkoUserProfilePatch
+) {
+  const ts = new Date().toISOString();
+  const row: Record<string, unknown> = { updated_at: ts, synced_at: ts };
+
+  if (patch.name !== undefined) row.name = patch.name;
+  if (patch.email !== undefined) row.email = patch.email;
+  if (patch.phone !== undefined) row.phone = patch.phone;
+  if (patch.cellphone !== undefined) row.cellphone = patch.cellphone;
+  if (patch.position !== undefined) row.position = patch.position;
+  if (patch.picture !== undefined) row.picture = patch.picture;
+  if (patch.branch_tokko_id !== undefined) row.branch_tokko_id = patch.branch_tokko_id;
+  if (patch.payload !== undefined) row.payload = patch.payload;
+
+  return client.from("tokko_users").update(row).eq("id", userId);
+}

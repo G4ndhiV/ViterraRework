@@ -13,6 +13,18 @@ function dbStatusFromApp(s: Property["status"]): string {
   return s === "alquiler" ? "alquiler" : "venta";
 }
 
+/** Interpreta el estado operativo desde el texto en BD (antes de colapsar a venta/alquiler). */
+export function parseListingInventory(raw: string): NonNullable<Property["listingInventory"]> {
+  const t = raw
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (/vendid|sold|liquidad/.test(t)) return "vendida";
+  if (/apartad|reservad/.test(t)) return "en_apartado";
+  if (/\brenta\b|alquiler|rent\b|for rent/.test(t)) return "renta";
+  return "disponible";
+}
+
 export type PropertyRow = {
   id: string;
   tokko_id: string;
@@ -30,16 +42,23 @@ export type PropertyRow = {
   images: string[];
   deleted_at: string | null;
   payload: Record<string, unknown>;
-  synced_at: string;
-  updated_at: string;
+  synced_at?: string | null;
+  updated_at?: string | null;
   featured: boolean;
   /** FK lógica al desarrollo: coincide con `developments.tokko_id`. */
   development_tokko_id?: string | null;
 };
 
 export function rowToProperty(row: PropertyRow): Property {
-  const imgs = Array.isArray(row.images) ? row.images : [];
+  const imgs = Array.isArray(row.images) ? row.images.filter((x): x is string => typeof x === "string") : [];
   const primary = row.image?.trim() || imgs[0] || "";
+  const rawStatus = String(row.status ?? "");
+  const listedAtIso =
+    typeof row.synced_at === "string" && row.synced_at.trim()
+      ? row.synced_at
+      : typeof row.updated_at === "string" && row.updated_at.trim()
+        ? row.updated_at
+        : undefined;
   return {
     id: row.id,
     title: row.title,
@@ -55,6 +74,10 @@ export function rowToProperty(row: PropertyRow): Property {
       row.lat != null && row.lng != null
         ? { lat: row.lat, lng: row.lng }
         : undefined,
+    developmentTokkoId: row.development_tokko_id?.trim() || undefined,
+    listedAtIso,
+    listingInventory: parseListingInventory(rawStatus),
+    images: imgs.length > 0 ? imgs : undefined,
   };
 }
 
@@ -84,7 +107,8 @@ export async function insertProperty(client: SupabaseClient, p: Property, explic
   const ts = nowIso();
   const id = explicitId || p.id;
   const tokkoId = `manual_${id}`;
-  const imgs = p.image ? [p.image] : [];
+  const imgs =
+    p.images && p.images.length > 0 ? p.images : p.image ? [p.image] : [];
   const row = {
     id,
     tokko_id: tokkoId,
@@ -94,7 +118,7 @@ export async function insertProperty(client: SupabaseClient, p: Property, explic
     bedrooms: p.bedrooms,
     bathrooms: p.bathrooms,
     area: p.area,
-    image: p.image || null,
+    image: imgs[0] ?? p.image ?? null,
     type: p.type || null,
     status: dbStatusFromApp(p.status),
     lat: p.coordinates?.lat ?? null,
@@ -127,7 +151,8 @@ export async function insertProperty(client: SupabaseClient, p: Property, explic
 
 export async function updateProperty(client: SupabaseClient, p: Property) {
   const ts = nowIso();
-  const imgs = p.image ? [p.image] : [];
+  const imgs =
+    p.images && p.images.length > 0 ? p.images : p.image ? [p.image] : [];
   return client
     .from("properties")
     .update({
@@ -137,7 +162,7 @@ export async function updateProperty(client: SupabaseClient, p: Property) {
       bedrooms: p.bedrooms,
       bathrooms: p.bathrooms,
       area: p.area,
-      image: p.image || null,
+      image: imgs[0] ?? p.image ?? null,
       type: p.type || null,
       status: dbStatusFromApp(p.status),
       lat: p.coordinates?.lat ?? null,

@@ -28,6 +28,14 @@ export interface Property {
     lat: number;
     lng: number;
   };
+  /** Relación lógica con desarrollo (`developments.tokko_id`). */
+  developmentTokkoId?: string;
+  /** Texto crudo / payload para dashboard (inventario, días en mercado). */
+  listedAtIso?: string;
+  /** Clasificación operativa derivada del `status` en BD (Tokko). */
+  listingInventory?: "disponible" | "en_apartado" | "vendida" | "renta";
+  /** Galería completa (URLs o data URLs); la primera coincide con `image`. */
+  images?: string[];
 }
 
 interface PropertyCardProps {

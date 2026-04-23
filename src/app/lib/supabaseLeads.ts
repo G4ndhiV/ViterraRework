@@ -79,7 +79,6 @@ function leadToInsertRow(lead: Lead, ts: string) {
     source: lead.source || null,
     assigned_to: lead.assignedTo || null,
     assigned_to_user_id: lead.assignedToUserId || null,
-    lead_kind: "crm",
     created_at: tsFromDateField(lead.createdAt),
     last_contact: tsFromDateField(lead.lastContact),
     payload: leadPayloadForDb(lead) as Record<string, unknown>,

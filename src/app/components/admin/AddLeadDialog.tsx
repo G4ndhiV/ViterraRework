@@ -38,6 +38,8 @@ type Props = {
   pipelineGroupId?: string;
   /** Primera columna activa del pipeline; obligatoria para crear leads. */
   defaultStageId?: string | null;
+  /** Si se define, limita la asignación a estos IDs de usuario. */
+  allowedAssigneeUserIds?: string[];
   properties: Property[];
   developments: Development[];
 };
@@ -62,6 +64,7 @@ export function AddLeadDialog({
   customKanbanStages = [],
   pipelineGroupId = DEFAULT_PIPELINE_GROUP_ID,
   defaultStageId = null,
+  allowedAssigneeUserIds,
   properties,
   developments,
 }: Props) {
@@ -85,17 +88,27 @@ export function AddLeadDialog({
   const assigneeOptions = useMemo(() => {
     const fromTeam = teamUsers.filter((u) => u.isActive).map((u) => ({ id: u.id, name: u.name }));
     const list = fromTeam.length > 0 ? fromTeam : CRM_ASSIGNEES;
+    const scopedList =
+      allowedAssigneeUserIds && allowedAssigneeUserIds.length > 0
+        ? list.filter((a) => allowedAssigneeUserIds.includes(a.id))
+        : list;
     if (user.role === "asesor") {
-      return list.filter((a) => a.id === user.id);
+      return scopedList.filter((a) => a.id === user.id);
     }
-    return list;
-  }, [teamUsers, user.role, user.id]);
+    return scopedList;
+  }, [teamUsers, user.role, user.id, allowedAssigneeUserIds]);
 
   useEffect(() => {
     if (user.role === "asesor") {
       setAssigneeId(user.id);
     }
   }, [user.role, user.id]);
+
+  useEffect(() => {
+    if (assigneeOptions.length === 0) return;
+    if (assigneeOptions.some((opt) => opt.id === assigneeId)) return;
+    setAssigneeId(assigneeOptions[0].id);
+  }, [assigneeOptions, assigneeId]);
 
   const duplicates = useMemo(
     () => findDuplicateLeads(allLeads, form.email, form.phone),
@@ -120,6 +133,17 @@ export function AddLeadDialog({
       foldSearchText(`${d.name} ${d.location} ${d.type}`).includes(q)
     );
   }, [developments, developmentSearch]);
+
+  const propertyToDevelopmentId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const property of properties) {
+      const tokkoId = property.developmentTokkoId?.trim();
+      if (!tokkoId) continue;
+      const linkedDevelopment = developments.find((development) => development.tokkoId?.trim() === tokkoId);
+      if (linkedDevelopment) map.set(property.id, linkedDevelopment.id);
+    }
+    return map;
+  }, [properties, developments]);
 
   const hasDuplicate = duplicates.length > 0;
 
@@ -405,7 +429,18 @@ export function AddLeadDialog({
                   <select
                     id="lead-property"
                     value={form.relatedPropertyId}
-                    onChange={(e) => setForm((f) => ({ ...f, relatedPropertyId: e.target.value }))}
+                    onChange={(e) => {
+                      const propertyId = e.target.value;
+                      const linkedDevelopmentId = propertyToDevelopmentId.get(propertyId);
+                      setForm((f) => ({
+                        ...f,
+                        relatedPropertyId: propertyId,
+                        relatedDevelopmentId:
+                          propertyId.length === 0
+                            ? ""
+                            : linkedDevelopmentId ?? "",
+                      }));
+                    }}
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:ring-2 focus:ring-primary/20"
                     style={{ fontWeight: 500 }}
                   >

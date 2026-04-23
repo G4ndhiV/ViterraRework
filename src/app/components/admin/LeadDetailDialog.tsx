@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, ExternalLink, History, Mail, MessageCircle, Phone, Plus, Search, Tag, Trash2, UserCircle2 } from "lucide-react";
+import { Calendar, History, Mail, MessageCircle, Phone, Plus, Search, Tag, Trash2, UserCircle2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -209,10 +209,6 @@ export function LeadDetailDialog({
                     title="Abrir perfil del cliente en modulo Clientes"
                   >
                     <span className="font-heading truncate text-3xl leading-tight tracking-tight sm:text-4xl">{d.name}</span>
-                    <span className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-primary">
-                      Ver perfil
-                      <ExternalLink className="h-3 w-3" strokeWidth={2} />
-                    </span>
                   </button>
                 ) : (
                   <DialogTitle
@@ -325,7 +321,6 @@ export function LeadDetailDialog({
                       title="Abrir perfil del cliente en modulo Clientes"
                     >
                       {d.name}
-                      <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} />
                     </button>
                   ) : (
                     d.name
@@ -833,75 +828,74 @@ export function LeadDetailDialog({
                     </section>
                   </div>
 
-                  <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
-                    <div className="flex flex-wrap items-end justify-between gap-2 border-b border-stone-100 pb-3">
-                      <h3 className="text-base text-brand-navy" style={{ fontWeight: 700 }}>
-                        Propiedad o desarrollo relacionado
-                      </h3>
-                      <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                        Resumen
-                      </span>
-                    </div>
-                    <dl className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">
-                      {[
-                        { label: "Propiedad", value: selectedProperty?.title ?? "Sin propiedad vinculada" },
-                        { label: "Desarrollo", value: selectedDevelopment?.name ?? "Sin desarrollo vinculado" },
-                      ].map((item) => (
-                        <div
-                          key={item.label}
-                          className="rounded-xl bg-gradient-to-b from-stone-50/90 to-stone-50/40 px-3 py-3 ring-1 ring-stone-200/70 sm:px-4 sm:py-3.5"
-                        >
-                          <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                            {item.label}
-                          </dt>
-                          <dd
-                            className="mt-1.5 text-sm text-brand-navy"
-                            style={{ fontWeight: 600 }}
-                          >
-                            {item.value}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </section>
-
-                  <div className="flex items-center gap-2 border-b border-stone-200/90 pb-2 pt-1">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-navy/70" aria-hidden />
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                      Notas del cliente
-                    </span>
-                  </div>
-
-                  <section className="relative overflow-hidden rounded-2xl border border-stone-200/70 bg-gradient-to-b from-stone-100/80 to-stone-50/90 p-5 shadow-inner sm:p-6">
-                    <div
-                      className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-primary/[0.06]"
-                      aria-hidden
-                    />
-                    {sortLeadClientNotesNewestFirst(d.clientNotes).length === 0 ? (
-                      <p className="relative text-sm text-slate-500">
-                        Sin notas registradas. Usa «Editar» para añadir la primera.
-                      </p>
-                    ) : (
-                      <ul className="relative space-y-4">
-                        {sortLeadClientNotesNewestFirst(d.clientNotes).map((note) => (
-                          <li
-                            key={note.id}
-                            className="rounded-xl border border-stone-200/80 bg-white/90 px-4 py-3 shadow-sm ring-1 ring-stone-100/80"
-                          >
-                            <time
-                              className="text-[11px] font-semibold uppercase tracking-wide text-primary"
-                              dateTime={note.date}
-                            >
-                              {formatLeadDate(note.date)}
-                            </time>
-                            <p className="mt-2 whitespace-pre-wrap text-[15px] leading-relaxed text-slate-800" style={{ fontWeight: 400 }}>
-                              {note.body.trim() || "—"}
+                  <div className="grid grid-cols-1 gap-6">
+                    <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
+                      <div className="border-b border-stone-100 pb-3">
+                        <h3 className="text-base text-brand-navy" style={{ fontWeight: 700 }}>
+                          Propiedad o desarrollo relacionado
+                        </h3>
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        {selectedProperty ? (
+                          <article className="flex flex-col overflow-hidden rounded-xl border border-stone-200/80 bg-white shadow-sm lg:flex-row lg:items-stretch">
+                            <div className="w-full min-w-0 lg:w-[70%] lg:max-w-[70%] lg:flex-[0_0_70%]">
+                              <div className="aspect-[16/9] w-full min-w-0 bg-stone-100 lg:flex lg:min-h-[220px] lg:h-full lg:aspect-auto">
+                                {selectedProperty.image ? (
+                                  <img
+                                    src={selectedProperty.image}
+                                    alt={selectedProperty.title}
+                                    className="h-full w-full object-cover"
+                                    loading="lazy"
+                                  />
+                                ) : (
+                                  <div className="flex h-full min-h-[160px] w-full items-center justify-center text-xs text-slate-500 lg:min-h-[220px]">
+                                    Sin imagen
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex w-full min-w-0 flex-col justify-start gap-0 border-t border-stone-200/80 p-4 sm:p-5 lg:w-[30%] lg:max-w-[30%] lg:flex-[0_0_30%] lg:border-l lg:border-t-0">
+                              <div className="min-w-0 break-words">
+                                <p className="text-sm font-semibold text-brand-navy">{selectedProperty.title}</p>
+                                <p className="mt-0.5 text-xs text-slate-500">
+                                  {selectedProperty.location || "Ubicación no definida"}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-600">
+                                  {selectedProperty.status === "alquiler" ? "Alquiler" : "Venta"} ·{" "}
+                                  {selectedProperty.type || "Tipo no definido"}
+                                </p>
+                                <p className="mt-1.5 text-sm font-semibold text-primary">
+                                  ${Number(selectedProperty.price || 0).toLocaleString("es-MX")}
+                                </p>
+                              </div>
+                              <div className="mt-4 border-t border-stone-200/80 pt-4">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                                  Desarrollo
+                                </p>
+                                <p className="mt-1.5 text-sm text-brand-navy" style={{ fontWeight: 600 }}>
+                                  {selectedDevelopment?.name ?? "Sin desarrollo vinculado"}
+                                </p>
+                              </div>
+                            </div>
+                          </article>
+                        ) : (
+                          <>
+                            <p className="rounded-xl bg-gradient-to-b from-stone-50/90 to-stone-50/40 px-3 py-3 text-sm text-slate-500 ring-1 ring-stone-200/70 sm:px-4 sm:py-3.5">
+                              Sin propiedad vinculada
                             </p>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </section>
+                            <div className="rounded-xl bg-gradient-to-b from-stone-50/90 to-stone-50/40 px-3 py-3 ring-1 ring-stone-200/70 sm:px-4 sm:py-3.5">
+                              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                                Desarrollo
+                              </p>
+                              <p className="mt-1.5 text-sm text-brand-navy" style={{ fontWeight: 600 }}>
+                                {selectedDevelopment?.name ?? "Sin desarrollo vinculado"}
+                              </p>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </section>
+                  </div>
                 </main>
 
                 <aside className="flex flex-col gap-0 lg:sticky lg:top-1 lg:col-span-5 xl:col-span-4">
