@@ -510,10 +510,10 @@ export function AdminUserProfilePanel() {
                 );
               }
               return (
-                <div className="grid gap-2">
-                  {enabledCards.map(({ value, label, description, Icon }) => (
+                <div className="grid grid-cols-2 gap-2">
+                  {enabledCards.map(({ value, label, Icon }) => (
                     <div key={value} className="relative rounded-xl border border-primary/35 bg-primary/[0.04] p-3">
-                      <div className="flex items-start gap-3">
+                      <div className="flex items-center gap-3">
                         <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-primary">
                           <Icon className="h-4.5 w-4.5" strokeWidth={1.7} />
                         </span>
@@ -521,7 +521,6 @@ export function AdminUserProfilePanel() {
                           <p className="text-sm text-slate-900" style={{ fontWeight: 700 }}>
                             {label}
                           </p>
-                          <p className="text-xs text-slate-600">{description}</p>
                         </div>
                       </div>
                     </div>
