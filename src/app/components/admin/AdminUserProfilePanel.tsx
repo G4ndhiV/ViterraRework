@@ -45,7 +45,7 @@ function hasPerm(permissions: UserPermission[] | undefined, p: UserPermission) {
 }
 
 const inputClass =
-  "h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-navy placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15";
+  "h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-navy ring-2 ring-transparent transition-[color,box-shadow] placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15";
 
 const readClass = "w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700";
 
@@ -420,16 +420,18 @@ export function AdminUserProfilePanel() {
             </div>
 
             <div className="space-y-1.5 sm:col-span-2">
-              <div className="flex items-center justify-between gap-2">
-                <Label className="text-xs text-slate-600">
+              <div className="flex min-h-7 items-center justify-between gap-2">
+                <Label className="min-w-0 text-xs text-slate-600">
                   <Mail className="mb-0.5 mr-1 inline h-3.5 w-3.5" strokeWidth={1.5} />
                   Correo
                 </Label>
-                {canEditSensitive && draft.email.trim() ? (
-                  <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" disabled={saving} onClick={() => void clearField("email")}>
-                    Quitar
-                  </Button>
-                ) : null}
+                <div className="flex h-7 w-16 shrink-0 items-center justify-end sm:w-20" aria-hidden={!(canEditSensitive && draft.email.trim())}>
+                  {canEditSensitive && draft.email.trim() ? (
+                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" disabled={saving} onClick={() => void clearField("email")}>
+                      Quitar
+                    </Button>
+                  ) : null}
+                </div>
               </div>
               <input
                 className={cn(inputClass, !canEditSensitive && "bg-slate-50 text-slate-600")}
@@ -440,56 +442,65 @@ export function AdminUserProfilePanel() {
             </div>
 
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <Label className="text-xs text-slate-600">
+              <div className="flex min-h-7 items-center justify-between gap-2">
+                <Label className="min-w-0 text-xs text-slate-600">
                   <Phone className="mb-0.5 mr-1 inline h-3.5 w-3.5" strokeWidth={1.5} />
                   Teléfono
                 </Label>
-                {draft.phone ? (
-                  <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" disabled={saving} onClick={() => void clearField("phone")}>
-                    Quitar
-                  </Button>
-                ) : null}
+                <div className="flex h-7 w-16 shrink-0 items-center justify-end sm:w-20" aria-hidden={!draft.phone}>
+                  {draft.phone ? (
+                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" disabled={saving} onClick={() => void clearField("phone")}>
+                      Quitar
+                    </Button>
+                  ) : null}
+                </div>
               </div>
               <input className={inputClass} value={draft.phone} onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))} />
             </div>
 
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <Label className="text-xs text-slate-600">
+              <div className="flex min-h-7 items-center justify-between gap-2">
+                <Label className="min-w-0 text-xs text-slate-600">
                   <Smartphone className="mb-0.5 mr-1 inline h-3.5 w-3.5" strokeWidth={1.5} />
                   Celular
                 </Label>
-                {draft.cellphone ? (
-                  <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" disabled={saving} onClick={() => void clearField("cellphone")}>
-                    Quitar
-                  </Button>
-                ) : null}
+                <div className="flex h-7 w-16 shrink-0 items-center justify-end sm:w-20" aria-hidden={!draft.cellphone}>
+                  {draft.cellphone ? (
+                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" disabled={saving} onClick={() => void clearField("cellphone")}>
+                      Quitar
+                    </Button>
+                  ) : null}
+                </div>
               </div>
               <input className={inputClass} value={draft.cellphone} onChange={(e) => setDraft((d) => ({ ...d, cellphone: e.target.value }))} />
             </div>
 
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <Label className="text-xs text-slate-600">
+              <div className="flex min-h-7 items-center justify-between gap-2">
+                <Label className="min-w-0 text-xs text-slate-600">
                   <Briefcase className="mb-0.5 mr-1 inline h-3.5 w-3.5" strokeWidth={1.5} />
                   Puesto
                 </Label>
-                {draft.position.trim() ? (
-                  <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" disabled={saving} onClick={() => void clearField("position")}>
-                    Quitar
-                  </Button>
-                ) : null}
+                <div className="flex h-7 w-16 shrink-0 items-center justify-end sm:w-20" aria-hidden={!draft.position.trim()}>
+                  {draft.position.trim() ? (
+                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" disabled={saving} onClick={() => void clearField("position")}>
+                      Quitar
+                    </Button>
+                  ) : null}
+                </div>
               </div>
               <input className={inputClass} value={draft.position} onChange={(e) => setDraft((d) => ({ ...d, position: e.target.value }))} />
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs text-slate-600">
-                <Shield className="mb-0.5 mr-1 inline h-3.5 w-3.5" strokeWidth={1.5} />
-                Rol
-              </Label>
-              <p className={readClass}>{roRole}</p>
+              <div className="flex min-h-7 items-center justify-between gap-2">
+                <Label className="min-w-0 text-xs text-slate-600">
+                  <Shield className="mb-0.5 mr-1 inline h-3.5 w-3.5" strokeWidth={1.5} />
+                  Rol
+                </Label>
+                <div className="h-7 w-16 shrink-0 sm:w-20" aria-hidden />
+              </div>
+              <p className={cn(readClass, "min-h-9")}>{roRole}</p>
             </div>
           </div>
         </div>

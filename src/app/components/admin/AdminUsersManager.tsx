@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { User, UserHistoryEntry, UserPermission, UserRole } from "../../contexts/AuthContext";
 import { labelForLeadStatus, type CustomKanbanStage, type Lead } from "../../data/leads";
+import type { Development } from "../../data/developments";
 import {
   Dialog,
   DialogClose,
@@ -42,6 +43,7 @@ import {
   SelectValue,
 } from "../ui/select";
 import { cn } from "../ui/utils";
+import type { Property } from "../PropertyCard";
 import { foldSearchText } from "../../lib/searchText";
 import type { UserGroup } from "../../lib/userGroups";
 import { DEFAULT_PIPELINE_GROUP_ID, loadPipelineByGroup } from "../../lib/pipelineByGroup";
@@ -188,6 +190,8 @@ interface Props {
   currentUser: User;
   users: User[];
   leads: Lead[];
+  properties?: Property[];
+  developments?: Development[];
   /** Etapas personalizadas del pipeline para mostrar el nombre de etapa en las cards. */
   customKanbanStages?: CustomKanbanStage[];
   userGroups?: UserGroup[];
@@ -225,6 +229,8 @@ export function AdminUsersManager({
   currentUser,
   users,
   leads,
+  properties = [],
+  developments = [],
   customKanbanStages = [],
   userGroups = [],
   onViewLead,
@@ -244,6 +250,8 @@ export function AdminUsersManager({
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  /** Solo `true` al abrir desde el icono de editar; desde el nombre es vista de solo lectura. */
+  const [userDetailEditMode, setUserDetailEditMode] = useState(false);
   const [creatingOpen, setCreatingOpen] = useState(false);
   const [passwordModal, setPasswordModal] = useState<User | null>(null);
   const [archiveCandidate, setArchiveCandidate] = useState<User | null>(null);
@@ -285,6 +293,7 @@ export function AdminUsersManager({
   }, [users, showArchived, roleFilter, userSearchQuery]);
 
   const closeUserDetail = () => {
+    setUserDetailEditMode(false);
     setSelectedUser(null);
     onUserDetailClosed?.();
   };
@@ -294,6 +303,7 @@ export function AdminUsersManager({
     const targetId = focusUser.id.trim().toLowerCase();
     const u = users.find((x) => x.id.trim().toLowerCase() === targetId);
     if (u) {
+      setUserDetailEditMode(false);
       setSelectedUser(u);
       onFocusUserConsumed?.();
       return;
@@ -311,17 +321,32 @@ export function AdminUsersManager({
   const selectedUserAssignedLeads = useMemo(() => {
     if (!selectedUser) return [];
     const selectedId = selectedUser.id.trim().toLowerCase();
+    const coveredUserIds = new Set<string>([selectedId]);
+    if (selectedUser.role === "lider_grupo") {
+      for (const group of userGroups) {
+        if (group.leaderId !== selectedUser.id) continue;
+        for (const memberId of group.memberIds) {
+          const normalizedMemberId = memberId.trim().toLowerCase();
+          if (normalizedMemberId) coveredUserIds.add(normalizedMemberId);
+        }
+      }
+    }
+
     const aliases = new Set<string>();
-    const selectedName = foldSearchText(selectedUser.name);
-    const selectedEmail = foldSearchText(selectedUser.email);
-    const selectedEmailUser = foldSearchText(selectedUser.email.split("@")[0] ?? "");
-    if (selectedName) aliases.add(selectedName);
-    if (selectedEmail) aliases.add(selectedEmail);
-    if (selectedEmailUser) aliases.add(selectedEmailUser);
+    for (const userId of coveredUserIds) {
+      const matchedUser = users.find((u) => u.id.trim().toLowerCase() === userId);
+      const baseName = foldSearchText(matchedUser?.name ?? "");
+      const baseEmail = foldSearchText(matchedUser?.email ?? "");
+      const emailUser = foldSearchText((matchedUser?.email ?? "").split("@")[0] ?? "");
+      if (baseName) aliases.add(baseName);
+      if (baseEmail) aliases.add(baseEmail);
+      if (emailUser) aliases.add(emailUser);
+    }
+
     return leads
       .filter((lead) => {
         const leadAssignedId = lead.assignedToUserId?.trim().toLowerCase();
-        if (leadAssignedId && leadAssignedId === selectedId) return true;
+        if (leadAssignedId && coveredUserIds.has(leadAssignedId)) return true;
 
         const assignedByName = foldSearchText(lead.assignedTo);
         if (!assignedByName) return false;
@@ -333,7 +358,7 @@ export function AdminUsersManager({
         return false;
       })
       .sort((a, b) => Date.parse(b.updatedAt || b.createdAt) - Date.parse(a.updatedAt || a.createdAt));
-  }, [selectedUser, leads]);
+  }, [selectedUser, leads, userGroups, users]);
 
   const selectedUserGroups = useMemo(() => {
     if (!selectedUser) return [];
@@ -347,6 +372,30 @@ export function AdminUsersManager({
   }, [selectedUser, userGroups]);
 
   const pipelineByGroup = useMemo(() => loadPipelineByGroup(), []);
+  const propertyById = useMemo(() => new Map(properties.map((p) => [p.id, p] as const)), [properties]);
+  const developmentById = useMemo(() => new Map(developments.map((d) => [d.id, d] as const)), [developments]);
+
+  const resolveLeadVisualImage = useCallback(
+    (lead: Lead): string => {
+      if (lead.relatedPropertyId) {
+        const property = propertyById.get(lead.relatedPropertyId);
+        const propertyImage = (property?.image ?? "").trim();
+        if (propertyImage) return propertyImage;
+        const galleryImage = property?.images?.[0]?.trim() ?? "";
+        if (galleryImage) return galleryImage;
+      }
+      if (lead.relatedDevelopmentId) {
+        const development = developmentById.get(lead.relatedDevelopmentId);
+        const developmentImage = (development?.image ?? "").trim();
+        if (developmentImage) return developmentImage;
+        const galleryImage = development?.images?.[0]?.trim() ?? "";
+        if (galleryImage) return galleryImage;
+      }
+      return "";
+    },
+    [propertyById, developmentById]
+  );
+
   const resolveLeadStatusLabel = useCallback(
     (lead: Lead) => {
       const customStagesForLead =
@@ -409,6 +458,7 @@ export function AdminUsersManager({
   };
 
   const canManageUsers = currentUser.role === "admin";
+  const isEditingUserDetail = canManageUsers && userDetailEditMode;
 
   return (
     <div className="space-y-6">
@@ -546,7 +596,15 @@ export function AdminUsersManager({
               filteredUsers.map((user) => (
                 <tr key={user.id} className="border-t border-slate-100">
                   <td className="px-4 py-3">
-                    <button type="button" onClick={() => setSelectedUser(user)} className="text-left">
+                    <button
+                      type="button"
+                      title="Ver detalle"
+                      onClick={() => {
+                        setUserDetailEditMode(false);
+                        setSelectedUser(user);
+                      }}
+                      className="text-left"
+                    >
                       <p className="text-sm font-semibold text-slate-900">{user.name}</p>
                       <p className="text-xs text-slate-500">
                         {user.isActive ? "Activo" : `Archivado ${new Date(user.archivedAt || "").toLocaleDateString()}`}
@@ -561,7 +619,15 @@ export function AdminUsersManager({
                   <td className="px-4 py-3 text-xs text-slate-700">{user.permissions.join(", ")}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
-                      <button type="button" onClick={() => setSelectedUser(user)} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" title="Detalle">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserDetailEditMode(true);
+                          setSelectedUser(user);
+                        }}
+                        className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                        title="Editar usuario"
+                      >
                         <Edit className="h-4 w-4" />
                       </button>
                       {canManageUsers && (
@@ -732,7 +798,7 @@ export function AdminUsersManager({
                         >
                           {selectedUser.name}
                         </DialogTitle>
-                        {canManageUsers ? (
+                        {isEditingUserDetail ? (
                           <div className="mt-1.5 max-w-[16rem]">
                             <select
                               value={selectedUser.role}
@@ -769,7 +835,7 @@ export function AdminUsersManager({
                           Cerrar
                         </Button>
                       </DialogClose>
-                      {canManageUsers && (
+                      {isEditingUserDetail && (
                         <Button
                           type="button"
                           className="h-10 w-full min-w-[10rem] bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-brand-red-hover min-[1100px]:w-auto"
@@ -799,9 +865,75 @@ export function AdminUsersManager({
                 <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
                   <div className="mx-auto w-full max-w-[min(100%,88rem)]">
                     <div className="space-y-8">
+                      {isEditingUserDetail ? (
+                        <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
+                          <div className="flex items-center gap-2">
+                            <Shield className="h-4 w-4 text-brand-navy" strokeWidth={1.75} />
+                            <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
+                              Configurar permisos y módulos
+                            </h3>
+                          </div>
+                          <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                            Solo puedes editar rol y permisos de módulos para este usuario.
+                          </p>
+                          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                            {permissionCards.map((card) => {
+                              const on = selectedUser.permissions.includes(card.value);
+                              const CardIcon = card.Icon;
+                              return (
+                                <button
+                                  key={card.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedUser((prev) => {
+                                      if (!prev) return prev;
+                                      return {
+                                        ...prev,
+                                        permissions: on
+                                          ? prev.permissions.filter((p) => p !== card.value)
+                                          : [...prev.permissions, card.value],
+                                      };
+                                    });
+                                  }}
+                                  className={cn(
+                                    "relative flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all",
+                                    on
+                                      ? "border-primary/45 bg-primary/[0.05] ring-1 ring-primary/20"
+                                      : "border-stone-200/90 bg-stone-50/30 hover:border-stone-300 hover:bg-white"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ring-1",
+                                      on
+                                        ? "bg-primary/15 text-primary ring-primary/20"
+                                        : "bg-stone-100 text-slate-600 ring-stone-200/80"
+                                    )}
+                                  >
+                                    <CardIcon className="h-4 w-4" strokeWidth={1.75} />
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
+                                      {card.label}
+                                    </p>
+                                  </div>
+                                  {on ? (
+                                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white shadow-sm">
+                                      <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+                                    </span>
+                                  ) : (
+                                    <span className="h-6 w-6 shrink-0 rounded-full border border-stone-200 bg-white" />
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      ) : (
+                      <>
                       <div className="grid grid-cols-1 gap-8 text-sm lg:grid-cols-12 lg:items-stretch lg:gap-8 xl:gap-10">
-                        <div className="min-w-0 lg:col-span-7">
-                          <section className="h-full rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
+                        <div className="flex min-w-0 flex-col gap-6 lg:col-span-7">
+                          <section className="h-full w-full self-start rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
                             <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
                               Contacto y datos personales
                             </h3>
@@ -880,10 +1012,76 @@ export function AdminUsersManager({
                               </div>
                             </div>
                           </section>
+
+                          {isEditingUserDetail && (
+                            <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
+                              <div className="flex items-center gap-2">
+                                <Shield className="h-4 w-4 text-brand-navy" strokeWidth={1.75} />
+                                <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
+                                  Configurar módulos
+                                </h3>
+                              </div>
+                              <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                                Activa o desactiva el acceso a cada módulo. Recuerda guardar con el botón superior.
+                              </p>
+                              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                                {permissionCards.map((card) => {
+                                  const on = selectedUser.permissions.includes(card.value);
+                                  const CardIcon = card.Icon;
+                                  return (
+                                    <button
+                                      key={card.value}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedUser((prev) => {
+                                          if (!prev) return prev;
+                                          return {
+                                            ...prev,
+                                            permissions: on
+                                              ? prev.permissions.filter((p) => p !== card.value)
+                                              : [...prev.permissions, card.value],
+                                          };
+                                        });
+                                      }}
+                                      className={cn(
+                                        "relative flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all",
+                                        on
+                                          ? "border-primary/45 bg-primary/[0.05] ring-1 ring-primary/20"
+                                          : "border-stone-200/90 bg-stone-50/30 hover:border-stone-300 hover:bg-white"
+                                      )}
+                                    >
+                                      <span
+                                        className={cn(
+                                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ring-1",
+                                          on
+                                            ? "bg-primary/15 text-primary ring-primary/20"
+                                            : "bg-stone-100 text-slate-600 ring-stone-200/80"
+                                        )}
+                                      >
+                                        <CardIcon className="h-4 w-4" strokeWidth={1.75} />
+                                      </span>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
+                                          {card.label}
+                                        </p>
+                                      </div>
+                                      {on ? (
+                                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white shadow-sm">
+                                          <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+                                        </span>
+                                      ) : (
+                                        <span className="h-6 w-6 shrink-0 rounded-full border border-stone-200 bg-white" />
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </section>
+                          )}
                         </div>
 
                         <aside className="min-w-0 lg:sticky lg:top-2 lg:col-span-5 lg:self-start">
-                          <section className="h-full rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
+                          <section className="h-full w-full rounded-2xl border border-stone-200/90 bg-white p-5 shadow-sm sm:p-6">
                             <div className="flex items-center gap-2">
                               <Shield className="h-4 w-4 text-brand-navy" strokeWidth={1.75} />
                               <h3 className="text-sm text-slate-700" style={{ fontWeight: 600 }}>
@@ -893,67 +1091,6 @@ export function AdminUsersManager({
                             <p className="mt-1 text-xs leading-relaxed text-slate-500">
                               Resumen de accesos y equipos del usuario seleccionado.
                             </p>
-
-                            {canManageUsers && (
-                              <>
-                                <p className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                  Configurar módulos
-                                </p>
-                                <div className="grid gap-2">
-                                  {permissionCards.map((card) => {
-                                    const on = selectedUser.permissions.includes(card.value);
-                                    const CardIcon = card.Icon;
-                                    return (
-                                      <button
-                                        key={card.value}
-                                        type="button"
-                                        onClick={() => {
-                                          setSelectedUser((prev) => {
-                                            if (!prev) return prev;
-                                            return {
-                                              ...prev,
-                                              permissions: on
-                                                ? prev.permissions.filter((p) => p !== card.value)
-                                                : [...prev.permissions, card.value],
-                                            };
-                                          });
-                                        }}
-                                        className={cn(
-                                          "relative flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all",
-                                          on
-                                            ? "border-primary/45 bg-primary/[0.05] ring-1 ring-primary/20"
-                                            : "border-stone-200/90 bg-stone-50/30 hover:border-stone-300 hover:bg-white"
-                                        )}
-                                      >
-                                        <span
-                                          className={cn(
-                                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ring-1",
-                                            on
-                                              ? "bg-primary/15 text-primary ring-primary/20"
-                                              : "bg-stone-100 text-slate-600 ring-stone-200/80"
-                                          )}
-                                        >
-                                          <CardIcon className="h-4 w-4" strokeWidth={1.75} />
-                                        </span>
-                                        <div className="min-w-0 flex-1">
-                                          <p className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
-                                            {card.label}
-                                          </p>
-                                          <p className="text-[11px] text-slate-500">{card.description}</p>
-                                        </div>
-                                        {on ? (
-                                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white shadow-sm">
-                                            <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-                                          </span>
-                                        ) : (
-                                          <span className="h-6 w-6 shrink-0 rounded-full border border-stone-200 bg-white" />
-                                        )}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </>
-                            )}
 
                             <div className="mt-5">
                               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -990,37 +1127,39 @@ export function AdminUsersManager({
                               )}
                             </div>
 
-                            <div className="mt-6 border-t border-stone-200/80 pt-5">
-                              <h4 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                                Equipos del usuario
-                              </h4>
-                              <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                                {selectedUserGroups.length === 0
-                                  ? "No pertenece a ningún grupo."
-                                  : `Pertenece a ${selectedUserGroups.length} grupo${selectedUserGroups.length === 1 ? "" : "s"}.`}
-                              </p>
-                              {selectedUserGroups.length === 0 ? (
-                                <p className="mt-4 rounded-xl border border-dashed border-stone-200 bg-stone-50/50 px-4 py-8 text-center text-sm text-slate-500">
-                                  Sin equipos asignados.
+                            {selectedUser.role !== "admin" && (
+                              <div className="mt-6 border-t border-stone-200/80 pt-5">
+                                <h4 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                                  Equipos del usuario
+                                </h4>
+                                <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                                  {selectedUserGroups.length === 0
+                                    ? "No pertenece a ningún grupo."
+                                    : `Pertenece a ${selectedUserGroups.length} grupo${selectedUserGroups.length === 1 ? "" : "s"}.`}
                                 </p>
-                              ) : (
-                                <ul className="mt-4 space-y-2">
-                                  {selectedUserGroups.map((group) => (
-                                    <li
-                                      key={group.id}
-                                      className="rounded-xl border border-stone-200/90 bg-stone-50/40 px-4 py-3 text-sm text-slate-800 ring-1 ring-stone-100"
-                                    >
-                                      <p className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
-                                        {group.name}
-                                      </p>
-                                      <p className="text-xs text-slate-500">
-                                        {group.isLeader ? "Líder del grupo" : "Miembro"}
-                                      </p>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </div>
+                                {selectedUserGroups.length === 0 ? (
+                                  <p className="mt-4 rounded-xl border border-dashed border-stone-200 bg-stone-50/50 px-4 py-8 text-center text-sm text-slate-500">
+                                    Sin equipos asignados.
+                                  </p>
+                                ) : (
+                                  <ul className="mt-4 space-y-2">
+                                    {selectedUserGroups.map((group) => (
+                                      <li
+                                        key={group.id}
+                                        className="rounded-xl border border-stone-200/90 bg-stone-50/40 px-4 py-3 text-sm text-slate-800 ring-1 ring-stone-100"
+                                      >
+                                        <p className="text-sm text-brand-navy" style={{ fontWeight: 700 }}>
+                                          {group.name}
+                                        </p>
+                                        <p className="text-xs text-slate-500">
+                                          {group.isLeader ? "Líder del grupo" : "Miembro"}
+                                        </p>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            )}
                           </section>
                         </aside>
                       </div>
@@ -1074,8 +1213,19 @@ export function AdminUsersManager({
                             >
                               {selectedUserAssignedLeads.map((lead) => {
                                 const statusLabel = resolveLeadStatusLabel(lead);
+                                const leadVisualImage = resolveLeadVisualImage(lead);
                                 const body = (
                                   <>
+                                    {leadVisualImage ? (
+                                      <div className="mb-3 overflow-hidden rounded-lg border border-stone-200/90">
+                                        <img
+                                          src={leadVisualImage}
+                                          alt={`Relacionado con ${lead.name}`}
+                                          className="h-24 w-full object-cover"
+                                          loading="lazy"
+                                        />
+                                      </div>
+                                    ) : null}
                                     <p className="line-clamp-2 min-h-[2.5rem] text-sm text-brand-navy" style={{ fontWeight: 700 }}>
                                       {lead.name}
                                     </p>
@@ -1122,9 +1272,11 @@ export function AdminUsersManager({
                           </div>
                         )}
                       </section>
-                    </div>
+                    </>
+                      )}
                   </div>
                 </div>
+              </div>
               </div>
             </>
           )}

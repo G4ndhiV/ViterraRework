@@ -69,9 +69,9 @@ function canManageAllClients(user: User): boolean {
   return user.role === "admin";
 }
 
-/** Crear/editar/guardar ficha CRM: solo admin y líder. El asesor solo consulta y puede usar WhatsApp. */
+/** Crear/editar/guardar ficha CRM: solo admin. Líder y asesor solo consulta (WhatsApp permitido). */
 function canModifyClientRecord(user: User): boolean {
-  return user.role !== "asesor";
+  return user.role === "admin";
 }
 
 /** Compara ids de usuario (p. ej. UUID de Supabase); insensible a mayúsculas y espacios. */
@@ -117,13 +117,9 @@ function clientEditableByUser(
   return clientVisibleToUser(user, client, leadsById, groupScopedLeadAssigneeIds);
 }
 
-/** Admin y líder pueden editar fichas aunque falte el permiso explícito en el usuario. */
+/** Solo administrador puede editar fichas de cliente. */
 function userMayEditClientRecords(user: User): boolean {
-  return (
-    user.role === "admin" ||
-    user.role === "lider_grupo" ||
-    user.permissions.includes("manage_clients")
-  );
+  return user.role === "admin";
 }
 
 function clientRowEditable(

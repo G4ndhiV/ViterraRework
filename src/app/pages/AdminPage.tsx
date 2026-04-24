@@ -221,6 +221,7 @@ export function AdminPage() {
   const [propertyCurrencyFilter, setPropertyCurrencyFilter] = useState("MXN");
   const [propertyMaxPrice, setPropertyMaxPrice] = useState("");
   const [propertyLocationFilter, setPropertyLocationFilter] = useState("all");
+  const [expandedLeaderGroupId, setExpandedLeaderGroupId] = useState<string | null>(null);
   const [propertyInventoryView, setPropertyInventoryView] = useState<"cards" | "list" | "map">("cards");
   const [adminHeaderQuery, setAdminHeaderQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -261,7 +262,8 @@ export function AdminPage() {
   const isGroupLeader = user?.role === "lider_grupo";
   const isAdvisor = user?.role === "asesor";
   const canAccessCompanyModule = !isAdvisor;
-  const canManageInventory = !isAdvisor;
+  // Inventario (propiedades/desarrollos) solo editable por administradores.
+  const canManageInventory = user?.role === "admin";
   // Verificar autenticación y cargar datos
   useEffect(() => {
     if (!authReady) return;
@@ -3269,6 +3271,8 @@ export function AdminPage() {
                     currentUser={user}
                     users={users}
                     leads={leads}
+                    properties={properties}
+                    developments={developments}
                     customKanbanStages={customKanbanStages}
                     userGroups={userGroups}
                     onUserGroupsChange={handleUserGroupsChange}
@@ -3343,10 +3347,11 @@ export function AdminPage() {
                           </div>
                         </div>
                       ) : (
-                        <div className="grid gap-3 p-5 lg:grid-cols-2">
+                        <div className="grid gap-3 p-5">
                           {pipelineGroupsVisibleToLeader.map((group) => {
                             const advisors = advisorsByGroupId[group.id] ?? [];
                             const isActiveGroup = activePipelineGroupId === group.id;
+                            const isExpanded = expandedLeaderGroupId === group.id;
                             return (
                               <article
                                 key={group.id}
@@ -3357,15 +3362,22 @@ export function AdminPage() {
                                     : "border-slate-200/80 shadow-[0_8px_24px_-16px_rgba(20,28,46,0.2)]"
                                 )}
                               >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <p className="truncate text-sm text-brand-navy" style={{ fontWeight: 700 }}>
+                                <div className="flex items-center justify-between gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedLeaderGroupId((prev) => (prev === group.id ? null : group.id))
+                                    }
+                                    className="flex min-w-0 items-center gap-2 text-left"
+                                  >
+                                    <ChevronDown
+                                      className={cn("h-4 w-4 text-slate-500 transition-transform", isExpanded && "rotate-180")}
+                                      strokeWidth={1.9}
+                                    />
+                                    <p className="truncate text-lg text-brand-navy" style={{ fontWeight: 700 }}>
                                       {group.name}
                                     </p>
-                                    <p className="mt-1 text-xs text-slate-500">
-                                      {advisors.length} asesor{advisors.length === 1 ? "" : "es"}
-                                    </p>
-                                  </div>
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={() => setActivePipelineGroupId(group.id)}
@@ -3381,27 +3393,34 @@ export function AdminPage() {
                                   </button>
                                 </div>
 
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                  {advisors.length > 0 ? (
-                                    advisors.map((advisor) => (
-                                      <button
-                                        type="button"
-                                        key={advisor.id}
-                                        onClick={() => handleViewTeamMember(advisor.id, advisor.name)}
-                                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200/90 bg-slate-50 px-2.5 py-1.5 text-left text-[11px] text-slate-700 transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
-                                      >
-                                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/12 text-[10px] text-primary">
-                                          {(advisor.name || advisor.email || "?").trim().charAt(0).toUpperCase()}
-                                        </span>
-                                        <span className="max-w-[10rem] truncate" style={{ fontWeight: 600 }}>
-                                          {advisor.name || advisor.email}
-                                        </span>
-                                      </button>
-                                    ))
-                                  ) : (
-                                    <span className="text-xs text-slate-500">Sin asesores activos en este grupo.</span>
-                                  )}
-                                </div>
+                                {isExpanded ? (
+                                  <div className="mt-3 border-t border-slate-200/80 pt-3">
+                                    <p className="mb-2 text-xs text-slate-500" style={{ fontWeight: 600 }}>
+                                      {advisors.length} asesor{advisors.length === 1 ? "" : "es"}
+                                    </p>
+                                    {advisors.length > 0 ? (
+                                      <div className="space-y-2">
+                                        {advisors.map((advisor) => (
+                                          <button
+                                            type="button"
+                                            key={advisor.id}
+                                            onClick={() => handleViewTeamMember(advisor.id, advisor.name)}
+                                            className="flex w-full items-center gap-2 rounded-lg border border-slate-200/90 bg-slate-50 px-3 py-2 text-left text-sm text-slate-700 transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                                          >
+                                            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/12 text-[11px] text-primary">
+                                              {(advisor.name || advisor.email || "?").trim().charAt(0).toUpperCase()}
+                                            </span>
+                                            <span className="truncate" style={{ fontWeight: 600 }}>
+                                              {advisor.name || advisor.email}
+                                            </span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs text-slate-500">Sin asesores activos en este grupo.</span>
+                                    )}
+                                  </div>
+                                ) : null}
                               </article>
                             );
                           })}

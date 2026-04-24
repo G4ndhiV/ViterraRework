@@ -64,7 +64,7 @@ const emptyForm = {
 
 export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Props) {
   const { user } = useAuth();
-  const readOnly = user?.role === "asesor";
+  const readOnly = user?.role === "asesor" || user?.role === "lider_grupo";
   const [editing, setEditing] = useState<Development | null>(null);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
