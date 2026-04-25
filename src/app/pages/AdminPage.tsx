@@ -36,6 +36,9 @@ import {
   Map as MapIcon,
   UserCircle2,
   Star,
+  TextSearch,
+  Copy,
+  Hash,
 } from "lucide-react";
 import { AdminSiteEditor } from "../components/admin/AdminSiteEditor";
 import { useAuth, type User } from "../contexts/AuthContext";
@@ -45,6 +48,7 @@ import {
   labelForLeadStatus,
   newLeadActivityId,
   newCustomStageId,
+  normalizeLeadPipelineStatus,
   type CustomKanbanStage,
 } from "../data/leads";
 import { getSupabaseClient, getSupabaseProjectHost, syncSupabaseAuthSession } from "../lib/supabaseClient";
@@ -134,6 +138,7 @@ import {
 import {
   DEFAULT_PIPELINE_GROUP_ID,
   canConfigurePipelineForGroup,
+  cloneGroupPipelineSnapshot,
   createDefaultBuiltinPipelineSnapshot,
   createEmptyGroupPipelineSnapshot,
   getAllowedPipelineGroupIds,
@@ -193,6 +198,13 @@ function teamMemberMatchesFoldedQuery(u: User, q: string): boolean {
   );
 }
 
+/** Misma base que arriba, pero solo por nombre (filtro «nombre del asesor»). */
+function teamMemberNameMatchesFoldedQuery(u: User, q: string): boolean {
+  if (u.role !== "asesor" && u.role !== "lider_grupo") return false;
+  if (!u.isActive || !q) return false;
+  return foldSearchText(u.name).includes(q);
+}
+
 export function AdminPage() {
   const navigate = useNavigate();
   const {
@@ -225,17 +237,19 @@ export function AdminPage() {
     null
   );
   const [propertySearchQuery, setPropertySearchQuery] = useState("");
+  const [propertyReferenceCodeQuery, setPropertyReferenceCodeQuery] = useState("");
   const [propertyOperationFilter, setPropertyOperationFilter] = useState("all");
   const [propertyTypeFilter, setPropertyTypeFilter] = useState("all");
-  const [propertyCurrencyFilter, setPropertyCurrencyFilter] = useState("MXN");
-  const [propertyMaxPrice, setPropertyMaxPrice] = useState("");
   const [propertyLocationFilter, setPropertyLocationFilter] = useState("all");
+  /** Misma noción que en desarrollos: todas / solo destacadas (portada) / sin destacar. */
+  const [propertyFeaturedFilter, setPropertyFeaturedFilter] = useState<"all" | "featured" | "normal">("all");
   const [expandedLeaderGroupId, setExpandedLeaderGroupId] = useState<string | null>(null);
   const [propertyInventoryView, setPropertyInventoryView] = useState<"cards" | "list" | "map">("cards");
   const [adminHeaderQuery, setAdminHeaderQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  /** Ámbito del texto de búsqueda en leads (admin, líder y asesor comparten la misma lógica). */
+  const [leadSearchNameScope, setLeadSearchNameScope] = useState<"all" | "client" | "advisor">("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   const [createdRangeFilter, setCreatedRangeFilter] = useState<
     "all" | "1m" | "3m" | "6m" | "1y" | "custom"
   >("all");
@@ -252,6 +266,8 @@ export function AdminPage() {
   const [pipelineSourcesHydrated, setPipelineSourcesHydrated] = useState(false);
   const [userGroups, setUserGroups] = useState<UserGroup[]>([]);
   const [activePipelineGroupId, setActivePipelineGroupId] = useState<string>(DEFAULT_PIPELINE_GROUP_ID);
+  const [pipelineCopyFrom, setPipelineCopyFrom] = useState<string>("");
+  const [pipelineCopyTo, setPipelineCopyTo] = useState<string>("");
   const [leadDialog, setLeadDialog] = useState<{ lead: Lead; mode: "view" | "edit" } | null>(null);
   const [usersPanelFocus, setUsersPanelFocus] = useState<{ id: string; nonce: number } | null>(null);
   /** Si se abrió la ficha desde un lead (CRM), al cerrar restauramos tab y diálogo del lead. */
@@ -271,6 +287,7 @@ export function AdminPage() {
   );
   const [deletePropertyId, setDeletePropertyId] = useState<string | null>(null);
   const isGroupLeader = user?.role === "lider_grupo";
+  const isAdmin = user?.role === "admin";
   const isAdvisor = user?.role === "asesor";
   const canAccessCompanyModule = !isAdvisor;
   // Inventario (propiedades/desarrollos) solo editable por administradores.
@@ -463,8 +480,10 @@ export function AdminPage() {
         for (const id of deletedIds) {
           delete next[id];
         }
+        const defaultFromGeneral =
+          next[DEFAULT_PIPELINE_GROUP_ID] ?? createDefaultBuiltinPipelineSnapshot();
         for (const g of nextGroups) {
-          if (!next[g.id]) next[g.id] = createEmptyGroupPipelineSnapshot();
+          if (!next[g.id]) next[g.id] = cloneGroupPipelineSnapshot(defaultFromGeneral);
         }
         return next;
       });
@@ -519,19 +538,35 @@ export function AdminPage() {
     if (!activePipelineGroupId) return;
     setPipelineByGroup((prev) => {
       if (prev[activePipelineGroupId]) return prev;
-      const snap =
-        activePipelineGroupId === DEFAULT_PIPELINE_GROUP_ID
-          ? createDefaultBuiltinPipelineSnapshot()
-          : createEmptyGroupPipelineSnapshot();
-      return { ...prev, [activePipelineGroupId]: snap };
+      if (activePipelineGroupId === DEFAULT_PIPELINE_GROUP_ID) {
+        return { ...prev, [activePipelineGroupId]: createDefaultBuiltinPipelineSnapshot() };
+      }
+      const template =
+        prev[DEFAULT_PIPELINE_GROUP_ID] ?? createDefaultBuiltinPipelineSnapshot();
+      return { ...prev, [activePipelineGroupId]: cloneGroupPipelineSnapshot(template) };
     });
   }, [activePipelineGroupId]);
 
-  const activePipeline =
-    pipelineByGroup[activePipelineGroupId] ?? createEmptyGroupPipelineSnapshot();
+  const activePipeline = useMemo((): GroupPipelineSnapshot => {
+    const cur = pipelineByGroup[activePipelineGroupId];
+    if (cur) return cur;
+    if (activePipelineGroupId === DEFAULT_PIPELINE_GROUP_ID) {
+      return createDefaultBuiltinPipelineSnapshot();
+    }
+    return cloneGroupPipelineSnapshot(
+      pipelineByGroup[DEFAULT_PIPELINE_GROUP_ID] ?? createDefaultBuiltinPipelineSnapshot()
+    );
+  }, [pipelineByGroup, activePipelineGroupId]);
   const customKanbanStages = activePipeline.customStages;
   const pipelineStageOrder = activePipeline.stageOrder;
   const stageColumnColors = activePipeline.stageColors;
+
+  const leadsForUser = useMemo(() => filterLeadsForUser(leads, user), [leads, user]);
+
+  const leadsInActivePipeline = useMemo(
+    () => leadsForUser.filter((l) => l.pipelineGroupId === activePipelineGroupId),
+    [leadsForUser, activePipelineGroupId]
+  );
 
   const canConfigureActivePipeline = useMemo(
     () => (user ? canConfigurePipelineForGroup(user, activePipelineGroupId, userGroups) : false),
@@ -539,8 +574,8 @@ export function AdminPage() {
   );
 
   const allStageIds = useMemo(
-    () => [...customKanbanStages.map((s) => s.id)],
-    [customKanbanStages]
+    () => [...new Set([...customKanbanStages.map((s) => s.id), ...pipelineStageOrder])],
+    [customKanbanStages, pipelineStageOrder]
   );
 
   useEffect(() => {
@@ -573,6 +608,29 @@ export function AdminPage() {
       .map((groupId) => userGroups.find((group) => group.id === groupId))
       .filter((group): group is UserGroup => !!group);
   }, [isGroupLeader, visiblePipelineGroupIds, userGroups]);
+
+  const pipelineCopySourceOptions = useMemo(() => {
+    if (!user || user.role !== "admin") return [];
+    return allowedPipelineGroupIds;
+  }, [user, allowedPipelineGroupIds]);
+
+  const pipelineCopyDestOptions = useMemo(() => {
+    if (!user) return [];
+    return allowedPipelineGroupIds.filter((id) => canConfigurePipelineForGroup(user, id, userGroups));
+  }, [user, allowedPipelineGroupIds, userGroups]);
+
+  const canSubmitPipelineCopy = useMemo(
+    () =>
+      Boolean(
+        user &&
+          pipelineCopyFrom &&
+          pipelineCopyTo &&
+          pipelineCopyFrom !== pipelineCopyTo &&
+          pipelineCopySourceOptions.includes(pipelineCopyFrom) &&
+          pipelineCopyDestOptions.includes(pipelineCopyTo)
+      ),
+    [user, pipelineCopyFrom, pipelineCopyTo, pipelineCopySourceOptions, pipelineCopyDestOptions]
+  );
 
   const advisorsByGroupId = useMemo(() => {
     const grouped: Record<string, User[]> = {};
@@ -655,9 +713,13 @@ export function AdminPage() {
   }, []);
 
   const handleSaveDevelopment = useCallback(async (payload: Development) => {
+    const normalizedPayload: Development = {
+      ...payload,
+      featured: Boolean(payload.featured),
+    };
     const client = getSupabaseClient();
     if (client) {
-      const res = await upsertDevelopment(client, payload);
+      const res = await upsertDevelopment(client, normalizedPayload);
       if (res.error) {
         toast.error(res.error.message);
         return;
@@ -668,28 +730,37 @@ export function AdminPage() {
       return;
     }
     setDevelopments((prev) => {
-      const exists = prev.some((row) => row.id === payload.id);
-      return exists ? prev.map((row) => (row.id === payload.id ? payload : row)) : [...prev, payload];
+      const exists = prev.some((row) => row.id === normalizedPayload.id);
+      return exists
+        ? prev.map((row) => (row.id === normalizedPayload.id ? normalizedPayload : row))
+        : [...prev, normalizedPayload];
     });
   }, []);
 
-  const leadColumnStatuses = useMemo(
-    () =>
+  const leadColumnStatuses = useMemo(() => {
+    const base =
       pipelineStageOrder.length > 0
-        ? pipelineStageOrder
-        : [...customKanbanStages.map((s) => s.id)],
-    [pipelineStageOrder, customKanbanStages]
-  );
+        ? [...pipelineStageOrder]
+        : [...customKanbanStages.map((s) => s.id)];
+    const seen = new Set(base);
+    const fromLeads = [
+      ...new Set(
+        leadsInActivePipeline
+          .map((l) => normalizeLeadPipelineStatus(l.status))
+          .filter((id) => id.length > 0)
+      ),
+    ]
+      .filter((id) => !seen.has(id))
+      .sort();
+    return [...base, ...fromLeads];
+  }, [pipelineStageOrder, customKanbanStages, leadsInActivePipeline]);
 
   const statusSelectOptions = useMemo(
     () =>
-      leadColumnStatuses.map((id) => {
-        if (Object.prototype.hasOwnProperty.call(LEAD_STATUS_LABEL, id)) {
-          return { value: id, label: LEAD_STATUS_LABEL[id as keyof typeof LEAD_STATUS_LABEL] };
-        }
-        const custom = customKanbanStages.find((s) => s.id === id);
-        return { value: id, label: custom?.label ?? id };
-      }),
+      leadColumnStatuses.map((id) => ({
+        value: id,
+        label: labelForLeadStatus(id, customKanbanStages),
+      })),
     [leadColumnStatuses, customKanbanStages]
   );
 
@@ -698,8 +769,15 @@ export function AdminPage() {
   const effectiveStageColors = useMemo(() => {
     const out: Record<string, string> = {};
     for (const id of leadColumnStatuses) {
-      if (stageColumnColors[id]) out[id] = stageColumnColors[id];
+      let hex = stageColumnColors[id];
+      if (!hex) {
+        const k = Object.keys(stageColumnColors).find((c) => c.toLowerCase() === id.toLowerCase());
+        hex = k ? stageColumnColors[k] : undefined;
+      }
+      if (hex) out[id] = hex;
       else if (DEFAULT_BUILTIN_STAGE_HEX[id]) out[id] = DEFAULT_BUILTIN_STAGE_HEX[id];
+      else if (DEFAULT_BUILTIN_STAGE_HEX[id.toLowerCase()])
+        out[id] = DEFAULT_BUILTIN_STAGE_HEX[id.toLowerCase()];
       else out[id] = DEFAULT_CUSTOM_STAGE_HEX;
     }
     return out;
@@ -776,17 +854,94 @@ export function AdminPage() {
     [activePipelineGroupId]
   );
 
+  const handleDuplicatePipelineToTeam = useCallback(() => {
+    if (!user) return;
+    const from = pipelineCopyFrom.trim();
+    const to = pipelineCopyTo.trim();
+    if (!from || !to) {
+      toast.error("Selecciona equipo de origen y equipo de destino.");
+      return;
+    }
+    if (from === to) {
+      toast.error("Origen y destino deben ser distintos.");
+      return;
+    }
+    if (!pipelineCopySourceOptions.includes(from) || !pipelineCopyDestOptions.includes(to)) {
+      toast.error("No puedes copiar con esa combinación (revisa permisos de equipos).");
+      return;
+    }
+    if (!canConfigurePipelineForGroup(user, to, userGroups)) {
+      toast.error("No puedes modificar el pipeline del equipo de destino.");
+      return;
+    }
+    const raw = pipelineByGroup[from];
+    const sourceSnap: GroupPipelineSnapshot =
+      raw ??
+      (from === DEFAULT_PIPELINE_GROUP_ID
+        ? createDefaultBuiltinPipelineSnapshot()
+        : createEmptyGroupPipelineSnapshot());
+    setPipelineByGroup((map) => ({
+      ...map,
+      [to]: cloneGroupPipelineSnapshot(sourceSnap),
+    }));
+    setActivePipelineGroupId(to);
+    setPipelineCopyTo("");
+    toast.success(
+      `Pipeline copiado de «${pipelineGroupLabel(from)}» a «${pipelineGroupLabel(to)}».`
+    );
+  }, [
+    user,
+    pipelineCopyFrom,
+    pipelineCopyTo,
+    pipelineByGroup,
+    userGroups,
+    pipelineCopySourceOptions,
+    pipelineCopyDestOptions,
+    pipelineGroupLabel,
+  ]);
+
   const handleUpdateKanbanStage = useCallback(
     (stageId: string, label: string) => {
       setPipelineByGroup((map) => {
         const cur = map[activePipelineGroupId] ?? createEmptyGroupPipelineSnapshot();
+        let matched = false;
+        const nextCustom = cur.customStages.map((stage) => {
+          if (stage.id === stageId || stage.id.toLowerCase() === stageId.toLowerCase()) {
+            matched = true;
+            return { ...stage, label };
+          }
+          return stage;
+        });
+        if (matched) {
+          return {
+            ...map,
+            [activePipelineGroupId]: { ...cur, customStages: nextCustom },
+          };
+        }
+        const builtinKey = stageId.trim().toLowerCase();
+        if (Object.prototype.hasOwnProperty.call(LEAD_STATUS_LABEL, builtinKey)) {
+          return map;
+        }
+        const canon = normalizeLeadPipelineStatus(stageId);
+        const stageOrder = cur.stageOrder.map((id) =>
+          id === stageId || id.toLowerCase() === stageId.toLowerCase() ? canon : id
+        );
+        const nextColors = { ...cur.stageColors };
+        for (const k of Object.keys(nextColors)) {
+          if (k === stageId || k.toLowerCase() === stageId.toLowerCase()) {
+            if (k !== canon) {
+              if (nextColors[k] && !nextColors[canon]) nextColors[canon] = nextColors[k];
+              delete nextColors[k];
+            }
+          }
+        }
         return {
           ...map,
           [activePipelineGroupId]: {
             ...cur,
-            customStages: cur.customStages.map((stage) =>
-              stage.id === stageId ? { ...stage, label } : stage
-            ),
+            customStages: [...cur.customStages, { id: canon, label }],
+            stageOrder,
+            stageColors: nextColors,
           },
         };
       });
@@ -1062,23 +1217,29 @@ export function AdminPage() {
 
   const handleSaveProperty = useCallback(
     async (p: Property) => {
+      const normalizedProperty: Property = {
+        ...p,
+        featured: Boolean(p.featured),
+      };
       if (!canManageInventory) return;
       const client = getSupabaseClient();
       if (!client) {
         toast.error("Supabase no configurado.");
         return;
       }
-      const prev = properties.find((x) => x.id === p.id);
+      const prev = properties.find((x) => x.id === normalizedProperty.id);
       const wasFeatured = Boolean(prev?.featured);
-      const otherFeatured = properties.filter((x) => x.featured && x.id !== p.id).length;
-      if (p.featured && !wasFeatured && otherFeatured >= MAX_FEATURED_PROPERTIES) {
+      const otherFeatured = properties.filter((x) => x.featured && x.id !== normalizedProperty.id).length;
+      if (normalizedProperty.featured && !wasFeatured && otherFeatured >= MAX_FEATURED_PROPERTIES) {
         toast.error(
           `Solo pueden destacarse hasta ${MAX_FEATURED_PROPERTIES} propiedades en la portada. Quita una estrella en otra ficha e inténtalo de nuevo.`
         );
         return;
       }
-      const exists = properties.some((x) => x.id === p.id);
-      const propRes = exists ? await updateProperty(client, p) : await insertProperty(client, p, p.id);
+      const exists = properties.some((x) => x.id === normalizedProperty.id);
+      const propRes = exists
+        ? await updateProperty(client, normalizedProperty)
+        : await insertProperty(client, normalizedProperty, normalizedProperty.id);
       if (propRes.error) {
         toast.error(propRes.error.message);
         return;
@@ -1115,49 +1276,6 @@ export function AdminPage() {
     },
     [properties, reloadProperties]
   );
-
-  const leadsForUser = useMemo(() => filterLeadsForUser(leads, user), [leads, user]);
-
-  const leadsInActivePipeline = useMemo(
-    () => leadsForUser.filter((l) => l.pipelineGroupId === activePipelineGroupId),
-    [leadsForUser, activePipelineGroupId]
-  );
-
-  const assigneeFilterOptions = useMemo(() => {
-    const options = new Map<string, string>();
-    const leaderGroupMemberIds =
-      user?.role === "lider_grupo" && activePipelineGroupId
-        ? (() => {
-            const group = userGroups.find((g) => g.id === activePipelineGroupId && g.leaderId === user.id);
-            return group ? new Set(group.memberIds) : new Set<string>();
-          })()
-        : null;
-
-    for (const u of users) {
-      if (!u.isActive) continue;
-      if (leaderGroupMemberIds && !leaderGroupMemberIds.has(u.id)) continue;
-      options.set(u.id, u.name || u.email || "Asesor");
-    }
-    for (const lead of leadsInActivePipeline) {
-      if (
-        leaderGroupMemberIds &&
-        (!lead.assignedToUserId || !leaderGroupMemberIds.has(lead.assignedToUserId))
-      ) {
-        continue;
-      }
-      if (lead.assignedToUserId && !options.has(lead.assignedToUserId)) {
-        options.set(lead.assignedToUserId, lead.assignedTo || "Asesor");
-        continue;
-      }
-      const assignedName = lead.assignedTo.trim();
-      if (!lead.assignedToUserId && assignedName) {
-        options.set(`name:${foldSearchText(assignedName)}`, `${assignedName} (sin usuario vinculado)`);
-      }
-    }
-    return [...options.entries()]
-      .map(([value, label]) => ({ value, label }))
-      .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
-  }, [users, leadsInActivePipeline, user, activePipelineGroupId, userGroups]);
 
   const openLeadDetail = useCallback(
     (lead: Lead, mode: "view" | "edit") => {
@@ -1277,22 +1395,25 @@ export function AdminPage() {
     const customFromDate = createdRangeFilter === "custom" && createdFrom ? new Date(`${createdFrom}T00:00:00`) : null;
     const customToDate = createdRangeFilter === "custom" && createdTo ? new Date(`${createdTo}T23:59:59`) : null;
     const q = foldSearchText(searchQuery);
-    const matchesSearch =
-      !q ||
-      foldSearchText(lead.name).includes(q) ||
-      foldSearchText(lead.email).includes(q) ||
-      foldSearchText(lead.phone).includes(q) ||
-      users.some((u) => teamMemberMatchesFoldedQuery(u, q) && leadAssignedToCrmUser(lead, u));
+    const matchesSearch = (() => {
+      if (!q) return true;
+      if (leadSearchNameScope === "client") {
+        return foldSearchText(lead.name).includes(q);
+      }
+      if (leadSearchNameScope === "advisor") {
+        return (
+          foldSearchText(lead.assignedTo).includes(q) ||
+          users.some((u) => teamMemberNameMatchesFoldedQuery(u, q) && leadAssignedToCrmUser(lead, u))
+        );
+      }
+      return (
+        foldSearchText(lead.name).includes(q) ||
+        foldSearchText(lead.email).includes(q) ||
+        foldSearchText(lead.phone).includes(q) ||
+        users.some((u) => teamMemberMatchesFoldedQuery(u, q) && leadAssignedToCrmUser(lead, u))
+      );
+    })();
     const matchesStatus = statusFilter === "all" || lead.status === statusFilter;
-    const selectedAssigneeLabel = assigneeFilterOptions.find((opt) => opt.value === assigneeFilter)?.label ?? "";
-    const selectedAssigneeName = selectedAssigneeLabel.replace(/\s+\(sin usuario vinculado\)\s*$/i, "").trim();
-    const matchesAssignee =
-      assigneeFilter === "all" ||
-      (assigneeFilter.startsWith("name:")
-        ? foldSearchText(lead.assignedTo) === assigneeFilter.slice(5)
-        : lead.assignedToUserId === assigneeFilter ||
-          (selectedAssigneeName.length > 0 &&
-            foldSearchText(lead.assignedTo) === foldSearchText(selectedAssigneeName)));
     const matchesCreatedRange =
       createdRangeFilter === "all" ||
       (createdAtDate !== null &&
@@ -1300,7 +1421,7 @@ export function AdminPage() {
         ((fromByRange ? createdAtDate >= fromByRange : true) &&
           (customFromDate ? createdAtDate >= customFromDate : true) &&
           (customToDate ? createdAtDate <= customToDate : true)));
-    return matchesSearch && matchesStatus && matchesAssignee && matchesCreatedRange;
+    return matchesSearch && matchesStatus && matchesCreatedRange;
   });
 
   const normalizeStageToken = useCallback((value: string) => {
@@ -1439,6 +1560,9 @@ export function AdminPage() {
       foldSearchText(property.type).includes(q) ||
       foldSearchText(property.status).includes(q)
     );
+    const refQ = foldSearchText(propertyReferenceCodeQuery);
+    const matchesReferenceCode =
+      !refQ || foldSearchText(property.referenceCode ?? "").includes(refQ);
     const matchesOperation =
       propertyOperationFilter === "all" || property.status === propertyOperationFilter;
     const matchesType =
@@ -1446,18 +1570,19 @@ export function AdminPage() {
     const matchesLocation =
       propertyLocationFilter === "all" || property.location === propertyLocationFilter;
 
-    const rawMax = Number(propertyMaxPrice);
-    const normalizedPrice =
-      propertyCurrencyFilter === "USD" ? property.price : property.price * 17;
-    const matchesMaxPrice =
-      propertyMaxPrice.trim() === "" || Number.isNaN(rawMax) || normalizedPrice <= rawMax;
+    const matchesFeatured =
+      propertyFeaturedFilter === "all" ||
+      (propertyFeaturedFilter === "featured"
+        ? Boolean(property.featured)
+        : !property.featured);
 
     return (
       matchesSearch &&
+      matchesReferenceCode &&
       matchesOperation &&
       matchesType &&
       matchesLocation &&
-      matchesMaxPrice
+      matchesFeatured
     );
   });
   const propertyTypeOptions = useMemo(
@@ -2303,23 +2428,56 @@ export function AdminPage() {
                 </div>
 
                 <div className="mt-8 flex flex-col gap-3 border-t border-slate-200/80 pt-6">
-                  <div className="relative min-h-[2.75rem] flex-1">
-                    <Search
-                      className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
-                      strokeWidth={1.75}
-                    />
-                    <input
-                      type="search"
-                      placeholder="Buscar por contacto, teléfono o asesor / líder…"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="h-full min-h-[2.75rem] w-full rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-4 text-sm text-brand-navy shadow-sm transition-all placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                      style={{ fontWeight: 500 }}
-                      autoComplete="off"
-                    />
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
+                    <div className="relative min-h-[2.75rem] min-w-0 flex-1">
+                      <Search
+                        className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
+                        strokeWidth={1.75}
+                      />
+                      <input
+                        type="search"
+                        placeholder={
+                          leadSearchNameScope === "client"
+                            ? "Buscar por nombre del cliente (contacto)…"
+                            : leadSearchNameScope === "advisor"
+                              ? "Buscar por nombre del asesor o líder asignado…"
+                              : "Buscar por contacto, teléfono o asesor / líder…"
+                        }
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="h-full min-h-[2.75rem] w-full rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-4 text-sm text-brand-navy shadow-sm transition-all placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                        style={{ fontWeight: 500 }}
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div className="relative min-h-[2.75rem] w-full shrink-0 lg:w-[min(100%,19rem)] lg:max-w-[19rem]">
+                      <TextSearch
+                        className="pointer-events-none absolute left-4 top-1/2 z-[1] h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
+                        strokeWidth={1.75}
+                      />
+                      <select
+                        aria-label="Ámbito de búsqueda por nombre"
+                        value={leadSearchNameScope}
+                        onChange={(e) =>
+                          setLeadSearchNameScope(e.target.value as "all" | "client" | "advisor")
+                        }
+                        className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                        style={{ fontWeight: 500 }}
+                      >
+                        <option value="all">Todo: contacto, tel. y asesor</option>
+                        <option value="client">Nombre del cliente</option>
+                        <option value="advisor">Nombre del asesor / líder</option>
+                      </select>
+                      <span
+                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                        aria-hidden
+                      >
+                        <ChevronDown className="h-4 w-4" strokeWidth={2} />
+                      </span>
+                    </div>
                   </div>
                   <div className="flex flex-row flex-nowrap items-stretch gap-2 overflow-x-auto pb-0.5 sm:gap-3">
-                  <div className="relative min-w-[10.5rem] flex-1 basis-0">
+                  <div className="relative min-h-[2.75rem] min-w-[12rem] flex-[2] basis-0">
                     <Users
                       className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
                       strokeWidth={1.75}
@@ -2328,34 +2486,12 @@ export function AdminPage() {
                       id="crm-pipeline-group"
                       value={activePipelineGroupId}
                       onChange={(e) => setActivePipelineGroupId(e.target.value)}
-                      className="h-full min-h-[2.75rem] w-full min-w-0 appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15 md:min-w-[17rem]"
+                      className="h-full min-h-[2.75rem] w-full min-w-0 appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15 md:min-w-[22rem]"
                       style={{ fontWeight: 500 }}
                     >
                       {allowedPipelineGroupIds.map((id) => (
                         <option key={id} value={id}>
                           Grupo: {pipelineGroupLabel(id)}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
-                      <ChevronDown className="h-4 w-4" strokeWidth={2} />
-                    </span>
-                  </div>
-                  <div className="relative min-w-[10.5rem] flex-1 basis-0">
-                    <UserIcon
-                      className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-400"
-                      strokeWidth={1.75}
-                    />
-                    <select
-                      value={assigneeFilter}
-                      onChange={(e) => setAssigneeFilter(e.target.value)}
-                      className="h-full min-h-[2.75rem] w-full min-w-0 appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-10 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15 md:min-w-[14rem]"
-                      style={{ fontWeight: 500 }}
-                    >
-                      <option value="all">{user.role === "lider_grupo" ? "Asesores de mi grupo" : "Todos los asesores"}</option>
-                      {assigneeFilterOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
                         </option>
                       ))}
                     </select>
@@ -2853,7 +2989,19 @@ export function AdminPage() {
                 </div>
               </div>
               <div className="mt-4 relative">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
+                  <select
+                    value={propertyFeaturedFilter}
+                    onChange={(e) =>
+                      setPropertyFeaturedFilter(e.target.value as "all" | "featured" | "normal")
+                    }
+                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                    aria-label="Filtrar por propiedades destacadas en la portada"
+                  >
+                    <option value="all">Todos</option>
+                    <option value="featured">Solo destacadas</option>
+                    <option value="normal">No destacadas</option>
+                  </select>
                   <select
                     value={propertyOperationFilter}
                     onChange={(e) => setPropertyOperationFilter(e.target.value)}
@@ -2876,22 +3024,6 @@ export function AdminPage() {
                     ))}
                   </select>
                   <select
-                    value={propertyCurrencyFilter}
-                    onChange={(e) => setPropertyCurrencyFilter(e.target.value)}
-                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
-                  >
-                    <option value="MXN">MXN</option>
-                    <option value="USD">USD</option>
-                  </select>
-                  <input
-                    type="number"
-                    min={0}
-                    value={propertyMaxPrice}
-                    onChange={(e) => setPropertyMaxPrice(e.target.value)}
-                    placeholder="Sin límite"
-                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 placeholder:text-slate-500"
-                  />
-                  <select
                     value={propertyLocationFilter}
                     onChange={(e) => setPropertyLocationFilter(e.target.value)}
                     className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
@@ -2905,15 +3037,38 @@ export function AdminPage() {
                   </select>
                 </div>
               </div>
-              <div className="mt-3 relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
-                <input
-                  type="search"
-                  value={propertySearchQuery}
-                  onChange={(e) => setPropertySearchQuery(e.target.value)}
-                  placeholder="Buscar propiedades por título..."
-                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-navy placeholder:text-slate-400 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                />
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="relative min-w-0">
+                  <Search
+                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                    strokeWidth={1.75}
+                  />
+                  <input
+                    type="search"
+                    value={propertySearchQuery}
+                    onChange={(e) => setPropertySearchQuery(e.target.value)}
+                    placeholder="Buscar por título, zona, tipo…"
+                    className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-navy placeholder:text-slate-400 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="relative min-w-0">
+                  <Hash
+                    className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                  <input
+                    type="search"
+                    value={propertyReferenceCodeQuery}
+                    onChange={(e) => setPropertyReferenceCodeQuery(e.target.value)}
+                    placeholder="Código de referencia…"
+                    className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-navy tabular-nums placeholder:text-slate-400 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                    autoComplete="off"
+                    spellCheck={false}
+                    aria-label="Filtrar por código de referencia"
+                  />
+                </div>
               </div>
               </div>
             </div>
@@ -3025,7 +3180,7 @@ export function AdminPage() {
                     </button>
                     <button
                       type="button"
-                      title={property.featured ? "Quitar de la portada (inicio)" : "Destacar en la portada (inicio)"}
+                      title={property.featured ? "Quitar de la portada (inicio)" : "Destacar en la portada"}
                       aria-label={property.featured ? "Quitar de la portada" : "Destacar en la portada"}
                       aria-pressed={Boolean(property.featured)}
                       onClick={(e) => {
@@ -3370,7 +3525,9 @@ export function AdminPage() {
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
                   {isGroupLeader
                     ? "Gestiona tus grupos asignados y configura las columnas del pipeline de cada equipo."
-                    : "Equipo, sitio, embudo comercial y ajustes del espacio de trabajo. Elige un área para continuar."}
+                    : isAdmin
+                      ? "Equipo, sitio, embudo comercial y ajustes. Como administrador puedes abrir el pipeline de cada grupo y ajustar columnas, orden y colores."
+                      : "Equipo, sitio, embudo comercial y ajustes del espacio de trabajo. Elige un área para continuar."}
                 </p>
               </div>
             </div>
@@ -3393,7 +3550,7 @@ export function AdminPage() {
                   {
                     id: "leadStages" as const,
                     title: "Pipeline de ventas",
-                    desc: "Columnas del Kanban por grupo (admin y líder de grupo).",
+                    desc: "Como administrador, revisa y edita el embudo de cada equipo; el líder solo el suyo.",
                     icon: LayoutGrid,
                   },
                   {
@@ -3511,6 +3668,165 @@ export function AdminPage() {
               )}
               {companySubtab === "leadStages" && (
                 <div className="flex flex-col gap-6 p-5 md:p-8">
+                  {isAdmin && (
+                    <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_28px_-12px_rgba(20,28,46,0.12)] ring-1 ring-black/[0.03]">
+                      <div className="border-b border-slate-200/80 bg-gradient-to-r from-slate-50 via-white to-slate-50/60 px-5 py-4 md:px-6">
+                        <h4
+                          className="flex items-center gap-2 text-base text-brand-navy"
+                          style={{ fontWeight: 700 }}
+                        >
+                          <LayoutGrid className="h-4 w-4 text-primary" strokeWidth={1.9} aria-hidden />
+                          Organización del pipeline por equipo
+                        </h4>
+                        <p className="mt-1 text-sm text-slate-500" style={{ fontWeight: 500 }}>
+                          Selecciona el grupo cuyo embudo quieres revisar o editar. Los cambios se guardan para ese
+                          equipo y se reflejan en el CRM cuando ese grupo está activo en la vista de leads.
+                        </p>
+                      </div>
+                      <div className="p-5 md:px-6 md:pb-6">
+                        <label
+                          htmlFor="admin-pipeline-group-context"
+                          className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500"
+                        >
+                          Equipo / contexto del embudo
+                        </label>
+                        <div className="relative min-h-[2.75rem]">
+                          <Users
+                            className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
+                            strokeWidth={1.75}
+                          />
+                          <select
+                            id="admin-pipeline-group-context"
+                            value={activePipelineGroupId}
+                            onChange={(e) => setActivePipelineGroupId(e.target.value)}
+                            className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                            style={{ fontWeight: 500 }}
+                          >
+                            {allowedPipelineGroupIds.map((id) => (
+                              <option key={id} value={id}>
+                                Grupo: {pipelineGroupLabel(id)}
+                              </option>
+                            ))}
+                          </select>
+                          <span
+                            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                            aria-hidden
+                          >
+                            <ChevronDown className="h-4 w-4" strokeWidth={2} />
+                          </span>
+                        </div>
+                      </div>
+                    </section>
+                  )}
+
+                  {isAdmin && pipelineCopyDestOptions.length > 0 && (
+                    <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_28px_-12px_rgba(20,28,46,0.12)] ring-1 ring-black/[0.03]">
+                      <div className="border-b border-slate-200/80 bg-gradient-to-r from-slate-50 via-white to-slate-50/60 px-5 py-4 md:px-6">
+                        <h4
+                          className="flex items-center gap-2 text-base text-brand-navy"
+                          style={{ fontWeight: 700 }}
+                        >
+                          <Copy className="h-4 w-4 text-primary" strokeWidth={1.9} aria-hidden />
+                          Duplicar pipeline entre equipos
+                        </h4>
+                        <p className="mt-1 text-sm text-slate-500" style={{ fontWeight: 500 }}>
+                          Copia etapas, orden y colores de un embudo a otro. Reemplaza la configuración del pipeline del
+                          equipo de destino; no mueve ni cambia los leads.
+                        </p>
+                      </div>
+                      <div className="space-y-4 p-5 md:px-6 md:pb-6">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <label
+                              htmlFor="pipeline-copy-from"
+                              className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500"
+                            >
+                              Copiar pipeline desde
+                            </label>
+                            <div className="relative min-h-[2.75rem]">
+                              <Copy
+                                className="pointer-events-none absolute left-4 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-400"
+                                strokeWidth={1.75}
+                                aria-hidden
+                              />
+                              <select
+                                id="pipeline-copy-from"
+                                value={pipelineCopyFrom}
+                                onChange={(e) => setPipelineCopyFrom(e.target.value)}
+                                className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                                style={{ fontWeight: 500 }}
+                              >
+                                <option value="">— Elige el equipo de origen —</option>
+                                {pipelineCopySourceOptions.map((id) => (
+                                  <option key={id} value={id}>
+                                    {pipelineGroupLabel(id)}
+                                  </option>
+                                ))}
+                              </select>
+                              <span
+                                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                                aria-hidden
+                              >
+                                <ChevronDown className="h-4 w-4" strokeWidth={2} />
+                              </span>
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label
+                              htmlFor="pipeline-copy-to"
+                              className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500"
+                            >
+                              Aplicar en (destino)
+                            </label>
+                            <div className="relative min-h-[2.75rem]">
+                              <Users
+                                className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
+                                strokeWidth={1.75}
+                              />
+                              <select
+                                id="pipeline-copy-to"
+                                value={pipelineCopyTo}
+                                onChange={(e) => setPipelineCopyTo(e.target.value)}
+                                className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                                style={{ fontWeight: 500 }}
+                              >
+                                <option value="">— Elige el equipo de destino —</option>
+                                {pipelineCopyDestOptions.map((id) => (
+                                  <option key={id} value={id}>
+                                    {pipelineGroupLabel(id)}
+                                  </option>
+                                ))}
+                              </select>
+                              <span
+                                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                                aria-hidden
+                              >
+                                <ChevronDown className="h-4 w-4" strokeWidth={2} />
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+                          <button
+                            type="button"
+                            onClick={handleDuplicatePipelineToTeam}
+                            disabled={!canSubmitPipelineCopy}
+                            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md transition hover:bg-brand-red-hover disabled:cursor-not-allowed disabled:opacity-50"
+                            style={{ fontWeight: 600 }}
+                          >
+                            <Copy className="h-4 w-4" strokeWidth={2} />
+                            Duplicar pipeline
+                          </button>
+                          {canSubmitPipelineCopy && (
+                            <p className="text-xs text-slate-500 sm:pb-0.5" style={{ fontWeight: 500 }}>
+                              Se reemplaza el embudo de «{pipelineGroupLabel(pipelineCopyTo)}».
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </section>
+                  )}
+
                   {isGroupLeader && (
                     <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_24px_50px_-24px_rgba(20,28,46,0.26)]">
                       <div className="border-b border-slate-200/80 bg-gradient-to-r from-slate-50 via-white to-slate-50/60 px-5 py-4">
@@ -3625,7 +3941,9 @@ export function AdminPage() {
                         Pipeline de leads
                       </h3>
                       <p className="mt-2 text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                        Cada grupo tiene sus propias columnas. Solo el administrador o el líder del grupo pueden crearlas, ordenarlas y colorearlas. Los cambios aplican al tablero cuando ese grupo está seleccionado en el CRM.
+                        Cada equipo tiene sus propias columnas. El administrador puede crearlas, ordenarlas y colorearlas
+                        en cualquier grupo; el líder de grupo solo en los suyos. Los cambios aplican al tablero cuando
+                        ese grupo está seleccionado en el CRM (o aquí arriba, si eres administrador).
                       </p>
                     </div>
                     <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:max-w-xl">
@@ -3667,11 +3985,7 @@ export function AdminPage() {
                     <DndProvider backend={HTML5Backend}>
                     <div className="mt-4 space-y-3">
                       {leadColumnStatuses.map((stageId, index) => {
-                        const customStage = customKanbanStages.find((stage) => stage.id === stageId);
-                        const stageLabel =
-                          Object.prototype.hasOwnProperty.call(LEAD_STATUS_LABEL, stageId)
-                          ? LEAD_STATUS_LABEL[stageId as keyof typeof LEAD_STATUS_LABEL]
-                          : customStage?.label ?? stageId;
+                        const stageLabel = resolveStatusLabel(stageId);
                         const isEditing = editingStageId === stageId;
                         const leadsInStage = leads.filter(
                           (lead) =>
@@ -3730,15 +4044,26 @@ export function AdminPage() {
                                       value={resolveStageHex(stageId)}
                                       onChange={(e) => {
                                         const hex = e.target.value;
+                                        const colorKey = normalizeLeadPipelineStatus(stageId);
                                         setPipelineByGroup((map) => {
                                           const cur =
                                             map[activePipelineGroupId] ??
                                             createEmptyGroupPipelineSnapshot();
+                                          const nextColors = { ...cur.stageColors };
+                                          for (const k of Object.keys(nextColors)) {
+                                            if (
+                                              k !== colorKey &&
+                                              k.toLowerCase() === colorKey.toLowerCase()
+                                            ) {
+                                              delete nextColors[k];
+                                            }
+                                          }
+                                          nextColors[colorKey] = hex;
                                           return {
                                             ...map,
                                             [activePipelineGroupId]: {
                                               ...cur,
-                                              stageColors: { ...cur.stageColors, [stageId]: hex },
+                                              stageColors: nextColors,
                                             },
                                           };
                                         });

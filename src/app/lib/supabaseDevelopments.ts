@@ -41,6 +41,7 @@ type DevelopmentRow = Record<string, unknown> & {
   display_on_web: boolean;
   in_charge_phone?: string | null;
   in_charge_email?: string | null;
+  reference_code?: string | null;
 };
 
 type DevelopmentUnitRow = {
@@ -156,6 +157,7 @@ export function rowToDevelopment(
     displayOnWeb: row.display_on_web ?? true,
     inChargePhone: row.in_charge_phone?.trim() ?? "",
     inChargeEmail: row.in_charge_email?.trim() ?? "",
+    referenceCode: row.reference_code?.trim() || undefined,
     tokkoId: row.tokko_id?.trim() || undefined,
   };
 }
@@ -256,12 +258,12 @@ export async function upsertDevelopment(client: SupabaseClient, d: Development) 
     additional_features: d.additionalFeatures ?? [],
     lat: d.coordinates?.lat ?? null,
     lng: d.coordinates?.lng ?? null,
-    featured: d.featured ?? false,
+    featured: Boolean(d.featured),
     payload: { ...(d.payload ?? {}), source: "viterra_admin" } as Record<string, unknown>,
     synced_at: ts,
     updated_at: ts,
     web_url: null,
-    reference_code: null,
+    reference_code: d.referenceCode?.trim() || null,
     publication_title: null,
     deleted_at: null,
     display_on_web: d.displayOnWeb !== false,

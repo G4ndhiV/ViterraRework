@@ -231,7 +231,7 @@ export async function insertProperty(client: SupabaseClient, p: Property, explic
     public_url: p.publicUrl?.trim() || null,
     deleted_at: null,
     publication_title: null,
-    featured: p.featured ?? false,
+    featured: Boolean(p.featured),
     surface_land: null,
     expenses: null,
     age: null,
@@ -280,7 +280,7 @@ export async function updateProperty(client: SupabaseClient, p: Property) {
       images: imgs,
       updated_at: ts,
       synced_at: ts,
-      featured: p.featured ?? false,
+      featured: Boolean(p.featured),
       payload: { source: "viterra_admin", lastEdit: ts } as Record<string, unknown>,
     })
     .eq("id", p.id);

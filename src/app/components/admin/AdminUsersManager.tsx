@@ -20,6 +20,7 @@ import {
   UserPlus,
   UserCircle2,
   Users,
+  Filter,
 } from "lucide-react";
 import { User, UserHistoryEntry, UserPermission, UserRole } from "../../contexts/AuthContext";
 import { labelForLeadStatus, type CustomKanbanStage, type Lead } from "../../data/leads";
@@ -249,6 +250,9 @@ export function AdminUsersManager({
   const [showArchived, setShowArchived] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
+  const [userGroupFilter, setUserGroupFilter] = useState<"all" | string>("all");
+  const [userPermissionFilter, setUserPermissionFilter] = useState<"all" | UserPermission>("all");
+  const [userPhoneFilter, setUserPhoneFilter] = useState<"all" | "with" | "without">("all");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   /** Solo `true` al abrir desde el icono de editar; desde el nombre es vista de solo lectura. */
   const [userDetailEditMode, setUserDetailEditMode] = useState(false);
@@ -269,20 +273,54 @@ export function AdminUsersManager({
     permissions: ["manage_leads", "manage_clients"] as UserPermission[],
   });
 
+  const canManageUsers = currentUser.role === "admin";
+
+  const adminExtraFiltersOn =
+    canManageUsers &&
+    (userGroupFilter !== "all" || userPermissionFilter !== "all" || userPhoneFilter !== "all");
+
   const filteredUsers = useMemo(() => {
     let list = users.filter((u) => (showArchived ? !u.isActive : u.isActive));
     if (roleFilter !== "all") {
       list = list.filter((u) => u.role === roleFilter);
     }
+    if (canManageUsers) {
+      if (userGroupFilter !== "all") {
+        const g = userGroups.find((x) => x.id === userGroupFilter);
+        if (g) {
+          const member = new Set(g.memberIds);
+          list = list.filter((u) => member.has(u.id));
+        } else {
+          list = [];
+        }
+      }
+      if (userPermissionFilter !== "all") {
+        list = list.filter((u) => u.permissions.includes(userPermissionFilter));
+      }
+      if (userPhoneFilter === "with") {
+        list = list.filter((u) => Boolean(u.profile.phone?.trim()));
+      } else if (userPhoneFilter === "without") {
+        list = list.filter((u) => !u.profile.phone?.trim());
+      }
+    }
     const q = userSearchQuery.trim().toLowerCase();
     if (q) {
       list = list.filter((u) => {
+        const teamNames = userGroups
+          .filter((g) => g.memberIds.includes(u.id))
+          .map((g) => g.name)
+          .join(" ");
+        const permLabels = u.permissions
+          .map((p) => permissionCards.find((c) => c.value === p)?.label ?? p)
+          .join(" ");
         const blob = [
           u.name,
           u.email,
           u.profile.phone,
           u.profile.address,
           roleOptions.find((r) => r.value === u.role)?.label ?? "",
+          teamNames,
+          permLabels,
         ]
           .join(" ")
           .toLowerCase();
@@ -290,7 +328,17 @@ export function AdminUsersManager({
       });
     }
     return list;
-  }, [users, showArchived, roleFilter, userSearchQuery]);
+  }, [
+    users,
+    showArchived,
+    roleFilter,
+    userSearchQuery,
+    canManageUsers,
+    userGroupFilter,
+    userPermissionFilter,
+    userPhoneFilter,
+    userGroups,
+  ]);
 
   const closeUserDetail = () => {
     setUserDetailEditMode(false);
@@ -465,7 +513,6 @@ export function AdminUsersManager({
     });
   };
 
-  const canManageUsers = currentUser.role === "admin";
   const isEditingUserDetail = canManageUsers && userDetailEditMode;
 
   return (
@@ -543,40 +590,125 @@ export function AdminUsersManager({
         </div>
 
         {managementTab === "users" && (
-          <div className="mt-6 flex flex-col gap-3 border-t border-slate-200/80 pt-6 sm:flex-row sm:items-stretch">
-            <div className="relative min-h-[2.75rem] flex-1">
-              <Search
-                className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
-                strokeWidth={1.75}
-                aria-hidden
-              />
-              <input
-                type="search"
-                value={userSearchQuery}
-                onChange={(e) => setUserSearchQuery(e.target.value)}
-                placeholder="Buscar por nombre, correo, teléfono o rol…"
-                className="h-full min-h-[2.75rem] w-full rounded-xl border border-slate-200/90 bg-white py-2.5 pl-11 pr-4 text-sm text-brand-navy shadow-sm transition-all placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                style={{ fontWeight: 500 }}
-                autoComplete="off"
-                aria-label="Buscar usuarios"
-              />
+          <div className="mt-6 space-y-3 border-t border-slate-200/80 pt-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+              <div className="relative min-h-[2.75rem] flex-1">
+                <Search
+                  className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+                <input
+                  type="search"
+                  value={userSearchQuery}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                  placeholder={
+                    canManageUsers
+                      ? "Buscar por nombre, correo, teléfono, rol, permiso o equipo…"
+                      : "Buscar por nombre, correo, teléfono o rol…"
+                  }
+                  className="h-full min-h-[2.75rem] w-full rounded-xl border border-slate-200/90 bg-white py-2.5 pl-11 pr-4 text-sm text-brand-navy shadow-sm transition-all placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                  style={{ fontWeight: 500 }}
+                  autoComplete="off"
+                  aria-label="Buscar usuarios"
+                />
+              </div>
+              <Select
+                value={roleFilter}
+                onValueChange={(v) => setRoleFilter(v as "all" | UserRole)}
+              >
+                <SelectTrigger className="h-[2.75rem] w-full rounded-xl border-slate-200/90 bg-white shadow-sm sm:w-[min(100%,220px)]">
+                  <SelectValue placeholder="Rol" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los roles</SelectItem>
+                  {roleOptions.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>
+                      {r.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <Select
-              value={roleFilter}
-              onValueChange={(v) => setRoleFilter(v as "all" | UserRole)}
-            >
-              <SelectTrigger className="h-[2.75rem] w-full rounded-xl border-slate-200/90 bg-white shadow-sm sm:w-[min(100%,220px)]">
-                <SelectValue placeholder="Rol" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los roles</SelectItem>
-                {roleOptions.map((r) => (
-                  <SelectItem key={r.value} value={r.value}>
-                    {r.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {canManageUsers && (
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <p className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    <Filter className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                    Filtros adicionales
+                  </p>
+                  {adminExtraFiltersOn && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUserGroupFilter("all");
+                        setUserPermissionFilter("all");
+                        setUserPhoneFilter("all");
+                      }}
+                      className="text-xs font-medium text-primary decoration-primary/30 hover:underline"
+                    >
+                      Limpiar
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-slate-600">Equipo de trabajo</Label>
+                    <Select
+                      value={userGroupFilter}
+                      onValueChange={(v) => setUserGroupFilter(v as "all" | string)}
+                    >
+                      <SelectTrigger className="h-[2.75rem] w-full rounded-xl border-slate-200/90 bg-white shadow-sm">
+                        <SelectValue placeholder="Equipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos los equipos</SelectItem>
+                        {userGroups.map((g) => (
+                          <SelectItem key={g.id} value={g.id}>
+                            {g.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-slate-600">Permiso</Label>
+                    <Select
+                      value={userPermissionFilter}
+                      onValueChange={(v) => setUserPermissionFilter(v as "all" | UserPermission)}
+                    >
+                      <SelectTrigger className="h-[2.75rem] w-full rounded-xl border-slate-200/90 bg-white shadow-sm">
+                        <SelectValue placeholder="Permiso" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Cualquiera</SelectItem>
+                        {permissionCards.map((p) => (
+                          <SelectItem key={p.value} value={p.value}>
+                            {p.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+                    <Label className="text-xs font-medium text-slate-600">Teléfono en ficha</Label>
+                    <Select
+                      value={userPhoneFilter}
+                      onValueChange={(v) => setUserPhoneFilter(v as "all" | "with" | "without")}
+                    >
+                      <SelectTrigger className="h-[2.75rem] w-full rounded-xl border-slate-200/90 bg-white shadow-sm">
+                        <SelectValue placeholder="Teléfono" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="with">Con teléfono</SelectItem>
+                        <SelectItem value="without">Sin teléfono</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -597,7 +729,7 @@ export function AdminUsersManager({
               {filteredUsers.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="border-t border-slate-100 px-4 py-14 text-center text-sm text-slate-500" style={{ fontWeight: 500 }}>
-                    No hay usuarios que coincidan con la búsqueda o el filtro de rol.
+                    No hay usuarios que coincidan con la búsqueda o los filtros.
                   </td>
                 </tr>
               ) : (

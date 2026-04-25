@@ -73,6 +73,7 @@ export function UserGroupsPanel({ users, canManageGroups, groups: groupsProp, on
   const [leaderSearch, setLeaderSearch] = useState("");
 
   const [deleteTarget, setDeleteTarget] = useState<UserGroup | null>(null);
+  const [viewGroup, setViewGroup] = useState<UserGroup | null>(null);
 
   useEffect(() => {
     setGroups(groupsProp);
@@ -131,6 +132,21 @@ export function UserGroupsPanel({ users, canManageGroups, groups: groupsProp, on
     if (!q) return groups;
     return groups.filter((g) => g.name.toLowerCase().includes(q));
   }, [groups, groupListQuery]);
+
+  const viewGroupDetail = useMemo(() => {
+    if (!viewGroup) return null;
+    const leaderU = users.find((u) => u.id === viewGroup.leaderId);
+    const members = viewGroup.memberIds
+      .map((id) => users.find((u) => u.id === id))
+      .filter((u): u is User => Boolean(u));
+    const asesores = members
+      .filter((u) => u.role === "asesor")
+      .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" }));
+    const otrosMiembros = members.filter(
+      (u) => u.id !== viewGroup.leaderId && u.role !== "asesor"
+    );
+    return { leaderU, asesores, otrosMiembros, created: viewGroup.createdAt };
+  }, [viewGroup, users]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -319,10 +335,28 @@ export function UserGroupsPanel({ users, canManageGroups, groups: groupsProp, on
                 return (
                   <tr key={g.id} className="border-t border-slate-100">
                     <td className="px-4 py-3">
-                      <p className="text-sm font-semibold text-slate-900">{g.name}</p>
-                      <p className="text-xs text-slate-500">
-                        Creado {new Date(g.createdAt).toLocaleDateString("es-MX")}
-                      </p>
+                      {canManageGroups ? (
+                        <button
+                          type="button"
+                          onClick={() => setViewGroup(g)}
+                          className="max-w-full text-left transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-1 rounded"
+                          title="Ver detalle del equipo"
+                        >
+                          <p className="text-sm font-semibold text-slate-900 underline decoration-slate-300 underline-offset-2 hover:decoration-primary/60">
+                            {g.name}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Creado {new Date(g.createdAt).toLocaleDateString("es-MX")}
+                          </p>
+                        </button>
+                      ) : (
+                        <>
+                          <p className="text-sm font-semibold text-slate-900">{g.name}</p>
+                          <p className="text-xs text-slate-500">
+                            Creado {new Date(g.createdAt).toLocaleDateString("es-MX")}
+                          </p>
+                        </>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-700">
                       <span className="font-medium">{leader?.name ?? "—"}</span>
@@ -580,6 +614,87 @@ export function UserGroupsPanel({ users, canManageGroups, groups: groupsProp, on
                   onClick={confirmDelete}
                 >
                   Eliminar
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!viewGroup} onOpenChange={(open) => !open && setViewGroup(null)}>
+        <DialogContent className="w-full max-w-md border-slate-200 bg-white p-0 max-h-[min(90vh,640px)] flex flex-col overflow-hidden">
+          {viewGroup && viewGroupDetail && (
+            <>
+              <DialogHeader className="shrink-0 border-b border-slate-100 px-6 py-4 text-left">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Equipo</p>
+                <DialogTitle className="mt-1 text-xl font-semibold text-slate-900">{viewGroup.name}</DialogTitle>
+                <DialogDescription className="mt-1 text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                  Creado {new Date(viewGroupDetail.created).toLocaleDateString("es-MX", { dateStyle: "long" })}.
+                  Vista de solo lectura.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Líder de grupo
+                  </p>
+                  {viewGroupDetail.leaderU ? (
+                    <div className="mt-2 rounded-lg border border-slate-200/90 bg-slate-50/80 px-3 py-2.5">
+                      <p className="text-sm font-semibold text-slate-900">{viewGroupDetail.leaderU.name}</p>
+                      <p className="text-xs text-slate-600">{viewGroupDetail.leaderU.email}</p>
+                      <p className="mt-0.5 text-[11px] font-medium text-slate-500">
+                        {roleLabels[viewGroupDetail.leaderU.role]}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-slate-500">— Sin líder vinculado en el listado de usuarios.</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Asesores asignados
+                  </p>
+                  {viewGroupDetail.asesores.length === 0 ? (
+                    <p className="mt-2 text-sm text-slate-500">Ningún asesor en este grupo.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-2">
+                      {viewGroupDetail.asesores.map((u) => (
+                        <li
+                          key={u.id}
+                          className="rounded-lg border border-slate-200/90 bg-white px-3 py-2 shadow-sm"
+                        >
+                          <p className="text-sm font-medium text-slate-900">{u.name}</p>
+                          <p className="text-xs text-slate-600">{u.email}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                {viewGroupDetail.otrosMiembros.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      Otros miembros
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {viewGroupDetail.otrosMiembros
+                        .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" }))
+                        .map((u) => (
+                          <li
+                            key={u.id}
+                            className="rounded-lg border border-slate-200/50 bg-slate-50/50 px-3 py-2"
+                          >
+                            <p className="text-sm font-medium text-slate-800">{u.name}</p>
+                            <p className="text-xs text-slate-600">{u.email}</p>
+                            <p className="text-[11px] text-slate-500">{roleLabels[u.role]}</p>
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+              <DialogFooter className="shrink-0 border-t border-slate-100 bg-slate-50/50 px-6 py-3">
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setViewGroup(null)}>
+                  Cerrar
                 </Button>
               </DialogFooter>
             </>

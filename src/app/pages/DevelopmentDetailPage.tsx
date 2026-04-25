@@ -161,6 +161,12 @@ export function DevelopmentDetailPage() {
     setDescriptionExpanded(false);
   }, [id]);
 
+  const waHref = useMemo(() => {
+    const digits = String(formData.phone ?? "").replace(/\D/g, "");
+    if (digits.length < 10) return "";
+    return `https://wa.me/${digits}`;
+  }, [formData.phone]);
+
   if (loading) {
     return (
       <div className="viterra-page min-h-screen flex flex-col bg-white">
@@ -228,12 +234,6 @@ export function DevelopmentDetailPage() {
 
   const descriptionNeedsExpand =
     development.description.length > DESCRIPTION_COLLAPSE_THRESHOLD;
-
-  const waHref = useMemo(() => {
-    const digits = String(formData.phone ?? "").replace(/\D/g, "");
-    if (digits.length < 10) return "";
-    return `https://wa.me/${digits}`;
-  }, [formData.phone]);
 
   return (
     <div className="viterra-page min-h-screen flex flex-col bg-slate-50">

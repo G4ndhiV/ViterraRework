@@ -39,6 +39,8 @@ export interface Development {
   inChargePhone?: string;
   /** Email de contacto (`in_charge_email` en Supabase). */
   inChargeEmail?: string;
+  /** Código de referencia (`reference_code`). */
+  referenceCode?: string;
   tokkoId?: string;
   payload?: Record<string, unknown>;
 }

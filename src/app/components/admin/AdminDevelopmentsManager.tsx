@@ -13,6 +13,7 @@ import {
   Table2,
   Plus,
   Search,
+  Star,
   Trash2,
   TrendingUp,
 } from "lucide-react";
@@ -28,6 +29,7 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
+import { Switch } from "../ui/switch";
 import { cn } from "../ui/utils";
 import { AdminDevelopmentsMap } from "./AdminDevelopmentsMap";
 import { ImageGalleryEditor } from "./ImageGalleryEditor";
@@ -60,6 +62,7 @@ const emptyForm = {
   priceRange: "",
   inChargePhone: "",
   inChargeEmail: "",
+  featured: false,
 };
 
 export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Props) {
@@ -69,6 +72,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [searchQuery, setSearchQuery] = useState("");
+  const [referenceCodeQuery, setReferenceCodeQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("all");
   const [constructionFilter, setConstructionFilter] = useState("all");
@@ -91,12 +95,15 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
 
   const filteredDevelopments = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
+    const refQ = referenceCodeQuery.trim().toLowerCase();
     return developments.filter((d) => {
       const matchesSearch =
         !q ||
         [d.name, d.location, d.type, d.status, d.colony].some((field) =>
           field.toLowerCase().includes(q)
         );
+      const matchesReferenceCode =
+        !refQ || (d.referenceCode ?? "").trim().toLowerCase().includes(refQ);
       const matchesType = typeFilter === "all" || d.type === typeFilter;
       const matchesLocation = locationFilter === "all" || d.location === locationFilter;
       const matchesConstruction = constructionFilter === "all" || d.status === constructionFilter;
@@ -106,6 +113,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
       const matchesDelivery = deliveryFilter === "all" || d.deliveryDate === deliveryFilter;
       return (
         matchesSearch &&
+        matchesReferenceCode &&
         matchesType &&
         matchesLocation &&
         matchesConstruction &&
@@ -116,6 +124,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
   }, [
     developments,
     searchQuery,
+    referenceCodeQuery,
     typeFilter,
     locationFilter,
     constructionFilter,
@@ -149,6 +158,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
       priceRange: d.priceRange,
       inChargePhone: d.inChargePhone ?? "",
       inChargeEmail: d.inChargeEmail ?? "",
+      featured: Boolean(d.featured),
     });
     setOpen(true);
   };
@@ -177,9 +187,10 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
       additionalFeatures: editing?.additionalFeatures ?? [],
       developmentUnits: editing?.developmentUnits ?? [],
       coordinates: editing?.coordinates ?? { lat: 20.67, lng: -103.35 },
-      featured: editing?.featured ?? false,
+      featured: Boolean(form.featured),
       inChargePhone: form.inChargePhone.trim(),
       inChargeEmail: form.inChargeEmail.trim(),
+      referenceCode: editing?.referenceCode,
       tokkoId: editing?.tokkoId,
     };
     onSave(payload);
@@ -303,10 +314,11 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
             value={stateFilter}
             onChange={(e) => setStateFilter(e.target.value)}
             className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
+            aria-label="Filtrar desarrollos destacados"
           >
-            <option value="all">Estado</option>
-            <option value="featured">Destacado</option>
-            <option value="normal">No destacado</option>
+            <option value="all">Todos</option>
+            <option value="featured">Solo destacados</option>
+            <option value="normal">No destacados</option>
           </select>
           <select
             value={deliveryFilter}
@@ -321,15 +333,34 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
             ))}
           </select>
         </div>
-        <div className="mt-3 relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar desarrollos por nombre..."
-            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-navy placeholder:text-slate-400 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15"
-          />
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar desarrollos por nombre..."
+              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-navy placeholder:text-slate-400 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15"
+            />
+          </div>
+          <div className="relative">
+            <span
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-semibold tracking-wide text-slate-400"
+              aria-hidden
+            >
+              REF
+            </span>
+            <input
+              type="search"
+              value={referenceCodeQuery}
+              onChange={(e) => setReferenceCodeQuery(e.target.value)}
+              placeholder="Código de referencia..."
+              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-11 pr-4 text-sm text-brand-navy tabular-nums placeholder:text-slate-400 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15"
+              aria-label="Filtrar por código de referencia"
+              autoComplete="off"
+            />
+          </div>
         </div>
         </div>
       </div>
@@ -891,13 +922,60 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                     "xl:max-h-[min(36rem,calc(100dvh-13rem))] xl:overflow-y-auto xl:pr-1"
                   )}
                 >
-                  <div>
-                    <h3 className="font-heading text-base text-brand-navy sm:text-lg" style={{ fontWeight: 700 }}>
-                      Datos del desarrollo
-                    </h3>
-                    <p className="mt-0.5 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
-                      Identificación, ubicación, contacto, comercial y descripción pública.
-                    </p>
+                  <div className="flex flex-col gap-3 border-b border-slate-200/60 pb-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:pb-3">
+                    <div className="min-w-0 sm:flex-1 sm:pt-0.5">
+                      <h3 className="font-heading text-base text-brand-navy sm:text-lg" style={{ fontWeight: 700 }}>
+                        Datos del desarrollo
+                      </h3>
+                      <p className="mt-0.5 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
+                        Identificación, ubicación, contacto, comercial y descripción pública.
+                      </p>
+                    </div>
+
+                    <div
+                      className={cn(
+                        "flex w-full shrink-0 items-center gap-2 rounded-xl border px-2.5 py-2 shadow-sm sm:mt-0 sm:max-w-[min(100%,20rem)] sm:py-1.5",
+                        form.featured
+                          ? "border-amber-300/50 bg-gradient-to-r from-amber-50/90 to-amber-50/20 ring-1 ring-amber-200/30"
+                          : "border-slate-200/80 bg-gradient-to-r from-slate-50/70 to-white ring-1 ring-slate-900/[0.04]"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors",
+                          form.featured
+                            ? "border-amber-200/80 bg-amber-100/80 text-amber-700"
+                            : "border-slate-200/90 bg-white text-amber-500/80"
+                        )}
+                        aria-hidden
+                      >
+                        <Star
+                          className="h-3.5 w-3.5"
+                          strokeWidth={2}
+                          fill={form.featured ? "currentColor" : "none"}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1 pr-0.5">
+                        <Label
+                          htmlFor="viterra-development-featured"
+                          className="block cursor-pointer text-[12px] leading-tight text-slate-800 sm:text-sm"
+                          style={{ fontWeight: 600 }}
+                        >
+                          <span className="sm:hidden">Destacado</span>
+                          <span className="hidden sm:inline">Destacar desarrollo</span>
+                        </Label>
+                      </div>
+                      <div className="flex shrink-0 self-center pl-0.5">
+                        <Switch
+                          id="viterra-development-featured"
+                          checked={Boolean(form.featured)}
+                          disabled={readOnly}
+                          onCheckedChange={(v) => setForm((p) => ({ ...p, featured: v }))}
+                          className="data-[state=unchecked]:bg-slate-200/80"
+                          aria-label="Destacar desarrollo"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
