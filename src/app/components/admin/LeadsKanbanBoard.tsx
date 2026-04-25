@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useState, useEffect, useRef } from "react";
+import { useMemo, useCallback, useState } from "react";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { ChevronLeft, ChevronRight, MapPin } from "lucide-react";
@@ -238,47 +238,25 @@ export function LeadsKanbanBoard({
     return map;
   }, [leads, columnStatuses]);
 
-  /** true = colapsada. Por defecto: columnas vacías colapsadas; si hay override en mapa, se respeta. */
+  /** true = colapsada. Por defecto todas expandidas (incluso vacías) para ver el pipeline completo; el usuario puede colapsar. */
   const [collapsedByStatus, setCollapsedByStatus] = useState<Record<string, boolean>>({});
-  const prevCountsRef = useRef<Record<string, number>>({});
-
-  useEffect(() => {
-    for (const status of columnStatuses) {
-      const c = byStatus[status]?.length ?? 0;
-      const p = prevCountsRef.current[status];
-      prevCountsRef.current[status] = c;
-      if (p === undefined) continue;
-      if (p > 0 && c === 0) {
-        setCollapsedByStatus((m) => ({ ...m, [status]: true }));
-      } else if (p === 0 && c > 0) {
-        setCollapsedByStatus((m) => {
-          const next = { ...m };
-          delete next[status];
-          return next;
-        });
-      }
-    }
-  }, [byStatus, columnStatuses]);
 
   const columnCollapsed = useCallback(
     (status: string) => {
-      const count = byStatus[status]?.length ?? 0;
       if (Object.prototype.hasOwnProperty.call(collapsedByStatus, status)) {
         return collapsedByStatus[status];
       }
-      return count === 0;
+      return false;
     },
-    [byStatus, collapsedByStatus],
+    [collapsedByStatus],
   );
 
-  const toggleColumnCollapsed = useCallback(
-    (status: string) => {
-      const count = byStatus[status]?.length ?? 0;
-      const cur = collapsedByStatus[status] ?? count === 0;
-      setCollapsedByStatus((m) => ({ ...m, [status]: !cur }));
-    },
-    [byStatus, collapsedByStatus],
-  );
+  const toggleColumnCollapsed = useCallback((status: string) => {
+    setCollapsedByStatus((m) => {
+      const cur = m[status] ?? false;
+      return { ...m, [status]: !cur };
+    });
+  }, []);
 
   const handleDrop = useCallback(
     (leadId: string, newStatus: string) => {

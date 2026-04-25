@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Lead, LeadClientNote, LeadActivityEntry } from "../data/leads";
-import { normalizeStoredLead } from "../data/leads";
+import { normalizeLeadPipelineStatus, normalizeStoredLead } from "../data/leads";
 import { DEFAULT_PIPELINE_GROUP_ID } from "./pipelineByGroup";
 
 const nowIso = () => new Date().toISOString();
@@ -34,7 +34,10 @@ export function rowToLead(row: Record<string, unknown>): Lead {
     propertyType: String(row.property_type ?? ""),
     budget: typeof row.budget === "number" ? row.budget : Number(row.budget) || 0,
     location: String(row.location ?? ""),
-    status: typeof row.status === "string" && row.status.length > 0 ? row.status : "nuevo",
+    status:
+      typeof row.status === "string" && row.status.length > 0
+        ? normalizeLeadPipelineStatus(row.status)
+        : "nuevo",
     priorityStars: row.priority_stars as Lead["priorityStars"],
     source: String(row.source ?? ""),
     assignedTo: String(row.assigned_to ?? ""),

@@ -12,6 +12,7 @@ import { DevelopmentDetailPage } from "./pages/DevelopmentDetailPage";
 import { AboutPage } from "./pages/AboutPage";
 import { ContactPage } from "./pages/ContactPage";
 import { LoginPage } from "./pages/LoginPage";
+import { FirstLoginChangePasswordPage } from "./pages/FirstLoginChangePasswordPage";
 import { AdminPage } from "./pages/AdminPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 
@@ -66,6 +67,10 @@ export const router = createBrowserRouter([
       {
         path: "/login",
         Component: LoginPage,
+      },
+      {
+        path: "/admin/cambiar-contrasena",
+        Component: FirstLoginChangePasswordPage,
       },
       {
         path: "/admin",

@@ -105,6 +105,19 @@ export const LEAD_STATUS_LABEL: Record<LeadBuiltinStatus, string> = {
   perdido: "Perdido",
 };
 
+const BUILTIN_STATUS_KEYS = new Set<string>(Object.keys(LEAD_STATUS_LABEL));
+
+/** Unifica `CUSTOM_uuid` vs `custom_uuid` y mayúsculas en etapas incorporadas para alinear Kanban y etiquetas. */
+export function normalizeLeadPipelineStatus(statusRaw: string): string {
+  const s = statusRaw.trim();
+  if (!s) return "";
+  const lower = s.toLowerCase();
+  if (BUILTIN_STATUS_KEYS.has(lower)) return lower;
+  const m = /^custom_([0-9a-f-]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(s);
+  if (m) return `custom_${m[1].toLowerCase()}`;
+  return s;
+}
+
 export type CustomKanbanStage = { id: string; label: string };
 
 export function newCustomStageId(): string {
@@ -114,12 +127,32 @@ export function newCustomStageId(): string {
   return `custom_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function labelForLeadStatus(status: string, customStages: CustomKanbanStage[] = []): string {
-  if (Object.prototype.hasOwnProperty.call(LEAD_STATUS_LABEL, status)) {
-    return LEAD_STATUS_LABEL[status as LeadBuiltinStatus];
+/** Etiqueta legible si el id de etapa no está en catálogo (p. ej. datos legacy con prefijo distinto). */
+function humanizeOrphanCustomStageId(status: string): string {
+  const s = status.trim();
+  const uuidLike = /^custom_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(s);
+  if (uuidLike) {
+    return `Etapa personalizada (${uuidLike[1].slice(0, 8)}…)`;
   }
-  const custom = customStages.find((s) => s.id === status);
-  return custom?.label ?? status;
+  if (/^custom_/i.test(s)) {
+    return "Etapa personalizada";
+  }
+  return s;
+}
+
+export function labelForLeadStatus(status: string, customStages: CustomKanbanStage[] = []): string {
+  const key = status.trim();
+  if (Object.prototype.hasOwnProperty.call(LEAD_STATUS_LABEL, key)) {
+    return LEAD_STATUS_LABEL[key as LeadBuiltinStatus];
+  }
+  if (Object.prototype.hasOwnProperty.call(LEAD_STATUS_LABEL, key.toLowerCase())) {
+    return LEAD_STATUS_LABEL[key.toLowerCase() as LeadBuiltinStatus];
+  }
+  const custom =
+    customStages.find((st) => st.id === key) ??
+    customStages.find((st) => st.id.toLowerCase() === key.toLowerCase());
+  if (custom?.label?.trim()) return custom.label.trim();
+  return humanizeOrphanCustomStageId(key);
 }
 
 const BY_ASSIGNED_NAME: Record<string, string> = {
@@ -230,7 +263,9 @@ export function normalizeStoredLead(raw: Partial<Lead> & Record<string, unknown>
     budget: typeof raw.budget === "number" ? raw.budget : Number(raw.budget) || 0,
     location: String(raw.location ?? ""),
     status:
-      typeof raw.status === "string" && raw.status.length > 0 ? raw.status : "",
+      typeof raw.status === "string" && raw.status.length > 0
+        ? normalizeLeadPipelineStatus(raw.status)
+        : "",
     priorityStars: migrateLegacyPriority(
       raw.priorityStars !== undefined ? raw.priorityStars : raw.priority
     ),

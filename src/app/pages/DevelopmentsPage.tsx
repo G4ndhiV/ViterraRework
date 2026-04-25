@@ -181,7 +181,7 @@ export function DevelopmentsPage() {
                       {dev.name}
                     </h3>
 
-                    <p className="font-heading mb-5 text-base font-normal leading-relaxed text-brand-navy/70 not-italic sm:mb-6 sm:text-lg">
+                    <p className="font-heading mb-5 line-clamp-6 text-base font-normal leading-relaxed text-brand-navy/70 not-italic sm:mb-6 sm:line-clamp-5 sm:text-lg">
                       {dev.description}
                     </p>
 
@@ -278,7 +278,7 @@ export function DevelopmentsPage() {
                       {dev.name}
                     </h3>
 
-                    <p className="font-heading mb-5 text-sm font-normal leading-relaxed text-brand-navy/70 not-italic sm:mb-6">
+                    <p className="font-heading mb-5 line-clamp-5 text-sm font-normal leading-relaxed text-brand-navy/70 not-italic sm:mb-6 sm:line-clamp-4">
                       {dev.description}
                     </p>
 

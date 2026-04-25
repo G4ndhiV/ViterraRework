@@ -3,6 +3,9 @@ import type { Property } from "../components/PropertyCard";
 
 const nowIso = () => new Date().toISOString();
 
+/** Máximo de propiedades destacadas en la portada (inicio). */
+export const MAX_FEATURED_PROPERTIES = 4;
+
 function appStatusFromDb(s: string): "venta" | "alquiler" {
   const t = s.trim().toLowerCase();
   if (t.includes("alquiler") || t.includes("rent") || t === "renta") return "alquiler";
@@ -25,6 +28,45 @@ export function parseListingInventory(raw: string): NonNullable<Property["listin
   return "disponible";
 }
 
+/** Entero ≥ 0 a partir de valores que vienen de Postgres/JSON (a veces string). */
+function nonNegInt(v: number | string | null | undefined): number {
+  if (v == null || v === "") return 0;
+  const n = typeof v === "number" ? v : Number(String(v).trim());
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.round(n));
+}
+
+/** Normaliza columnas `text[]` de Postgres. */
+function textArrayCol(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((x): x is string => typeof x === "string")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function optionalPositiveNum(v: number | string | null | undefined): number | undefined {
+  if (v == null || v === "") return undefined;
+  const n = typeof v === "number" ? v : Number(String(v).trim());
+  if (!Number.isFinite(n)) return undefined;
+  return n;
+}
+
+/** URLs de galería: primero la principal, luego el resto sin duplicados. */
+function buildGalleryUrls(primary: string, images: string[]): string[] {
+  const cleaned = images.map((u) => String(u).trim()).filter(Boolean);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const push = (u: string) => {
+    if (seen.has(u)) return;
+    seen.add(u);
+    out.push(u);
+  };
+  if (primary) push(primary);
+  for (const u of cleaned) push(u);
+  return out.length ? out : primary ? [primary] : [];
+}
+
 export type PropertyRow = {
   id: string;
   tokko_id: string;
@@ -45,10 +87,28 @@ export type PropertyRow = {
   synced_at?: string | null;
   updated_at?: string | null;
   featured: boolean;
-  /** FK lógica al desarrollo: coincide con `developments.tokko_id`. */
+  /** `public.properties.colony` (puede faltar en filas antiguas). */
+  colony?: string | null;
+  amenities?: string[] | null;
+  services?: string[] | null;
+  additional_features?: string[] | null;
+  publication_title?: string | null;
+  full_address?: string | null;
+  description?: string | null;
+  rich_description?: string | null;
+  reference_code?: string | null;
+  public_url?: string | null;
+  surface_land?: number | string | null;
+  expenses?: number | string | null;
+  age?: number | null;
+  parking_spaces?: number | null;
   development_tokko_id?: string | null;
 };
 
+/**
+ * Convierte una fila de `public.properties` al tipo `Property` de la app.
+ * Recámaras y baños salen de las columnas **`bedrooms`** y **`bathrooms`** (no de `payload`).
+ */
 export function rowToProperty(row: PropertyRow): Property {
   const imgs = Array.isArray(row.images) ? row.images.filter((x): x is string => typeof x === "string") : [];
   const primary = row.image?.trim() || imgs[0] || "";
@@ -59,46 +119,72 @@ export function rowToProperty(row: PropertyRow): Property {
       : typeof row.updated_at === "string" && row.updated_at.trim()
         ? row.updated_at
         : undefined;
+  const pubTitle = row.publication_title?.trim();
+  const listingAt = row.synced_at || row.updated_at;
+  const galleryUrls = buildGalleryUrls(primary, imgs);
   return {
     id: row.id,
     title: row.title,
     price: Number(row.price ?? 0),
     location: row.location ?? "",
-    bedrooms: row.bedrooms ?? 0,
-    bathrooms: row.bathrooms ?? 0,
+    bedrooms: nonNegInt(row.bedrooms),
+    bathrooms: nonNegInt(row.bathrooms),
     area: Number(row.area ?? 0),
     image: primary,
     type: row.type ?? "",
     status: appStatusFromDb(row.status),
+    featured: Boolean(row.featured),
     coordinates:
       row.lat != null && row.lng != null
         ? { lat: row.lat, lng: row.lng }
         : undefined,
-    developmentTokkoId: row.development_tokko_id?.trim() || undefined,
+    colony:
+      row.colony != null && String(row.colony).trim() !== ""
+        ? String(row.colony).trim()
+        : undefined,
+    amenities: textArrayCol(row.amenities),
+    services: textArrayCol(row.services),
+    additionalFeatures: textArrayCol(row.additional_features),
+    publicationTitle: pubTitle || undefined,
+    fullAddress: row.full_address?.trim() || undefined,
+    description: row.description?.trim() || undefined,
+    richDescription: row.rich_description?.trim() || undefined,
+    referenceCode: row.reference_code?.trim() || undefined,
+    publicUrl: row.public_url?.trim() || undefined,
+    surfaceLand: optionalPositiveNum(row.surface_land),
+    expenses: optionalPositiveNum(row.expenses),
+    age: row.age != null && Number.isFinite(row.age) ? Math.max(0, Math.round(row.age)) : undefined,
+    parkingSpaces: row.parking_spaces != null ? nonNegInt(row.parking_spaces) : undefined,
+    galleryImages: galleryUrls,
+    listingUpdatedAt: listingAt || undefined,
+    developmentTokkoId:
+      row.development_tokko_id != null && String(row.development_tokko_id).trim() !== ""
+        ? String(row.development_tokko_id).trim()
+        : undefined,
     listedAtIso,
     listingInventory: parseListingInventory(rawStatus),
-    images: imgs.length > 0 ? imgs : undefined,
+    images: galleryUrls.length > 0 ? galleryUrls : undefined,
   };
 }
 
 export async function fetchCatalogProperties(client: SupabaseClient) {
   /** No filtramos por `deleted_at IS NULL`: en datos sincronizados desde Tokko a veces nunca queda NULL y el listado quedaría vacío. El borrado en admin sigue usando `softDeleteProperty`. */
+  /** `select('*')` incluye `bedrooms` y `bathrooms`; `rowToProperty` las mapea al modelo. */
   return client.from("properties").select("*").order("updated_at", { ascending: false });
 }
 
-/** Propiedades (unidades) vinculadas a un desarrollo vía `properties.development_tokko_id` = `developments.tokko_id`. */
-export async function fetchPropertiesByDevelopmentTokkoId(
-  client: SupabaseClient,
-  developmentTokkoId: string
-) {
-  const tid = developmentTokkoId.trim();
-  if (!tid) return { data: [] as Property[], error: null };
+/** Propiedades vinculadas a un desarrollo por `development_tokko_id` (Tokko). */
+export async function fetchPropertiesByDevelopmentTokkoId(client: SupabaseClient, developmentTokkoId: string) {
+  const id = developmentTokkoId.trim();
+  if (!id) {
+    return { data: [] as Property[], error: null };
+  }
   const res = await client
     .from("properties")
     .select("*")
-    .eq("development_tokko_id", tid)
-    .order("price", { ascending: true });
-  if (res.error) return { data: [] as Property[], error: res.error };
+    .eq("development_tokko_id", id)
+    .order("updated_at", { ascending: false });
+  if (res.error) return { data: null, error: res.error };
   const rows = (res.data ?? []) as PropertyRow[];
   return { data: rows.map(rowToProperty), error: null };
 }
@@ -108,7 +194,13 @@ export async function insertProperty(client: SupabaseClient, p: Property, explic
   const id = explicitId || p.id;
   const tokkoId = `manual_${id}`;
   const imgs =
-    p.images && p.images.length > 0 ? p.images : p.image ? [p.image] : [];
+    p.galleryImages && p.galleryImages.length > 0
+      ? [...p.galleryImages]
+      : p.images && p.images.length > 0
+        ? [...p.images]
+        : p.image
+          ? [p.image]
+          : [];
   const row = {
     id,
     tokko_id: tokkoId,
@@ -123,28 +215,40 @@ export async function insertProperty(client: SupabaseClient, p: Property, explic
     status: dbStatusFromApp(p.status),
     lat: p.coordinates?.lat ?? null,
     lng: p.coordinates?.lng ?? null,
-    development_tokko_id: null,
+    development_tokko_id: p.developmentTokkoId?.trim() || null,
     payload: { source: "viterra_admin" } as Record<string, unknown>,
     synced_at: ts,
     updated_at: ts,
     images: imgs,
-    colony: null,
-    full_address: null,
-    description: null,
-    rich_description: null,
-    amenities: [] as string[],
-    services: [] as string[],
-    additional_features: [] as string[],
-    reference_code: null,
-    public_url: null,
+    colony: p.colony?.trim() || null,
+    full_address: p.fullAddress?.trim() || null,
+    description: p.description?.trim() || null,
+    rich_description: p.richDescription?.trim() || null,
+    amenities: [...(p.amenities ?? [])],
+    services: [...(p.services ?? [])],
+    additional_features: [...(p.additionalFeatures ?? [])],
+    reference_code: p.referenceCode?.trim() || null,
+    public_url: p.publicUrl?.trim() || null,
     deleted_at: null,
     publication_title: null,
-    featured: false,
+    featured: p.featured ?? false,
     surface_land: null,
     expenses: null,
     age: null,
     parking_spaces: null,
     property_type_tokko_id: null,
+    total_surface: null,
+    roofed_surface: null,
+    semiroofed_surface: null,
+    unroofed_surface: null,
+    front_measure: null,
+    depth_measure: null,
+    floors_amount: null,
+    situation: null,
+    orientation: null,
+    half_bathrooms: null,
+    credit_eligible: null,
+    tags: [] as string[],
   };
   return client.from("properties").insert(row);
 }
@@ -152,7 +256,13 @@ export async function insertProperty(client: SupabaseClient, p: Property, explic
 export async function updateProperty(client: SupabaseClient, p: Property) {
   const ts = nowIso();
   const imgs =
-    p.images && p.images.length > 0 ? p.images : p.image ? [p.image] : [];
+    p.galleryImages && p.galleryImages.length > 0
+      ? [...p.galleryImages]
+      : p.images && p.images.length > 0
+        ? [...p.images]
+        : p.image
+          ? [p.image]
+          : [];
   return client
     .from("properties")
     .update({
@@ -170,9 +280,15 @@ export async function updateProperty(client: SupabaseClient, p: Property) {
       images: imgs,
       updated_at: ts,
       synced_at: ts,
+      featured: p.featured ?? false,
       payload: { source: "viterra_admin", lastEdit: ts } as Record<string, unknown>,
     })
     .eq("id", p.id);
+}
+
+export async function updatePropertyFeatured(client: SupabaseClient, id: string, featured: boolean) {
+  const ts = nowIso();
+  return client.from("properties").update({ featured, updated_at: ts, synced_at: ts }).eq("id", id);
 }
 
 export async function softDeleteProperty(client: SupabaseClient, id: string) {

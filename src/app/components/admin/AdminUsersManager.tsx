@@ -332,6 +332,14 @@ export function AdminUsersManager({
       }
     }
 
+    const matchIds = new Set<string>();
+    for (const userId of coveredUserIds) {
+      matchIds.add(userId);
+      const matchedUser = users.find((u) => u.id.trim().toLowerCase() === userId);
+      const tok = matchedUser?.tokkoUserId?.trim().toLowerCase();
+      if (tok) matchIds.add(tok);
+    }
+
     const aliases = new Set<string>();
     for (const userId of coveredUserIds) {
       const matchedUser = users.find((u) => u.id.trim().toLowerCase() === userId);
@@ -346,7 +354,7 @@ export function AdminUsersManager({
     return leads
       .filter((lead) => {
         const leadAssignedId = lead.assignedToUserId?.trim().toLowerCase();
-        if (leadAssignedId && coveredUserIds.has(leadAssignedId)) return true;
+        if (leadAssignedId && matchIds.has(leadAssignedId)) return true;
 
         const assignedByName = foldSearchText(lead.assignedTo);
         if (!assignedByName) return false;
@@ -381,7 +389,7 @@ export function AdminUsersManager({
         const property = propertyById.get(lead.relatedPropertyId);
         const propertyImage = (property?.image ?? "").trim();
         if (propertyImage) return propertyImage;
-        const galleryImage = property?.images?.[0]?.trim() ?? "";
+        const galleryImage = (property?.galleryImages?.[0] ?? property?.images?.[0] ?? "").trim();
         if (galleryImage) return galleryImage;
       }
       if (lead.relatedDevelopmentId) {

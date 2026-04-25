@@ -35,6 +35,7 @@ import {
   Settings,
   Map as MapIcon,
   UserCircle2,
+  Star,
 } from "lucide-react";
 import { AdminSiteEditor } from "../components/admin/AdminSiteEditor";
 import { useAuth, type User } from "../contexts/AuthContext";
@@ -90,6 +91,8 @@ import {
   insertProperty,
   softDeleteProperty,
   updateProperty,
+  updatePropertyFeatured,
+  MAX_FEATURED_PROPERTIES,
 } from "../lib/supabaseProperties";
 import type { Development } from "../data/developments";
 import {
@@ -131,6 +134,7 @@ import {
 import {
   DEFAULT_PIPELINE_GROUP_ID,
   canConfigurePipelineForGroup,
+  createDefaultBuiltinPipelineSnapshot,
   createEmptyGroupPipelineSnapshot,
   getAllowedPipelineGroupIds,
   loadPipelineByGroup,
@@ -141,6 +145,11 @@ import {
 } from "../lib/pipelineByGroup";
 import { type UserGroup } from "../lib/userGroups";
 import { fetchActiveUserGroups, softDeleteUserGroup, upsertUserGroup } from "../lib/supabaseUserGroups";
+import {
+  buildPipelineByGroupFromSources,
+  fetchSalesPipelineConfigs,
+  persistSalesPipelineConfigs,
+} from "../lib/supabaseSalesPipeline";
 import { foldSearchText } from "../lib/searchText";
 
 type TabType =
@@ -236,9 +245,11 @@ export function AdminPage() {
   const [leadsView, setLeadsView] = useState<"kanban" | "table">("kanban");
   /** Vista lista: secciones por estado; true = colapsada */
   const [leadsTableSectionCollapsed, setLeadsTableSectionCollapsed] = useState<Record<string, boolean>>({});
-  const [pipelineByGroup, setPipelineByGroup] = useState<Record<string, GroupPipelineSnapshot>>(() =>
-    loadPipelineByGroup()
-  );
+  const [pipelineByGroup, setPipelineByGroup] = useState<Record<string, GroupPipelineSnapshot>>(() => ({
+    [DEFAULT_PIPELINE_GROUP_ID]: createDefaultBuiltinPipelineSnapshot(),
+  }));
+  /** Tras cargar pipeline desde Supabase (y fusionar local legacy si aplica). */
+  const [pipelineSourcesHydrated, setPipelineSourcesHydrated] = useState(false);
   const [userGroups, setUserGroups] = useState<UserGroup[]>([]);
   const [activePipelineGroupId, setActivePipelineGroupId] = useState<string>(DEFAULT_PIPELINE_GROUP_ID);
   const [leadDialog, setLeadDialog] = useState<{ lead: Lead; mode: "view" | "edit" } | null>(null);
@@ -271,6 +282,10 @@ export function AdminPage() {
       navigate("/login");
       return;
     }
+    if (user?.mustChangePassword) {
+      navigate("/admin/cambiar-contrasena", { replace: true });
+      return;
+    }
 
     let cancelled = false;
     (async () => {
@@ -286,6 +301,8 @@ export function AdminPage() {
         setDevelopments([]);
         setLeadsLoading(false);
         setDevelopmentsLoading(false);
+        setPipelineByGroup(loadPipelineByGroup());
+        setPipelineSourcesHydrated(true);
         return;
       }
 
@@ -298,6 +315,8 @@ export function AdminPage() {
         setDevelopments([]);
         setLeadsLoading(false);
         setDevelopmentsLoading(false);
+        setPipelineByGroup(loadPipelineByGroup());
+        setPipelineSourcesHydrated(true);
         return;
       }
 
@@ -330,14 +349,32 @@ export function AdminPage() {
       }
       setDevelopmentsLoading(false);
 
+      let groupsData: UserGroup[] = [];
       if (groupsRes.error) {
         if (import.meta.env.DEV) {
           console.warn("[Viterra] No se pudieron cargar grupos desde DB:", groupsRes.error.message);
         }
         setUserGroups([]);
       } else {
+        groupsData = groupsRes.data;
         setUserGroups(groupsRes.data);
       }
+
+      const allowedGroupIds = user
+        ? getAllowedPipelineGroupIds(user, groupsData)
+        : [DEFAULT_PIPELINE_GROUP_ID];
+      const localLegacy = loadPipelineByGroup();
+      const pipeRes = await fetchSalesPipelineConfigs(client);
+      if (cancelled) return;
+      if (pipeRes.error) {
+        if (import.meta.env.DEV) {
+          console.warn("[Viterra] sales_pipeline_configs:", pipeRes.error.message);
+        }
+        setPipelineByGroup(buildPipelineByGroupFromSources([], allowedGroupIds, localLegacy));
+      } else {
+        setPipelineByGroup(buildPipelineByGroupFromSources(pipeRes.data, allowedGroupIds, localLegacy));
+      }
+      setPipelineSourcesHydrated(true);
 
       if (import.meta.env.DEV) {
         const host = getSupabaseProjectHost();
@@ -364,7 +401,25 @@ export function AdminPage() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, isAuthenticated, authReady]);
+  }, [navigate, isAuthenticated, authReady, user?.mustChangePassword, user?.id, user?.role]);
+
+  useEffect(() => {
+    if (!pipelineSourcesHydrated) return;
+    const client = getSupabaseClient();
+    const handle = window.setTimeout(() => {
+      if (client) {
+        void persistSalesPipelineConfigs(client, pipelineByGroup).then((r) => {
+          if (r.error) {
+            toast.error(`Pipeline: no se pudo guardar en la base (${r.error.message}).`);
+            savePipelineByGroup(pipelineByGroup);
+          }
+        });
+      } else {
+        savePipelineByGroup(pipelineByGroup);
+      }
+    }, 500);
+    return () => window.clearTimeout(handle);
+  }, [pipelineByGroup, pipelineSourcesHydrated]);
 
   useEffect(() => {
     document.body.classList.add("admin-crm-montserrat");
@@ -402,6 +457,17 @@ export function AdminPage() {
         }
         return;
       }
+
+      setPipelineByGroup((prev) => {
+        const next = { ...prev };
+        for (const id of deletedIds) {
+          delete next[id];
+        }
+        for (const g of nextGroups) {
+          if (!next[g.id]) next[g.id] = createEmptyGroupPipelineSnapshot();
+        }
+        return next;
+      });
 
       if (nextGroups.length > prevGroups.length) {
         toast.success("Grupo creado y guardado correctamente en la base de datos.");
@@ -453,16 +519,13 @@ export function AdminPage() {
     if (!activePipelineGroupId) return;
     setPipelineByGroup((prev) => {
       if (prev[activePipelineGroupId]) return prev;
-      return {
-        ...prev,
-        [activePipelineGroupId]: createEmptyGroupPipelineSnapshot(),
-      };
+      const snap =
+        activePipelineGroupId === DEFAULT_PIPELINE_GROUP_ID
+          ? createDefaultBuiltinPipelineSnapshot()
+          : createEmptyGroupPipelineSnapshot();
+      return { ...prev, [activePipelineGroupId]: snap };
     });
   }, [activePipelineGroupId]);
-
-  useEffect(() => {
-    savePipelineByGroup(pipelineByGroup);
-  }, [pipelineByGroup]);
 
   const activePipeline =
     pipelineByGroup[activePipelineGroupId] ?? createEmptyGroupPipelineSnapshot();
@@ -1005,6 +1068,15 @@ export function AdminPage() {
         toast.error("Supabase no configurado.");
         return;
       }
+      const prev = properties.find((x) => x.id === p.id);
+      const wasFeatured = Boolean(prev?.featured);
+      const otherFeatured = properties.filter((x) => x.featured && x.id !== p.id).length;
+      if (p.featured && !wasFeatured && otherFeatured >= MAX_FEATURED_PROPERTIES) {
+        toast.error(
+          `Solo pueden destacarse hasta ${MAX_FEATURED_PROPERTIES} propiedades en la portada. Quita una estrella en otra ficha e inténtalo de nuevo.`
+        );
+        return;
+      }
       const exists = properties.some((x) => x.id === p.id);
       const propRes = exists ? await updateProperty(client, p) : await insertProperty(client, p, p.id);
       if (propRes.error) {
@@ -1014,6 +1086,34 @@ export function AdminPage() {
       await reloadProperties();
     },
     [properties, reloadProperties, canManageInventory]
+  );
+
+  const handleTogglePropertyFeatured = useCallback(
+    async (property: Property) => {
+      const client = getSupabaseClient();
+      if (!client) {
+        toast.error("Supabase no configurado.");
+        return;
+      }
+      const next = !property.featured;
+      if (next) {
+        const featuredNow = properties.filter((x) => x.featured).length;
+        if (featuredNow >= MAX_FEATURED_PROPERTIES) {
+          toast.error(
+            `Ya hay ${MAX_FEATURED_PROPERTIES} propiedades destacadas en la portada. Quita una antes de añadir otra.`
+          );
+          return;
+        }
+      }
+      const { error } = await updatePropertyFeatured(client, property.id, next);
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      toast.success(next ? "Propiedad destacada en la portada." : "Propiedad ya no aparece destacada en la portada.");
+      await reloadProperties();
+    },
+    [properties, reloadProperties]
   );
 
   const leadsForUser = useMemo(() => filterLeadsForUser(leads, user), [leads, user]);
@@ -1214,12 +1314,17 @@ export function AdminPage() {
   }, []);
 
   const stageAliasToConfiguredId = useMemo(() => {
+    const builtinTokens = new Set(
+      Object.keys(LEAD_STATUS_LABEL).map((k) => normalizeStageToken(k))
+    );
     const out = new Map<string, string>();
     for (const id of leadColumnStatuses) {
       out.set(normalizeStageToken(id), id);
     }
     for (const stage of customKanbanStages) {
-      out.set(normalizeStageToken(stage.label), stage.id);
+      const t = normalizeStageToken(stage.label);
+      if (builtinTokens.has(t)) continue;
+      if (!out.has(t)) out.set(t, stage.id);
     }
     return out;
   }, [leadColumnStatuses, customKanbanStages, normalizeStageToken]);
@@ -1244,6 +1349,13 @@ export function AdminPage() {
         if (!lead.status || leadColumnStatuses.includes(lead.status)) return null;
         const mapped = stageAliasToConfiguredId.get(normalizeStageToken(lead.status));
         if (!mapped || mapped === lead.status) return null;
+        const leadKey = lead.status.trim().toLowerCase();
+        if (
+          Object.prototype.hasOwnProperty.call(LEAD_STATUS_LABEL, leadKey) &&
+          mapped.startsWith("custom_")
+        ) {
+          return null;
+        }
         return { lead, mapped };
       })
       .filter((x): x is { lead: Lead; mapped: string } => x !== null);
@@ -1354,6 +1466,10 @@ export function AdminPage() {
   );
   const propertyLocationOptions = useMemo(
     () => Array.from(new Set(properties.map((p) => p.location).filter(Boolean))),
+    [properties]
+  );
+  const propertyFeaturedCount = useMemo(
+    () => properties.filter((p) => p.featured).length,
     [properties]
   );
 
@@ -2351,6 +2467,20 @@ export function AdminPage() {
             )}
 
             {!leadsLoading &&
+              leadColumnStatuses.length === 0 &&
+              customKanbanStages.length === 0 &&
+              leadStatusesForRendering.length === 0 && (
+                <div
+                  className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                  style={{ fontWeight: 500 }}
+                  role="status"
+                >
+                  Este pipeline no tiene columnas todavía. Crea la primera en{" "}
+                  <code className="text-xs">Mi empresa → Pipeline de ventas</code>.
+                </div>
+              )}
+
+            {!leadsLoading &&
               user &&
               !canViewAllLeads(user.role) &&
               leads.length > 0 &&
@@ -2360,10 +2490,13 @@ export function AdminPage() {
                   style={{ fontWeight: 500 }}
                   role="status"
                 >
-                  Hay {leads.length} lead{leads.length === 1 ? "" : "s"} en el sistema, pero ninguno está asignado a tu
-                  usuario ({roleLabelEs(user.role)}). Pide a un administrador que asigne{" "}
-                  <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">assigned_to_user_id</code> a tu id de
-                  sesión, o configura en Supabase el metadata{" "}
+                  Hay {leads.length} lead{leads.length === 1 ? "" : "s"} en el sistema, pero ninguno coincide con tu
+                  usuario ({roleLabelEs(user.role)}). En datos Tokko,{" "}
+                  <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">assigned_to_user_id</code> suele ser el{" "}
+                  <strong>id Tokko del asesor</strong> (no el UUID de Auth): debe coincidir con{" "}
+                  <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">tokko_users.tokko_user_id</code> o con{" "}
+                  <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">user_metadata.tokko_user_id</code> en
+                  Auth. Un administrador puede poner{" "}
                   <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">role: &quot;admin&quot;</code> para ver
                   todos.
                 </div>
@@ -2652,6 +2785,13 @@ export function AdminPage() {
                   <p className="text-sm text-slate-600" style={{ fontWeight: 500 }}>
                     Filtra, edita y publica propiedades del catálogo.
                   </p>
+                  <p className="mt-2 text-xs text-slate-600" style={{ fontWeight: 500 }}>
+                    Portada (inicio):{" "}
+                    <span className="font-semibold text-brand-navy">
+                      {propertyFeaturedCount}/{MAX_FEATURED_PROPERTIES}
+                    </span>{" "}
+                    destacadas (máximo {MAX_FEATURED_PROPERTIES}). Usa la estrella en la imagen, en la lista o el checkbox al editar.
+                  </p>
                 </div>
                 <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
                   <div
@@ -2865,6 +3005,7 @@ export function AdminPage() {
               {filteredProperties.map((property) => (
                 <div key={property.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden hover:border-slate-300 transition-all group">
                   {canManageInventory ? (
+                    <div className="relative">
                     <button
                       type="button"
                       onClick={() => setPropertyForm({ mode: "edit", property })}
@@ -2882,6 +3023,25 @@ export function AdminPage() {
                         </span>
                       </div>
                     </button>
+                    <button
+                      type="button"
+                      title={property.featured ? "Quitar de la portada (inicio)" : "Destacar en la portada (inicio)"}
+                      aria-label={property.featured ? "Quitar de la portada" : "Destacar en la portada"}
+                      aria-pressed={Boolean(property.featured)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void handleTogglePropertyFeatured(property);
+                      }}
+                      className={`absolute left-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md border shadow-sm backdrop-blur-sm transition-colors ${
+                        property.featured
+                          ? "border-amber-300/90 bg-amber-400/95 text-amber-950 hover:bg-amber-400"
+                          : "border-slate-200/90 bg-white/95 text-slate-500 hover:border-amber-200 hover:text-amber-700"
+                      }`}
+                    >
+                      <Star className="h-4 w-4" strokeWidth={2} fill={property.featured ? "currentColor" : "none"} />
+                    </button>
+                  </div>
                   ) : (
                     <div className="relative block h-48 w-full overflow-hidden bg-slate-100 p-0 text-left">
                       <img
@@ -2986,7 +3146,7 @@ export function AdminPage() {
             {propertyInventoryView === "list" && filteredProperties.length > 0 && (
               <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_8px_32px_-10px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02]">
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[720px]">
+                  <table className="w-full min-w-[800px]">
                     <thead className="border-b border-slate-200/90 bg-gradient-to-r from-slate-50/95 to-white">
                       <tr>
                         <th
@@ -3018,6 +3178,12 @@ export function AdminPage() {
                           style={{ fontWeight: 600 }}
                         >
                           Precio
+                        </th>
+                        <th
+                          className="font-heading px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                          style={{ fontWeight: 600 }}
+                        >
+                          Inicio
                         </th>
                         <th
                           className="font-heading px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
@@ -3067,6 +3233,22 @@ export function AdminPage() {
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-slate-900 sm:px-6 sm:py-4" style={{ fontWeight: 700 }}>
                             ${property.price.toLocaleString()}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-center sm:px-6 sm:py-4">
+                            <button
+                              type="button"
+                              title={property.featured ? "Quitar de la portada" : "Destacar en la portada"}
+                              aria-label={property.featured ? "Quitar de la portada" : "Destacar en la portada"}
+                              aria-pressed={Boolean(property.featured)}
+                              onClick={() => void handleTogglePropertyFeatured(property)}
+                              className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
+                                property.featured
+                                  ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                                  : "border-slate-200 bg-white text-slate-400 hover:border-amber-200 hover:text-amber-700"
+                              }`}
+                            >
+                              <Star className="h-4 w-4" strokeWidth={2} fill={property.featured ? "currentColor" : "none"} />
+                            </button>
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-right sm:px-6 sm:py-4">
                             <div className="flex items-center justify-end gap-1">
@@ -3703,7 +3885,11 @@ export function AdminPage() {
         />
 
         <AlertDialog
-          open={!!deletePipelineStage && activeTab === "leads"}
+          open={
+            !!deletePipelineStage &&
+            activeTab === "company" &&
+            companySubtab === "leadStages"
+          }
           onOpenChange={(open) => {
             if (!open) setDeletePipelineStage(null);
           }}
@@ -3812,6 +3998,11 @@ export function AdminPage() {
           property={propertyForm?.mode === "edit" ? propertyForm.property : null}
           newId={newPropertyDraftId}
           onSave={handleSaveProperty}
+          otherFeaturedCount={
+            propertyForm?.mode === "edit" && propertyForm.property
+              ? properties.filter((x) => x.featured && x.id !== propertyForm.property.id).length
+              : properties.filter((x) => x.featured).length
+          }
         />
       </div>
 

@@ -28,6 +28,7 @@ export function RentPage() {
     () => properties.filter((p) => p.status === "alquiler"),
     [properties]
   );
+  const catalogPrices = useMemo(() => rentProperties.map((p) => p.price), [rentProperties]);
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
   const [sortBy, setSortBy] = useState("newest");
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
@@ -180,7 +181,7 @@ export function RentPage() {
               viewport={{ once: true, amount: 0.35 }}
               transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
             >
-              <SearchBar onSearch={handleSearch} defaultStatus="alquiler" />
+              <SearchBar onSearch={handleSearch} defaultStatus="alquiler" catalogPrices={catalogPrices} />
             </motion.div>
           </Reveal>
         </div>
@@ -267,9 +268,9 @@ export function RentPage() {
           </Reveal>
 
           {viewMode === "grid" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 items-stretch md:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredProperties.map((property, index) => (
-                <Reveal key={property.id} delay={Math.min(index * 0.055, 0.4)} y={24}>
+                <Reveal key={property.id} className="h-full" delay={Math.min(index * 0.055, 0.4)} y={24}>
                   <PropertyCard property={property} disablePreview />
                 </Reveal>
               ))}

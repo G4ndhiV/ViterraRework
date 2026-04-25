@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useEffect, useMemo, useState, ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseClient } from "../lib/supabaseClient";
 import { toast } from "sonner";
@@ -7,82 +7,30 @@ import {
   fetchTokkoUserRow,
   upsertTokkoUserAccess,
 } from "../lib/supabaseTokkoUsers";
+import { AuthContext } from "./authContextInstance";
+import type {
+  AuthContextType,
+  CreateUserInput,
+  UpdateUserInput,
+  User,
+  UserHistoryEntry,
+  UserPermission,
+  UserProfile,
+  UserRole,
+} from "./authContextTypes";
 
-export type UserRole = "admin" | "lider_grupo" | "asesor";
-export type UserPermission =
-  | "manage_leads"
-  | "manage_properties"
-  | "manage_developments"
-  | "manage_users"
-  | "manage_clients"
-  | "edit_site";
+export type {
+  AuthContextType,
+  CreateUserInput,
+  UpdateUserInput,
+  User,
+  UserHistoryEntry,
+  UserPermission,
+  UserProfile,
+  UserRole,
+} from "./authContextTypes";
 
-export interface UserHistoryEntry {
-  id: string;
-  type: "created" | "updated" | "password_changed" | "permissions_changed" | "archived" | "reactivated";
-  description: string;
-  createdAt: string;
-  actorName: string;
-}
-
-export interface UserProfile {
-  phone: string;
-  address: string;
-  birthDate: string;
-  workHistory: string[];
-  picture: string;
-}
-
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: UserRole;
-  permissions: UserPermission[];
-  profile: UserProfile;
-  isActive: boolean;
-  archivedAt?: string;
-  archivedBy?: string;
-  createdAt: string;
-  updatedAt: string;
-  history: UserHistoryEntry[];
-}
-
-interface CreateUserInput {
-  name: string;
-  email: string;
-  password: string;
-  role: UserRole;
-  permissions?: UserPermission[];
-  profile?: Partial<UserProfile>;
-}
-
-interface UpdateUserInput {
-  name?: string;
-  email?: string;
-  profile?: Partial<UserProfile>;
-}
-
-interface AuthContextType {
-  user: User | null;
-  users: User[];
-  /** `true` tras resolver la sesión de Supabase (o si no hay cliente). Evita redirigir a login antes de restaurar sesión. */
-  authReady: boolean;
-  login: (email: string, password: string) => Promise<{ ok: boolean; message?: string }>;
-  logout: () => Promise<void>;
-  isAuthenticated: boolean;
-  isAdmin: boolean;
-  createUser: (input: CreateUserInput, actorName?: string) => { ok: boolean; message?: string };
-  updateUser: (id: string, input: UpdateUserInput, actorName?: string) => void;
-  updateUserPassword: (id: string, newPassword: string, actorName?: string) => void;
-  updateUserPermissions: (id: string, role: UserRole, permissions: UserPermission[], actorName?: string) => void;
-  archiveUser: (id: string, actorName?: string) => void;
-  reactivateUser: (id: string, actorName?: string) => void;
-  /** Vuelve a leer la sesión y la fila `tokko_users` (tras editar el perfil en CRM, etc.). */
-  refreshUser: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export { useAuth } from "./authContextInstance";
 
 const USERS_STORAGE_KEY = "viterra_admin_users";
 const PASSWORDS_STORAGE_KEY = "viterra_admin_passwords";
@@ -202,6 +150,9 @@ const normalizeUser = (raw: Partial<User>): User => {
       picture: profile.picture ?? "",
     },
     isActive: raw.isActive ?? true,
+    tokkoUserId:
+      typeof raw.tokkoUserId === "string" && raw.tokkoUserId.trim() ? raw.tokkoUserId.trim() : undefined,
+    mustChangePassword: raw.mustChangePassword === true,
     archivedAt: raw.archivedAt,
     archivedBy: raw.archivedBy,
     createdAt: raw.createdAt ?? now,
@@ -241,12 +192,17 @@ function sessionToAppUser(session: Session): User {
     : [...defaultPermissionsByRole[role]];
   const now = new Date().toISOString();
   const createdAt = typeof su.created_at === "string" ? su.created_at : now;
+  const tokkoUserId =
+    typeof meta.tokko_user_id === "string" && meta.tokko_user_id.trim()
+      ? meta.tokko_user_id.trim()
+      : undefined;
   return normalizeUser({
     id: su.id,
     email,
     name,
     role,
     permissions,
+    tokkoUserId,
     profile: {
       phone: String(meta.phone ?? ""),
       address: String(meta.address ?? ""),
@@ -299,11 +255,26 @@ function mergeTokkoRowIntoUser(base: User, row: Record<string, unknown>): User {
     base.profile.birthDate;
   const picture = typeof row.picture === "string" ? row.picture : base.profile.picture;
 
+  const rawMust = row.must_change_password;
+  let mustChangePassword = base.mustChangePassword === true;
+  if (rawMust === true || rawMust === "true" || rawMust === "t" || rawMust === 1) {
+    mustChangePassword = true;
+  } else if (rawMust === false || rawMust === "false" || rawMust === "f" || rawMust === 0) {
+    mustChangePassword = false;
+  }
+
+  const tokkoUserIdFromRow =
+    typeof row.tokko_user_id === "string" && row.tokko_user_id.trim()
+      ? row.tokko_user_id.trim()
+      : base.tokkoUserId;
+
   return normalizeUser({
     ...base,
     name: nameFromRow,
     role,
     permissions,
+    tokkoUserId: tokkoUserIdFromRow,
+    mustChangePassword,
     profile: {
       ...base.profile,
       phone,
@@ -398,6 +369,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             role: appUser.role,
             permissions: appUser.permissions,
             profile: appUser.profile,
+            tokkoUserId: appUser.tokkoUserId,
+            mustChangePassword: appUser.mustChangePassword,
             updatedAt: appUser.updatedAt,
           };
         }
@@ -531,7 +504,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       return { ok: false, message: error.message };
     }
-    return { ok: true };
+    const {
+      data: { session },
+    } = await client.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) {
+      return { ok: true, mustChangePassword: false };
+    }
+    let flagRow: { must_change_password?: unknown } | null = null;
+    const byId = await client.from("tokko_users").select("must_change_password").eq("id", uid).maybeSingle();
+    if (!byId.error && byId.data) {
+      flagRow = byId.data as { must_change_password?: unknown };
+    } else if (session.user.email?.trim()) {
+      const byEmail = await client
+        .from("tokko_users")
+        .select("must_change_password")
+        .ilike("email", session.user.email.trim())
+        .maybeSingle();
+      if (!byEmail.error && byEmail.data) {
+        flagRow = byEmail.data as { must_change_password?: unknown };
+      }
+    }
+    if (!flagRow) {
+      return { ok: true, mustChangePassword: false };
+    }
+    const v = flagRow.must_change_password;
+    const mustChangePassword =
+      v === true || v === "true" || v === "t" || v === 1;
+    return { ok: true, mustChangePassword };
   };
 
   const logout: AuthContextType["logout"] = async () => {
@@ -688,12 +688,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
 }

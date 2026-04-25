@@ -6,7 +6,7 @@ import { Reveal } from "../components/Reveal";
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { login, authReady, isAuthenticated } = useAuth();
+  const { login, authReady, isAuthenticated, user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -15,9 +15,9 @@ export function LoginPage() {
 
   useEffect(() => {
     if (authReady && isAuthenticated) {
-      navigate("/admin", { replace: true });
+      navigate(user?.mustChangePassword ? "/admin/cambiar-contrasena" : "/admin", { replace: true });
     }
-  }, [authReady, isAuthenticated, navigate]);
+  }, [authReady, isAuthenticated, user?.mustChangePassword, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,7 +27,7 @@ export function LoginPage() {
     const result = await login(email, password);
     setIsLoading(false);
     if (result.ok) {
-      navigate("/admin");
+      navigate(result.mustChangePassword ? "/admin/cambiar-contrasena" : "/admin");
     } else {
       setError(result.message ?? "No se pudo iniciar sesión.");
     }

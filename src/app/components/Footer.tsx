@@ -69,11 +69,6 @@ export function Footer() {
                   Contacto
                 </Link>
               </li>
-              <li>
-                <Link to="/admin" className="hover:text-white hover:translate-x-1 transition-all duration-200 inline-block text-xs opacity-50" style={{ fontWeight: 400 }}>
-                  Admin
-                </Link>
-              </li>
             </ul>
           </div>
 

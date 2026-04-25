@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { User } from "../../contexts/AuthContext";
 import type { Lead } from "../../data/leads";
+import { leadIsAssignedToUser } from "../../lib/leadsAccess";
 import type { Property } from "../PropertyCard";
 import type { Development } from "../../data/developments";
 import {
@@ -229,7 +230,7 @@ export function AdminClientsManager({
       ) {
         return false;
       }
-      if (currentUser.role === "asesor" && !uidEq(lead.assignedToUserId, currentUser.id)) return false;
+      if (currentUser.role === "asesor" && !leadIsAssignedToUser(lead, currentUser)) return false;
       return true;
     });
   }, [leads, clients, currentUser.role, currentUser.id, groupScopedLeadAssigneeIds]);
