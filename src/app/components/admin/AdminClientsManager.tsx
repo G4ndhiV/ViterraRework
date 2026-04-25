@@ -798,6 +798,16 @@ export function AdminClientsManager({
                           className="h-10 border-stone-300 bg-white text-slate-700 hover:bg-stone-100 hover:text-slate-700"
                           style={{ fontWeight: 600 }}
                         >
+                          Regresar
+                        </Button>
+                      </DialogClose>
+                      <DialogClose asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-10 border-stone-300 bg-white text-slate-700 hover:bg-stone-100 hover:text-slate-700"
+                          style={{ fontWeight: 600 }}
+                        >
                           Cerrar
                         </Button>
                       </DialogClose>

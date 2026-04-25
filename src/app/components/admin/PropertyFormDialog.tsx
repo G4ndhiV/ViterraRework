@@ -167,6 +167,16 @@ export function PropertyFormDialog({
                       className="h-9 w-fit shrink-0 border-stone-300 bg-white px-3 text-sm text-slate-700 hover:bg-stone-50 hover:text-slate-800"
                       style={{ fontWeight: 600 }}
                     >
+                      Regresar
+                    </Button>
+                  </DialogClose>
+                  <DialogClose asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9 w-fit shrink-0 border-stone-300 bg-white px-3 text-sm text-slate-700 hover:bg-stone-50 hover:text-slate-800"
+                      style={{ fontWeight: 600 }}
+                    >
                       Cerrar
                     </Button>
                   </DialogClose>

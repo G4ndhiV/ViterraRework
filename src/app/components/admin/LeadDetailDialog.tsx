@@ -1026,6 +1026,14 @@ export function LeadDetailDialog({
                   className="border-stone-300 bg-white text-slate-700 hover:bg-stone-50 hover:text-slate-800"
                   onClick={() => onOpenChange(false)}
                 >
+                  Regresar
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-stone-300 bg-white text-slate-700 hover:bg-stone-50 hover:text-slate-800"
+                  onClick={() => onOpenChange(false)}
+                >
                   Cerrar
                 </Button>
                 <Button
@@ -1059,6 +1067,14 @@ export function LeadDetailDialog({
               </>
             ) : (
               <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-stone-300 bg-white text-slate-700 hover:bg-stone-50 hover:text-slate-800"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Regresar
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
