@@ -42,6 +42,17 @@
   --sidebar-ring: #C8102E;
   /* Único uso: título principal del hero en Inicio (resto del sitio: Poppins / Perpetua) */
   --font-hero-display: "Cormorant Garamond", ui-serif, Georgia, "Times New Roman", serif;
+  /**
+   * Altura visible bajo el header fijo (overlay en inicio y varias landings).
+   * Usada para secciones que deben caber en una sola vista (p. ej. bloque de búsqueda).
+   */
+  --viterra-sticky-header-offset: calc(env(safe-area-inset-top, 0px) + 5rem);
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --viterra-sticky-header-offset: calc(env(safe-area-inset-top, 0px) + 8rem);
+  }
 }
 
 .dark {

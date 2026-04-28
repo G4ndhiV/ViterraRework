@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
+import { useLocation } from "react-router";
 import { getSupabaseClient } from "../lib/supabaseClient";
+import { withTimeout } from "../lib/withTimeout";
 import { toast } from "sonner";
 import {
   fetchAllTokkoUsersForDirectory,
@@ -320,7 +322,14 @@ function directoryUserFromTokkoRow(row: Record<string, unknown>): User {
   return merged;
 }
 
+/** Directorio CRM (`tokko_users`): solo en panel admin — la landing no debe consultar esta tabla. */
+function tokkoDbNeededForPath(pathname: string): boolean {
+  return pathname.startsWith("/admin");
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const location = useLocation();
+
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem(USERS_STORAGE_KEY);
     if (!saved) return [];
@@ -345,6 +354,129 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
+  const TOKKO_USER_ROW_MS = 6_000;
+  const TOKKO_DIRECTORY_MS = 6_000;
+
+  const mergeSessionUserIntoDirectory = useCallback((appUser: User) => {
+    setUsers((prev) => {
+      const email = appUser.email.toLowerCase();
+      const i = prev.findIndex((u) => u.email.toLowerCase() === email);
+      let next: User[];
+      if (i === -1) {
+        next = [...prev, appUser];
+      } else {
+        next = [...prev];
+        next[i] = {
+          ...prev[i],
+          id: appUser.id,
+          name: appUser.name,
+          email: appUser.email,
+          role: appUser.role,
+          permissions: appUser.permissions,
+          profile: appUser.profile,
+          tokkoUserId: appUser.tokkoUserId,
+          mustChangePassword: appUser.mustChangePassword,
+          updatedAt: appUser.updatedAt,
+        };
+      }
+      writeUsersStorage(next);
+      return next;
+    });
+  }, []);
+
+  const syncDirectoryAccessToTokkoUsers = useCallback(async (directory: User[]) => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    const activeUsers = directory.filter((u) => u.isActive);
+    if (activeUsers.length === 0) return;
+    const results = await Promise.all(
+      activeUsers.map((u) =>
+        upsertTokkoUserAccess(client, {
+          userId: u.id,
+          email: u.email,
+          role: u.role,
+          permissions: u.permissions,
+        })
+      )
+    );
+    const failed = results.filter((r) => r.error);
+    if (failed.length > 0 && import.meta.env.DEV) {
+      console.warn(
+        `[Viterra] Backfill de rol/permisos en tokko_users con fallas: ${failed.length}/${results.length}`
+      );
+    }
+  }, []);
+
+  const hydrateTokkoDirectory = useCallback(
+    async (appUser: User) => {
+      const c = getSupabaseClient();
+      if (!c) return;
+
+      let listRes: Awaited<ReturnType<typeof fetchAllTokkoUsersForDirectory>>;
+      try {
+        listRes = await withTimeout(
+          fetchAllTokkoUsersForDirectory(c),
+          TOKKO_DIRECTORY_MS,
+          "tokko_users (equipo)"
+        );
+      } catch {
+        mergeSessionUserIntoDirectory(appUser);
+        return;
+      }
+
+      if (!listRes.error && Array.isArray(listRes.data)) {
+        const activeRows = (listRes.data as Record<string, unknown>[]).filter((rec) => {
+          const del = rec.deleted_at;
+          return del == null || String(del).trim() === "";
+        });
+
+        let merged: User[];
+        if (activeRows.length === 0) {
+          merged = [appUser];
+        } else {
+          const directory = activeRows.map((rec) => directoryUserFromTokkoRow(rec));
+          const byId = new Map(directory.map((u) => [u.id, u]));
+          byId.set(appUser.id, appUser);
+          merged = Array.from(byId.values()).sort((a, b) =>
+            a.name.localeCompare(b.name, "es", { sensitivity: "base" })
+          );
+        }
+        setUsers(merged);
+        writeUsersStorage(merged);
+        void syncDirectoryAccessToTokkoUsers(merged);
+      } else {
+        mergeSessionUserIntoDirectory(appUser);
+      }
+    },
+    [TOKKO_DIRECTORY_MS, mergeSessionUserIntoDirectory, syncDirectoryAccessToTokkoUsers]
+  );
+
+  const loadTokkoProfileAndDirectory = useCallback(async () => {
+    if (!tokkoDbNeededForPath(location.pathname)) return;
+    const client = getSupabaseClient();
+    if (!client) return;
+    const {
+      data: { session },
+    } = await client.auth.getSession();
+    if (!session?.user) return;
+
+    let appUser = sessionToAppUser(session);
+    try {
+      const { data, error } = await withTimeout(
+        fetchTokkoUserRow(client, session.user.id),
+        TOKKO_USER_ROW_MS,
+        "tokko_users (perfil)"
+      );
+      if (!error && data) {
+        appUser = mergeTokkoRowIntoUser(appUser, data as Record<string, unknown>);
+      }
+    } catch {
+      /* Servidor lento o 500: seguimos con metadata de JWT; sin logs en consola de la landing */
+    }
+    setUser(appUser);
+    void hydrateTokkoDirectory(appUser);
+  }, [TOKKO_USER_ROW_MS, location.pathname, hydrateTokkoDirectory]);
+
   useEffect(() => {
     const client = getSupabaseClient();
     if (!client) {
@@ -352,99 +484,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const mergeSessionUserIntoDirectory = (appUser: User) => {
-      setUsers((prev) => {
-        const email = appUser.email.toLowerCase();
-        const i = prev.findIndex((u) => u.email.toLowerCase() === email);
-        let next: User[];
-        if (i === -1) {
-          next = [...prev, appUser];
-        } else {
-          next = [...prev];
-          next[i] = {
-            ...prev[i],
-            id: appUser.id,
-            name: appUser.name,
-            email: appUser.email,
-            role: appUser.role,
-            permissions: appUser.permissions,
-            profile: appUser.profile,
-            tokkoUserId: appUser.tokkoUserId,
-            mustChangePassword: appUser.mustChangePassword,
-            updatedAt: appUser.updatedAt,
-          };
-        }
-        writeUsersStorage(next);
-        return next;
-      });
-    };
-
-    const syncDirectoryAccessToTokkoUsers = async (directory: User[]) => {
-      const activeUsers = directory.filter((u) => u.isActive);
-      if (activeUsers.length === 0) return;
-      const results = await Promise.all(
-        activeUsers.map((u) =>
-          upsertTokkoUserAccess(client, {
-            userId: u.id,
-            email: u.email,
-            role: u.role,
-            permissions: u.permissions,
-          })
-        )
-      );
-      const failed = results.filter((r) => r.error);
-      if (failed.length > 0 && import.meta.env.DEV) {
-        console.warn(
-          `[Viterra] Backfill de rol/permisos en tokko_users con fallas: ${failed.length}/${results.length}`
-        );
-      }
-    };
-
     const applySession = async (session: Session | null) => {
       if (!session?.user) {
         setUser(null);
         return;
       }
-      let appUser = sessionToAppUser(session);
+      const appUser = sessionToAppUser(session);
       const c = getSupabaseClient();
       if (c) {
-        const { data, error } = await fetchTokkoUserRow(c, session.user.id);
-        if (!error && data) {
-          appUser = mergeTokkoRowIntoUser(appUser, data as Record<string, unknown>);
-        }
-
-        const listRes = await fetchAllTokkoUsersForDirectory(c);
-        if (!listRes.error && Array.isArray(listRes.data)) {
-          const activeRows = (listRes.data as Record<string, unknown>[]).filter((rec) => {
-            const del = rec.deleted_at;
-            return del == null || String(del).trim() === "";
-          });
-
-          let merged: User[];
-          if (activeRows.length === 0) {
-            merged = [appUser];
-          } else {
-            const directory = activeRows.map((rec) => directoryUserFromTokkoRow(rec));
-            const byId = new Map(directory.map((u) => [u.id, u]));
-            byId.set(appUser.id, appUser);
-            merged = Array.from(byId.values()).sort((a, b) =>
-              a.name.localeCompare(b.name, "es", { sensitivity: "base" })
-            );
-          }
-          setUsers(merged);
-          writeUsersStorage(merged);
-          void syncDirectoryAccessToTokkoUsers(merged);
-        } else {
-          if (import.meta.env.DEV && listRes.error) {
-            console.warn("[Viterra] No se pudo listar tokko_users (equipo):", listRes.error.message);
-          }
-          mergeSessionUserIntoDirectory(appUser);
-          void syncDirectoryAccessToTokkoUsers([appUser]);
-        }
+        setUser(appUser);
       } else {
         mergeSessionUserIntoDirectory(appUser);
+        setUser(appUser);
       }
-      setUser(appUser);
     };
 
     void client.auth
@@ -461,7 +513,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [mergeSessionUserIntoDirectory]);
+
+  useEffect(() => {
+    if (!tokkoDbNeededForPath(location.pathname)) return;
+    void loadTokkoProfileAndDirectory();
+  }, [location.pathname, loadTokkoProfileAndDirectory]);
 
   const persistUsers = (next: User[]) => {
     setUsers(next);
