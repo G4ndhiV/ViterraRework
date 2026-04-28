@@ -188,6 +188,53 @@ export async function fetchDevelopmentsWithUnits(
   return { data, error: null };
 }
 
+export type FetchDevelopmentsPageOpts = {
+  publicOnly?: boolean;
+  limit: number;
+  offset: number;
+  /** Reutilizar el mapa de propiedades vinculadas entre páginas (una sola consulta ligera al inicio). */
+  linkedByTokko?: Map<string, number>;
+};
+
+/**
+ * Página del catálogo público: mismos datos que `fetchDevelopmentsWithUnits`, pero por rangos.
+ * Orden: destacados primero, luego nombre (coincide con las secciones de la página).
+ */
+export async function fetchDevelopmentsPage(client: SupabaseClient, opts: FetchDevelopmentsPageOpts) {
+  const linkedByTokko =
+    opts.linkedByTokko ?? (await fetchLinkedPropertyCountByTokkoLower(client));
+
+  let q = client.from("developments").select("*");
+  if (opts.publicOnly) {
+    q = q.eq("display_on_web", true);
+  }
+  const devRes = await q
+    .order("featured", { ascending: false })
+    .order("name")
+    .range(opts.offset, opts.offset + opts.limit - 1);
+
+  if (devRes.error) {
+    return { data: [] as Development[], error: devRes.error, linkedByTokko };
+  }
+
+  const rows = (devRes.data ?? []) as DevelopmentRow[];
+  if (rows.length === 0) {
+    return { data: [] as Development[], error: null, linkedByTokko };
+  }
+
+  const ids = rows.map((r) => r.id);
+  const unitRes = await client.from("development_units").select("*").in("development_id", ids);
+  if (unitRes.error) {
+    return { data: [] as Development[], error: unitRes.error, linkedByTokko };
+  }
+
+  const byDev = groupUnitsByDevelopment((unitRes.data ?? []) as DevelopmentUnitRow[]);
+  const data = rows.map((r) =>
+    rowToDevelopment(r, byDev.get(r.id) ?? [], linkedPropertyCountForRow(r, linkedByTokko))
+  );
+  return { data, error: null, linkedByTokko };
+}
+
 /**
  * Busca un desarrollo por su `tokko_id` (coincide con `properties.development_tokko_id`).
  * Incluye unidades para mantener el mismo modelo `Development` que el resto del catálogo.

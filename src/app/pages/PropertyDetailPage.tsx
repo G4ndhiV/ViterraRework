@@ -1,55 +1,32 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, Link } from "react-router";
+import { useParams, Link, useLocation } from "react-router";
 import type { Map as LeafletMap } from "leaflet";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { useCatalogProperties } from "../hooks/useCatalogProperties";
 import { getSupabaseClient, syncSupabaseAuthSession } from "../lib/supabaseClient";
 import { fetchDevelopmentByTokkoId } from "../lib/supabaseDevelopments";
-import type { Development } from "../data/developments";
-import type { LucideIcon } from "lucide-react";
+import { displayDeliveryDate, type Development } from "../data/developments";
 import {
   Bed,
   Bath,
   Square,
   MapPin,
   Calendar,
+  Phone,
+  Send,
   Share2,
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
   Car,
-  Building2,
-  Sparkles,
-  Package,
-  Wrench,
-  Waves,
-  Dumbbell,
-  Shield,
-  Flame,
-  Dog,
-  Wifi,
-  Droplets,
-  Zap,
-  Wind,
-  Trees,
-  Mountain,
-  UtensilsCrossed,
-  Briefcase,
-  Baby,
-  Volleyball,
-  Home,
-  Sun,
-  Fence,
-  Users,
-  Landmark,
-  Store,
-  TreePine,
-  Cctv,
 } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { cn } from "../components/ui/utils";
+import { FeatureSection } from "../components/FeatureSectionBlocks";
+import { WhatsAppGlyph } from "../components/WhatsAppGlyph";
+import type { Property } from "../components/PropertyCard";
 
 function listingActivityLabel(iso: string | undefined): string {
   if (!iso) return "—";
@@ -81,127 +58,15 @@ function isMeaningfulText(s: string | undefined): boolean {
   return t.length > 0 && t.toUpperCase() !== "EMPTY";
 }
 
-/** Normaliza texto para buscar palabras clave (acentos → ASCII). */
-function foldFeatureLabel(s: string): string {
-  return s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
-}
-
-/**
- * Icono sugerido según el texto del ítem (amenidad/servicio/extra).
- * Cubre términos frecuentes en español de catálogos Tokko.
- */
-function iconForFeatureLabel(label: string): LucideIcon | null {
-  const n = foldFeatureLabel(label);
-  const rules: { test: RegExp; Icon: LucideIcon }[] = [
-    { test: /alberca|piscina|pool/, Icon: Waves },
-    { test: /pileta/, Icon: Waves },
-    { test: /gimnasio|\bgym\b/, Icon: Dumbbell },
-    { test: /seguridad|vigilancia|portero|caseta/, Icon: Shield },
-    { test: /cctv|camara|videovigilancia/, Icon: Cctv },
-    { test: /parrill|asador|bbq/, Icon: Flame },
-    { test: /mascota|pet/, Icon: Dog },
-    { test: /wifi|internet|fibra/, Icon: Wifi },
-    { test: /agua|cloaca|desague|drenaje|potable/, Icon: Droplets },
-    { test: /electric|luz\b|alumbrad/, Icon: Zap },
-    { test: /gas\b|natural/, Icon: Flame },
-    { test: /aire|acondicionado|climat|minisplit/, Icon: Wind },
-    { test: /parque|jardin|verde|arbol|pet park/, Icon: TreePine },
-    { test: /estacion|cochera|parking|garage/, Icon: Car },
-    { test: /cocina|comedor/, Icon: UtensilsCrossed },
-    { test: /spa|hidromas|sauna|jacuzzi/, Icon: Bath },
-    { test: /oficina|cowork|escritorio/, Icon: Briefcase },
-    { test: /sala de reuniones|reuniones/, Icon: Briefcase },
-    { test: /niño|kids|infantil|juego/, Icon: Baby },
-    { test: /deport|sport|pickle|padel|cancha|golf|simulador/, Icon: Volleyball },
-    { test: /sala de juegos|playroom/, Icon: Volleyball },
-    { test: /roof|terraza|balcon|deck/, Icon: Home },
-    { test: /patio|jardin/, Icon: TreePine },
-    { test: /living|comedor diario/, Icon: Home },
-    { test: /vista|panoram|montaña/, Icon: Mountain },
-    { test: /sum|salon|eventos/, Icon: Users },
-    { test: /centro comercial|plaza|comercial/, Icon: Store },
-    { test: /yoga|pilates|meditacion/, Icon: Home },
-    { test: /lavander|lavadero|lavado/, Icon: Droplets },
-    { test: /vestidor/, Icon: Home },
-    { test: /biblioteca/, Icon: Landmark },
-    { test: /dependencia|baño de servicio|bano de servicio/, Icon: Bath },
-    { test: /baulera|altillo|sotano|deposito/, Icon: Package },
-    { test: /paviment|via publica|alumbrad public/, Icon: Fence },
-    { test: /escritura|notaria|potencial alto para alquilar/, Icon: Landmark },
-    { test: /ilumin|natural|luminosidad/, Icon: Sun },
-    { test: /elevador|ascensor/, Icon: Building2 },
-  ];
-  for (const { test, Icon } of rules) {
-    if (test.test(n)) return Icon;
-  }
-  return null;
-}
-
-const CATEGORY_STYLES = {
-  amenity: {
-    sectionIcon: "text-slate-600",
-    cardIcon: "text-slate-500",
-  },
-  service: {
-    sectionIcon: "text-slate-600",
-    cardIcon: "text-slate-500",
-  },
-  extra: {
-    sectionIcon: "text-slate-600",
-    cardIcon: "text-slate-500",
-  },
-} as const;
-
-function FeatureSection({
-  variant,
-  title,
-  items,
-  keyPrefix,
-}: {
-  variant: keyof typeof CATEGORY_STYLES;
-  title: string;
-  items: string[];
-  keyPrefix: string;
-}) {
-  if (items.length === 0) return null;
-  const meta = CATEGORY_STYLES[variant];
-  const SectionIcon = variant === "amenity" ? Home : variant === "service" ? Wrench : Package;
-  return (
-    <div>
-      <div className="mb-4 flex items-center gap-3">
-        <SectionIcon className={cn("h-5 w-5 shrink-0", meta.sectionIcon)} strokeWidth={1.8} aria-hidden />
-        <h4 className="text-base font-semibold text-slate-900" style={{ fontWeight: 600 }}>
-          {title}
-        </h4>
-      </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {items.map((feature, idx) => {
-          const ItemIcon = iconForFeatureLabel(feature);
-          return (
-            <div
-              key={`${keyPrefix}-${idx}`}
-              className={cn(
-                "rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md",
-                ItemIcon ? "flex items-center gap-3" : "block"
-              )}
-            >
-              {ItemIcon ? <ItemIcon className={cn("h-4.5 w-4.5 shrink-0", meta.cardIcon)} strokeWidth={1.8} /> : null}
-              <p className="min-w-0 flex-1 text-sm font-medium leading-normal text-slate-900" style={{ fontWeight: 500 }}>
-                {feature}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-
 export function PropertyDetailPage() {
   const { id } = useParams();
+  const location = useLocation();
   const { properties, loading } = useCatalogProperties();
-  const property = useMemo(() => properties.find((p) => p.id === id), [properties, id]);
+  const seededProperty = useMemo(() => {
+    const maybe = (location.state as { property?: Property } | null)?.property;
+    return maybe?.id === id ? maybe : undefined;
+  }, [location.state, id]);
+  const property = useMemo(() => properties.find((p) => p.id === id) ?? seededProperty, [properties, id, seededProperty]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [activeTab, setActiveTab] = useState("descripcion");
   const reduceMotion = useReducedMotion();
@@ -209,6 +74,13 @@ export function PropertyDetailPage() {
   const mapInstanceRef = useRef<LeafletMap | null>(null);
   const [linkedDevelopment, setLinkedDevelopment] = useState<Development | null>(null);
   const [developmentLoading, setDevelopmentLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    message: "",
+  });
+  const [submitted, setSubmitted] = useState(false);
 
   const propertyImages = useMemo(() => {
     if (!property) return [];
@@ -379,7 +251,7 @@ export function PropertyDetailPage() {
     };
   }, []);
 
-  if (loading) {
+  if (loading && !property) {
     return (
       <div className="viterra-page flex min-h-screen flex-col">
         <Header />
@@ -425,6 +297,22 @@ export function PropertyDetailPage() {
   const prevImage = () => {
     if (propertyImages.length <= 1) return;
     setCurrentImageIndex((prev) => (prev === 0 ? propertyImages.length - 1 : prev - 1));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitted(true);
+    setTimeout(() => {
+      setFormData({ name: "", email: "", phone: "", message: "" });
+      setSubmitted(false);
+    }, 3000);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
   };
 
   return (
@@ -512,54 +400,6 @@ export function PropertyDetailPage() {
                       <ImageWithFallback src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" />
                     </button>
                   ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                <div className="flex-1 min-w-0">
-                  <h1 className="mb-2 break-words text-[1.75rem] font-semibold leading-tight tracking-tight text-slate-900 sm:text-2xl md:text-3xl" style={{ fontWeight: 700 }}>
-                    {displayTitle}
-                  </h1>
-                  <div className="mb-2 flex items-start gap-2 text-slate-600">
-                    <MapPin className="w-4 h-4 flex-shrink-0" strokeWidth={1.5} />
-                    <span className="break-words text-sm font-medium" style={{ fontWeight: 500 }}>{property.location}</span>
-                  </div>
-                  {property.colony ? (
-                    <p className="mb-3 text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                      <span className="text-slate-500">Colonia:</span>{" "}
-                      <span className="text-slate-900">{property.colony}</span>
-                    </p>
-                  ) : null}
-                </div>
-                <div className="text-left sm:text-right">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: "0.05em", fontWeight: 500 }}>
-                    {property.status === "venta" ? "Precio" : "Renta mensual"}
-                  </p>
-                  <p className="text-xl md:text-2xl font-semibold text-slate-900" style={{ fontWeight: 700 }}>
-                    ${property.price.toLocaleString()}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 md:gap-4 md:p-4">
-                <div className="text-center">
-                  <Bed className="w-5 h-5 text-slate-600 mx-auto mb-1" strokeWidth={1.5} />
-                  <p className="text-base md:text-lg font-semibold text-slate-900" style={{ fontWeight: 600 }}>{property.bedrooms}</p>
-                  <p className="text-xs text-slate-600" style={{ fontWeight: 500 }}>Recámaras</p>
-                </div>
-                <div className="text-center border-x border-slate-200">
-                  <Bath className="w-5 h-5 text-slate-600 mx-auto mb-1" strokeWidth={1.5} />
-                  <p className="text-base md:text-lg font-semibold text-slate-900" style={{ fontWeight: 600 }}>{property.bathrooms}</p>
-                  <p className="text-xs text-slate-600" style={{ fontWeight: 500 }}>Baños</p>
-                </div>
-                <div className="text-center">
-                  <Square className="w-5 h-5 text-slate-600 mx-auto mb-1" strokeWidth={1.5} />
-                  <p className="text-base md:text-lg font-semibold text-slate-900" style={{ fontWeight: 600 }}>
-                    {property.area.toLocaleString()} m²
-                  </p>
-                  <p className="text-xs text-slate-600" style={{ fontWeight: 500 }}>Cubierta</p>
                 </div>
               </div>
             </div>
@@ -661,17 +501,16 @@ export function PropertyDetailPage() {
                                 </Link>
                               </div>
 
-                              {formatDeliveryDateEs(linkedDevelopment.deliveryDate) ? (
-                                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm">
-                                  <Calendar className="h-4 w-4 text-slate-500" strokeWidth={1.5} />
-                                  <span className="text-slate-600" style={{ fontWeight: 500 }}>
-                                    Entrega estimada:
-                                  </span>
-                                  <span className="text-slate-900" style={{ fontWeight: 600 }}>
-                                    {formatDeliveryDateEs(linkedDevelopment.deliveryDate)}
-                                  </span>
-                                </div>
-                              ) : null}
+                              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm">
+                                <Calendar className="h-4 w-4 text-slate-500" strokeWidth={1.5} />
+                                <span className="text-slate-600" style={{ fontWeight: 500 }}>
+                                  Entrega estimada:
+                                </span>
+                                <span className="text-slate-900" style={{ fontWeight: 600 }}>
+                                  {formatDeliveryDateEs(linkedDevelopment.deliveryDate) ||
+                                    displayDeliveryDate(linkedDevelopment.deliveryDate)}
+                                </span>
+                              </div>
 
                               {isMeaningfulText(linkedDevelopment.priceRange) ? (
                                 <p className="text-sm text-slate-700" style={{ fontWeight: 500 }}>
@@ -784,36 +623,176 @@ export function PropertyDetailPage() {
                 </AnimatePresence>
               </div>
             </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <h2 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl" style={{ fontWeight: 700 }}>
+                ¿Te interesa esta propiedad?
+              </h2>
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-600" style={{ fontWeight: 400 }}>
+                Llama, escribe por WhatsApp o déjanos tus datos y un asesor te contacta.
+              </p>
+
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <Link
+                  to="/contacto"
+                  className="flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-900 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50"
+                  style={{ fontWeight: 600 }}
+                >
+                  <Phone className="h-4 w-4" strokeWidth={2} />
+                  Llamar
+                </Link>
+                <a
+                  href="https://wa.me/523318878494"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 rounded-lg bg-[#25D366] py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#20bd5a]"
+                  style={{ fontWeight: 600 }}
+                >
+                  <WhatsAppGlyph className="h-4 w-4 text-white" />
+                  WhatsApp
+                </a>
+              </div>
+
+              <div className="relative py-6">
+                <div className="absolute inset-0 flex items-center" aria-hidden>
+                  <div className="w-full border-t border-slate-200" />
+                </div>
+                <div className="relative flex justify-center">
+                  <span className="bg-white px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    O completa el formulario
+                  </span>
+                </div>
+              </div>
+
+              {submitted && (
+                <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-center">
+                  <p className="text-sm font-semibold text-green-900" style={{ fontWeight: 600 }}>
+                    ¡Mensaje enviado!
+                  </p>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input
+                    type="text"
+                    name="name"
+                    required
+                    value={formData.name}
+                    onChange={handleChange}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/15"
+                    placeholder="Nombre"
+                    autoComplete="name"
+                  />
+                  <input
+                    type="tel"
+                    name="phone"
+                    required
+                    value={formData.phone}
+                    onChange={handleChange}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/15"
+                    placeholder="Tu teléfono"
+                    autoComplete="tel"
+                  />
+                </div>
+                <input
+                  type="email"
+                  name="email"
+                  required
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/15"
+                  placeholder="Correo"
+                  autoComplete="email"
+                />
+                <textarea
+                  name="message"
+                  value={formData.message}
+                  onChange={handleChange}
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/15"
+                  placeholder="Mensaje (opcional)"
+                />
+                <button
+                  type="submit"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-brand-red-hover"
+                  style={{ fontWeight: 600 }}
+                >
+                  <Send className="h-4 w-4" strokeWidth={2} />
+                  Enviar consulta
+                </button>
+              </form>
+            </div>
           </div>
 
           <div className="min-w-0 lg:col-span-1">
             <div className="space-y-6 lg:sticky lg:top-24">
               <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1" style={{ letterSpacing: "0.05em", fontWeight: 500 }}>
-                  {property.status === "venta" ? "Precio" : "Renta mensual"}
-                </p>
-                <p className="text-3xl font-semibold text-slate-900 mb-6" style={{ fontWeight: 700 }}>
-                  ${property.price.toLocaleString()}
-                </p>
-
-                <div className="space-y-3">
-                  <Link
-                    to="/contacto"
-                    className="block text-center w-full bg-[#C8102E] text-white px-6 py-3 rounded-lg hover:bg-[#a00d25] hover:shadow-lg transition-all duration-300 font-medium"
-                    style={{ fontWeight: 600 }}
+                <div className="mb-4">
+                  <h1
+                    className="mb-2 break-words text-[1.75rem] font-semibold leading-tight tracking-tight text-brand-navy sm:text-2xl md:text-3xl"
+                    style={{ fontWeight: 700 }}
                   >
-                    Agendar visita
-                  </Link>
-                  <Link
-                    to="/contacto"
-                    className="block text-center w-full border-2 border-slate-900 text-slate-900 px-6 py-3 rounded-lg hover:bg-slate-50 transition-all font-medium"
-                    style={{ fontWeight: 600 }}
-                  >
-                    Contactar asesor
-                  </Link>
+                    {displayTitle}
+                  </h1>
+                  <div className="mb-2">
+                    <p
+                      className="mb-1 text-xs uppercase tracking-wide text-slate-500"
+                      style={{ letterSpacing: "0.05em", fontWeight: 500 }}
+                    >
+                      {property.status === "venta" ? "Precio" : "Renta mensual"}
+                    </p>
+                    <p className="text-xl font-semibold text-brand-navy md:text-2xl" style={{ fontWeight: 700 }}>
+                      ${property.price.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="mb-2 flex items-start gap-2 text-slate-600">
+                    <MapPin className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                    <span className="break-words text-sm font-medium" style={{ fontWeight: 500 }}>
+                      {property.location}
+                    </span>
+                  </div>
+                  {property.colony ? (
+                    <p className="text-sm text-slate-600" style={{ fontWeight: 500 }}>
+                      <span className="text-slate-500">Colonia:</span>{" "}
+                      <span className="text-slate-900">{property.colony}</span>
+                    </p>
+                  ) : null}
                 </div>
 
-                <div className="mt-6 space-y-2.5 border-t border-slate-200 pt-5 text-[13px]">
+                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 md:gap-4 md:p-4">
+                  <div className="text-center">
+                    <Bed className="mx-auto mb-1 h-5 w-5 text-slate-600" strokeWidth={1.5} />
+                    <p className="text-base font-semibold text-slate-900 md:text-lg" style={{ fontWeight: 600 }}>
+                      {property.bedrooms}
+                    </p>
+                    <p className="text-xs text-slate-600" style={{ fontWeight: 500 }}>
+                      Recámaras
+                    </p>
+                  </div>
+                  <div className="border-x border-slate-200 text-center">
+                    <Bath className="mx-auto mb-1 h-5 w-5 text-slate-600" strokeWidth={1.5} />
+                    <p className="text-base font-semibold text-slate-900 md:text-lg" style={{ fontWeight: 600 }}>
+                      {property.bathrooms}
+                    </p>
+                    <p className="text-xs text-slate-600" style={{ fontWeight: 500 }}>
+                      Baños
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <Square className="mx-auto mb-1 h-5 w-5 text-slate-600" strokeWidth={1.5} />
+                    <p className="text-base font-semibold text-slate-900 md:text-lg" style={{ fontWeight: 600 }}>
+                      {property.area.toLocaleString()} m²
+                    </p>
+                    <p className="text-xs text-slate-600" style={{ fontWeight: 500 }}>
+                      Cubierta
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+                <div className="space-y-2.5 text-[13px]">
                   <div className="flex justify-between gap-3">
                     <span className="text-slate-600 shrink-0" style={{ fontWeight: 500 }}>Referencia:</span>
                     <span className="text-right text-slate-900 break-all" style={{ fontWeight: 600 }}>
@@ -847,13 +826,14 @@ export function PropertyDetailPage() {
                       {listingActivityLabel(property.listingUpdatedAt)}
                     </span>
                   </div>
-                  {linkedDevelopment && formatDeliveryDateEs(linkedDevelopment.deliveryDate) ? (
+                  {linkedDevelopment ? (
                     <div className="flex justify-between gap-3">
                       <span className="text-slate-600 shrink-0" style={{ fontWeight: 500 }}>
                         Fecha de entrega:
                       </span>
                       <span className="text-right text-slate-900" style={{ fontWeight: 600 }}>
-                        {formatDeliveryDateEs(linkedDevelopment.deliveryDate)}
+                        {formatDeliveryDateEs(linkedDevelopment.deliveryDate) ||
+                          displayDeliveryDate(linkedDevelopment.deliveryDate)}
                       </span>
                     </div>
                   ) : null}
