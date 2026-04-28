@@ -4,7 +4,8 @@ import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { PropertyCard } from "../components/PropertyCard";
 import { SearchBar, SearchFilters } from "../components/SearchBar";
-import { useCatalogProperties } from "../hooks/useCatalogProperties";
+import { useFeaturedHomeProperties } from "../hooks/useFeaturedHomeProperties";
+import { useCatalogPriceSlices } from "../hooks/useCatalogPriceSlices";
 import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
@@ -12,8 +13,6 @@ import { useSiteContent } from "../../contexts/SiteContentContext";
 import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
 import { Reveal } from "../components/Reveal";
 import { cn } from "../components/ui/utils";
-import { MAX_FEATURED_PROPERTIES } from "../lib/supabaseProperties";
-
 function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?: "dark" | "light" }) {
   return (
     <div className="text-center">
@@ -35,11 +34,13 @@ export function HomePage() {
   const reduceMotion = useReducedMotion();
   const { content } = useSiteContent();
   const h = content.home;
-  const { properties, loading: propertiesLoading } = useCatalogProperties();
-  const featuredProperties = useMemo(
-    () => properties.filter((p) => p.featured).slice(0, MAX_FEATURED_PROPERTIES),
-    [properties]
-  );
+  const {
+    properties: featuredProperties,
+    loading: featuredLoading,
+    error: featuredError,
+    reload: reloadFeatured,
+  } = useFeaturedHomeProperties();
+  const catalogPriceSlices = useCatalogPriceSlices();
   const [activeFeaturedId, setActiveFeaturedId] = useState<string | null>(null);
   const activeFeaturedProperty = useMemo(
     () =>
@@ -79,13 +80,6 @@ export function HomePage() {
       setActiveFeaturedId(featuredProperties[0].id);
     }
   }, [featuredProperties, activeFeaturedId]);
-  const catalogPriceSlices = useMemo(
-    () => ({
-      venta: properties.filter((p) => p.status === "venta").map((p) => p.price),
-      alquiler: properties.filter((p) => p.status === "alquiler").map((p) => p.price),
-    }),
-    [properties]
-  );
 
   const handleSearch = (filters: SearchFilters) => {
     const params = new URLSearchParams();
@@ -227,7 +221,14 @@ export function HomePage() {
       <PreviewSectionChrome blockId="home-search" label="Búsqueda">
       <section
         id="busqueda"
-        className="relative scroll-mt-8 flex min-h-[100svh] flex-col justify-center border-b border-brand-navy/20 py-10 md:py-12"
+        className={cn(
+          "relative flex flex-col justify-center overflow-hidden border-b border-brand-navy/20",
+          "h-[calc(100dvh-var(--viterra-sticky-header-offset))]",
+          "max-h-[calc(100dvh-var(--viterra-sticky-header-offset))]",
+          "min-h-0",
+          "scroll-mt-[var(--viterra-sticky-header-offset)]",
+          "py-5 md:py-6"
+        )}
       >
         <div className="absolute inset-0 z-0 overflow-hidden">
           <img
@@ -245,8 +246,8 @@ export function HomePage() {
           className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_135%_92%_at_50%_58%,rgb(0_0_0/0.78)_0%,rgb(0_0_0/0.42)_48%,rgb(0_0_0/0.14)_72%,transparent_100%)]"
         />
 
-        <div className="relative z-10 mx-auto w-full max-w-5xl overflow-visible px-4 sm:px-6 lg:px-8">
-          <Reveal className="mb-5 md:mb-6" y={28}>
+        <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col justify-center overflow-x-visible overflow-y-auto overscroll-contain px-4 py-1 sm:px-6 lg:px-8">
+          <Reveal className="mb-3 shrink-0 md:mb-4" y={28}>
             <div>
               <SectionKicker tone="light">{h.searchKicker}</SectionKicker>
               <h2 className="font-heading font-light mt-4 text-center text-2xl leading-tight tracking-tight text-white [text-shadow:0_2px_28px_rgb(0_0_0/0.55),0_1px_2px_rgb(0_0_0/0.4)] sm:text-3xl md:text-4xl lg:text-[2.2rem]">
@@ -303,23 +304,32 @@ export function HomePage() {
           </Reveal>
 
           <div className="mx-auto max-w-6xl">
-            {propertiesLoading ? (
+            {featuredLoading ? (
               <p className="text-center text-sm text-brand-navy/60" style={{ fontWeight: 500 }}>
                 Cargando propiedades…
               </p>
             ) : featuredProperties.length === 0 ? (
-              <p className="text-center text-sm text-brand-navy/60" style={{ fontWeight: 500 }}>
-                No hay propiedades destacadas en este momento.
-              </p>
+              <div className="space-y-3 text-center">
+                <p className="text-sm text-brand-navy/60" style={{ fontWeight: 500 }}>
+                  {featuredError
+                    ? "No pudimos cargar las propiedades destacadas. Comprueba tu conexión e inténtalo de nuevo."
+                    : "No hay propiedades destacadas en este momento."}
+                </p>
+                {featuredError ? (
+                  <button
+                    type="button"
+                    onClick={() => void reloadFeatured()}
+                    className="text-sm text-primary underline-offset-2 hover:underline"
+                  >
+                    Reintentar
+                  </button>
+                ) : null}
+              </div>
             ) : (
               <div className="space-y-5 md:space-y-6">
                 {activeFeaturedProperty && (
-                  <motion.div
+                  <div
                     key={activeFeaturedProperty.id}
-                    initial={reduceMotion ? false : { opacity: 0, y: 20 }}
-                    whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-                    viewport={{ once: true, amount: 0.2 }}
-                    transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
                     className="relative mx-auto h-[360px] w-full max-w-5xl sm:h-[390px] md:h-[420px]"
                   >
                     <div className="h-full [&>article]:h-full">
@@ -345,16 +355,10 @@ export function HomePage() {
                         </button>
                       </>
                     )}
-                  </motion.div>
+                  </div>
                 )}
 
-                <motion.div
-                  initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-                  whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.3 }}
-                  transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
-                  className="relative"
-                >
+                <div className="relative">
                   <div className="overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     <div className="mx-auto flex w-max gap-2.5 md:gap-3">
                       {featuredProperties.map((property) => {
@@ -403,7 +407,7 @@ export function HomePage() {
                       })}
                     </div>
                   </div>
-                </motion.div>
+                </div>
               </div>
             )}
           </div>

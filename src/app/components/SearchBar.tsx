@@ -100,15 +100,20 @@ export function SearchBar({
   };
 
   const mapZoneHref = useMemo(() => {
-    const s = filters.status || defaultStatus;
+    const s =
+      showPriceOperationToggle ? priceOp : filters.status || defaultStatus;
     const q = s ? `?status=${encodeURIComponent(s)}` : "";
     return `/propiedades/mapa${q}`;
-  }, [filters.status, defaultStatus]);
+  }, [filters.status, defaultStatus, showPriceOperationToggle, priceOp]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const pricePatch = catalogRangeRef.current?.getPriceFilterPatch() ?? {};
-    const next = { ...filters, ...pricePatch };
+    const next = {
+      ...filters,
+      ...pricePatch,
+      ...(showPriceOperationToggle ? { status: priceOp } : {}),
+    };
     setFilters(next);
     onSearch?.(next);
   };
@@ -171,10 +176,61 @@ export function SearchBar({
       <div
         className={cn(
           "grid grid-cols-1 gap-4 sm:gap-4",
-          "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5",
+          showPriceOperationToggle
+            ? "lg:grid-cols-[minmax(10.25rem,auto)_minmax(0,1.5fr)_minmax(0,0.9fr)_minmax(11rem,auto)] lg:items-end lg:gap-x-5"
+            : "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5",
           isAmbient && "gap-y-5 lg:gap-y-0"
         )}
       >
+        {showPriceOperationToggle ? (
+          <div className="min-w-0">
+            <label className={labelClass}>Operación</label>
+            <div
+              role="group"
+              aria-label="Venta o alquiler"
+              className={cn(
+                "flex w-full max-w-md rounded-xl border p-1 shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)]",
+                isAmbient
+                  ? "border-white/25 bg-black/35 backdrop-blur-sm"
+                  : "border-slate-200 bg-slate-100/90"
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => setPriceOperation("venta")}
+                className={cn(
+                  "relative flex-1 rounded-lg px-3 py-2.5 text-center text-[11px] font-semibold uppercase tracking-[0.12em] transition-[color,background,box-shadow,transform] duration-200",
+                  priceOp === "venta"
+                    ? isAmbient
+                      ? "bg-white text-brand-navy shadow-[0_2px_12px_rgba(0,0,0,0.35)]"
+                      : "bg-white text-brand-navy shadow-sm"
+                    : isAmbient
+                      ? "text-white/65 hover:text-white"
+                      : "text-slate-600 hover:text-slate-900"
+                )}
+              >
+                Venta
+              </button>
+              <button
+                type="button"
+                onClick={() => setPriceOperation("alquiler")}
+                className={cn(
+                  "relative flex-1 rounded-lg px-3 py-2.5 text-center text-[11px] font-semibold uppercase tracking-[0.12em] transition-[color,background,box-shadow,transform] duration-200",
+                  priceOp === "alquiler"
+                    ? isAmbient
+                      ? "bg-white text-brand-navy shadow-[0_2px_12px_rgba(0,0,0,0.35)]"
+                      : "bg-white text-brand-navy shadow-sm"
+                    : isAmbient
+                      ? "text-white/65 hover:text-white"
+                      : "text-slate-600 hover:text-slate-900"
+                )}
+              >
+                Alquiler
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         <div className="min-w-0 lg:min-w-[12rem]">
           <label className={labelClass}>Ubicación o palabra clave</label>
           <input
@@ -206,28 +262,30 @@ export function SearchBar({
           </select>
         </div>
 
-        <div className="min-w-0">
-          <label className={labelClass}>Estado</label>
-          <select
-            value={filters.status}
-            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-            className={cn(
-              fieldClass,
-              "cursor-pointer appearance-none bg-[length:12px] bg-[right_0.25rem_center] bg-no-repeat pr-9"
-            )}
-            style={selectChevronStyle}
-          >
-            <option value="">Todos</option>
-            <option value="venta">Venta</option>
-            <option value="alquiler">Alquiler</option>
-          </select>
-        </div>
+        {!showPriceOperationToggle ? (
+          <div className="min-w-0">
+            <label className={labelClass}>Estado</label>
+            <select
+              value={filters.status}
+              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+              className={cn(
+                fieldClass,
+                "cursor-pointer appearance-none bg-[length:12px] bg-[right_0.25rem_center] bg-no-repeat pr-9"
+              )}
+              style={selectChevronStyle}
+            >
+              <option value="">Todos</option>
+              <option value="venta">Venta</option>
+              <option value="alquiler">Alquiler</option>
+            </select>
+          </div>
+        ) : null}
 
         <div className="flex min-w-0 flex-col gap-2">
           <label className={cn(labelClass, "text-transparent")} aria-hidden="true">
             Buscar
           </label>
-          <button type="submit" className={cn(btnClass, "lg:w-full")}>
+          <button type="submit" className={cn(btnClass, "lg:w-full min-w-0")}>
             <Search className={cn("h-5 w-5 shrink-0", isAmbient ? "opacity-80" : "opacity-95")} strokeWidth={1.5} aria-hidden />
             <span>Buscar</span>
           </button>
@@ -237,10 +295,11 @@ export function SearchBar({
       {showMapZoneLink && (
         <div
           className={cn(
-            "mt-5 flex justify-center border-t pt-5",
-            isAmbient && "border-white/15",
-            isPremium && !isAmbient && "border-brand-navy/10",
-            !isPremium && !isAmbient && "border-slate-200"
+            "mt-4 flex justify-center",
+            showCatalogPriceRange ? "pt-1" : "border-t pt-5 mt-5",
+            !showCatalogPriceRange && isAmbient && "border-white/15",
+            !showCatalogPriceRange && isPremium && !isAmbient && "border-brand-navy/10",
+            !showCatalogPriceRange && !isPremium && !isAmbient && "border-slate-200"
           )}
         >
           <Link
@@ -266,52 +325,6 @@ export function SearchBar({
               Explorar en mapa
             </span>
           </Link>
-        </div>
-      )}
-
-      {showPriceOperationToggle && (
-        <div className={cn("mt-4 flex justify-center", isAmbient && "mt-3")}>
-          <div
-            role="group"
-            aria-label="Operación para rango de precio"
-            className={cn(
-              "inline-flex rounded-full border p-0.5 text-[11px] font-semibold uppercase tracking-[0.14em]",
-              isAmbient ? "border-white/20 bg-black/25" : "border-slate-200 bg-slate-50"
-            )}
-          >
-            <button
-              type="button"
-              onClick={() => setPriceOperation("venta")}
-              className={cn(
-                "rounded-full px-4 py-2 transition-colors",
-                priceOp === "venta"
-                  ? isAmbient
-                    ? "bg-white text-brand-navy"
-                    : "bg-brand-navy text-white"
-                  : isAmbient
-                    ? "text-white/70 hover:text-white"
-                    : "text-slate-600 hover:text-slate-900"
-              )}
-            >
-              Venta
-            </button>
-            <button
-              type="button"
-              onClick={() => setPriceOperation("alquiler")}
-              className={cn(
-                "rounded-full px-4 py-2 transition-colors",
-                priceOp === "alquiler"
-                  ? isAmbient
-                    ? "bg-white text-brand-navy"
-                    : "bg-brand-navy text-white"
-                  : isAmbient
-                    ? "text-white/70 hover:text-white"
-                    : "text-slate-600 hover:text-slate-900"
-              )}
-            >
-              Alquiler
-            </button>
-          </div>
         </div>
       )}
 

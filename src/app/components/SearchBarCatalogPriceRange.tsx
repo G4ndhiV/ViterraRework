@@ -1,4 +1,5 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
+import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useMemo, useState } from "react";
 import { Slider } from "./ui/slider";
 import { cn } from "./ui/utils";
 
@@ -93,14 +94,10 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
   function SearchBarCatalogPriceRange({ prices, minPrice, maxPrice, onChange, variant }, ref) {
   const isAmbient = variant === "ambient";
   const isPremium = variant === "premium";
+  const manualToggleId = useId();
+  const manualRegionId = `${manualToggleId}-region`;
 
   const { min: domMin, max: domMax, step } = useMemo(() => computeDomain(prices), [prices]);
-
-  const avg = useMemo(() => {
-    const v = prices.filter((p) => Number.isFinite(p) && p >= 0);
-    if (!v.length) return 0;
-    return Math.round(v.reduce((a, b) => a + b, 0) / v.length);
-  }, [prices]);
 
   const fromProps = useMemo((): [number, number] => {
     const lo = parseDigits(minPrice);
@@ -113,6 +110,8 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
 
   /** Estado local: el padre solo se actualiza al soltar (onValueCommit) → drag fluido. */
   const [local, setLocal] = useState<[number, number]>(fromProps);
+  /** Campos Desde/Hasta ocultos por defecto; solo para montos muy específicos. */
+  const [manualOpen, setManualOpen] = useState(false);
 
   useEffect(() => {
     setLocal(fromProps);
@@ -172,12 +171,6 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
     !isAmbient && "text-slate-900"
   );
 
-  const subClass = cn(
-    "mt-1 text-sm",
-    isAmbient && "text-white/70",
-    !isAmbient && "text-slate-500"
-  );
-
   const fieldWrap = cn(
     "flex min-h-[2.75rem] items-stretch overflow-hidden rounded-xl border text-sm transition-[border-color,box-shadow] duration-200",
     isAmbient && "border-white/20 bg-black/20 focus-within:border-white/50 focus-within:shadow-[0_0_0_1px_rgba(255,255,255,0.35)]",
@@ -196,16 +189,16 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
     !isAmbient && "border-slate-200 bg-slate-50 text-slate-500"
   );
 
-  /** Pista fina + rango sólido; thumbs circulares (aspect-square + rounded-full). */
+  /** Pista gruesa redondeada + rango relleno + thumbs grandes (mejor arrastre y contraste). */
   const sliderLook = cn(
-    "w-full touch-pan-x py-3",
-    "[&_[data-slot=slider-track]]:relative [&_[data-slot=slider-track]]:mx-2 [&_[data-slot=slider-track]]:h-px [&_[data-slot=slider-track]]:rounded-none [&_[data-slot=slider-track]]:bg-neutral-300",
-    "[&_[data-slot=slider-range]]:rounded-none",
-    "[&_[data-slot=slider-thumb]]:box-border [&_[data-slot=slider-thumb]]:size-5 [&_[data-slot=slider-thumb]]:min-h-5 [&_[data-slot=slider-thumb]]:min-w-5 [&_[data-slot=slider-thumb]]:shrink-0 [&_[data-slot=slider-thumb]]:rounded-full [&_[data-slot=slider-thumb]]:border-2 [&_[data-slot=slider-thumb]]:border-neutral-900 [&_[data-slot=slider-thumb]]:bg-white [&_[data-slot=slider-thumb]]:shadow-sm [&_[data-slot=slider-thumb]]:outline-none [&_[data-slot=slider-thumb]]:transition-shadow [&_[data-slot=slider-thumb]]:duration-150 [&_[data-slot=slider-thumb]]:hover:shadow-[0_0_0_7px_rgba(0,0,0,0.06)] [&_[data-slot=slider-thumb]]:focus-visible:shadow-[0_0_0_7px_rgba(0,0,0,0.08)]",
+    "w-full cursor-grab touch-pan-x py-4 active:cursor-grabbing",
+    "[&_[data-slot=slider-track]]:relative [&_[data-slot=slider-track]]:mx-1.5 [&_[data-slot=slider-track]]:h-2.5 [&_[data-slot=slider-track]]:rounded-full [&_[data-slot=slider-track]]:shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)]",
+    "[&_[data-slot=slider-range]]:rounded-full [&_[data-slot=slider-range]]:shadow-[0_1px_3px_rgba(0,0,0,0.15)]",
+    "[&_[data-slot=slider-thumb]]:box-border [&_[data-slot=slider-thumb]]:size-6 [&_[data-slot=slider-thumb]]:min-h-6 [&_[data-slot=slider-thumb]]:min-w-6 [&_[data-slot=slider-thumb]]:shrink-0 [&_[data-slot=slider-thumb]]:rounded-full [&_[data-slot=slider-thumb]]:border-[3px] [&_[data-slot=slider-thumb]]:border-white [&_[data-slot=slider-thumb]]:bg-primary [&_[data-slot=slider-thumb]]:shadow-[0_2px_10px_rgba(0,0,0,0.28)] [&_[data-slot=slider-thumb]]:outline-none [&_[data-slot=slider-thumb]]:transition-[transform,box-shadow] [&_[data-slot=slider-thumb]]:duration-150 [&_[data-slot=slider-thumb]]:ease-out [&_[data-slot=slider-thumb]]:hover:scale-110 [&_[data-slot=slider-thumb]]:hover:shadow-[0_3px_14px_rgba(0,0,0,0.35)] [&_[data-slot=slider-thumb]]:focus-visible:ring-2 [&_[data-slot=slider-thumb]]:focus-visible:ring-primary/40 [&_[data-slot=slider-thumb]]:focus-visible:ring-offset-2 [&_[data-slot=slider-thumb]]:focus-visible:ring-offset-transparent [&_[data-slot=slider-thumb]]:active:scale-105",
     isAmbient &&
-      "[&_[data-slot=slider-track]]:bg-white/35 [&_[data-slot=slider-range]]:h-0.5 [&_[data-slot=slider-range]]:bg-white [&_[data-slot=slider-thumb]]:border-white [&_[data-slot=slider-thumb]]:bg-neutral-950 [&_[data-slot=slider-thumb]]:hover:shadow-[0_0_0_7px_rgba(255,255,255,0.12)]",
+      "[&_[data-slot=slider-track]]:border [&_[data-slot=slider-track]]:border-white/20 [&_[data-slot=slider-track]]:bg-black/40 [&_[data-slot=slider-range]]:bg-gradient-to-r [&_[data-slot=slider-range]]:from-white/90 [&_[data-slot=slider-range]]:to-white [&_[data-slot=slider-thumb]]:border-white [&_[data-slot=slider-thumb]]:bg-brand-navy [&_[data-slot=slider-thumb]]:shadow-[0_2px_12px_rgba(0,0,0,0.45)] [&_[data-slot=slider-thumb]]:hover:shadow-[0_4px_18px_rgba(255,255,255,0.2)] [&_[data-slot=slider-thumb]]:focus-visible:ring-white/50",
     !isAmbient &&
-      "[&_[data-slot=slider-range]]:h-0.5 [&_[data-slot=slider-range]]:bg-neutral-900 [&_[data-slot=slider-thumb]]:ring-0 [&_[data-slot=slider-thumb]]:hover:ring-0 [&_[data-slot=slider-thumb]]:focus-visible:ring-0"
+      "[&_[data-slot=slider-track]]:bg-slate-200/90 [&_[data-slot=slider-range]]:bg-neutral-900 [&_[data-slot=slider-thumb]]:border-white [&_[data-slot=slider-thumb]]:bg-primary [&_[data-slot=slider-thumb]]:ring-0 [&_[data-slot=slider-thumb]]:hover:ring-0"
   );
 
   return (
@@ -217,9 +210,9 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
         !isPremium && !isAmbient && "border-slate-200"
       )}
     >
-      <div className={cn(cardClass, "px-4 py-4 sm:px-5 sm:py-5")}>
-        <div className="mb-3">
-          <h3 className={cn(titleClass, "text-base sm:text-lg")}>
+      <div className={cn(cardClass, "px-4 py-3 sm:px-5 sm:py-4")}>
+        <div className="mb-2">
+          <h3 className={cn(titleClass, "text-[15px] sm:text-base")}>
             <span className="font-semibold">Precio</span>
             <span className={cn("font-normal", isAmbient ? "text-white/80" : "text-slate-500")}> · rango</span>
             <span className={cn("ml-2 text-[10px] font-medium uppercase tracking-wider", isAmbient ? "text-white/45" : "text-slate-400")}>
@@ -234,7 +227,7 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
         </div>
 
         <Slider
-          className={cn(sliderLook, "py-2")}
+          className={sliderLook}
           min={domMin}
           max={domMax}
           step={step}
@@ -264,57 +257,86 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
           <span className="font-semibold">{formatMxnLong(local[1])}</span>
         </p>
 
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end sm:gap-2.5">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <span
-              className={cn(
-                "shrink-0 text-xs font-medium",
-                isAmbient ? "text-white/60" : "text-slate-400"
-              )}
-            >
-              Desde
-            </span>
-            <div className={cn(fieldWrap, "min-w-0 flex-1")}>
-              <input
-                type="text"
-                inputMode="numeric"
-                className={innerInput}
-                placeholder="—"
-                value={minPrice}
-                onChange={(e) => setMinStr(e.target.value)}
-                aria-label="Precio mínimo en MXN"
-              />
-              <span className={mxnChip}>MXN</span>
-            </div>
-          </div>
-
-          <div className={cn("hidden pb-2 text-center text-slate-300 sm:block", isAmbient && "text-white/35")} aria-hidden>
-            —
-          </div>
-
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <span
-              className={cn(
-                "shrink-0 text-xs font-medium",
-                isAmbient ? "text-white/60" : "text-slate-400"
-              )}
-            >
-              Hasta
-            </span>
-            <div className={cn(fieldWrap, "min-w-0 flex-1")}>
-              <input
-                type="text"
-                inputMode="numeric"
-                className={innerInput}
-                placeholder="—"
-                value={maxPrice}
-                onChange={(e) => setMaxStr(e.target.value)}
-                aria-label="Precio máximo en MXN"
-              />
-              <span className={mxnChip}>MXN</span>
-            </div>
-          </div>
+        <div className="mt-3 flex justify-center">
+          <button
+            type="button"
+            id={manualToggleId}
+            aria-expanded={manualOpen}
+            aria-controls={manualRegionId}
+            onClick={() => setManualOpen((o) => !o)}
+            className={cn(
+              "inline-flex items-center gap-1.5 border-b border-dotted pb-0.5 text-[11px] font-medium uppercase tracking-[0.14em] transition-colors",
+              isAmbient
+                ? "border-white/35 text-white/75 hover:border-white/60 hover:text-white"
+                : "border-slate-400 text-slate-600 hover:border-primary hover:text-primary"
+            )}
+          >
+            {manualOpen ? "Ocultar montos exactos" : "Montos exactos"}
+            <ChevronDown
+              className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", manualOpen && "rotate-180")}
+              aria-hidden
+            />
+          </button>
         </div>
+
+        {manualOpen ? (
+          <div
+            id={manualRegionId}
+            role="region"
+            aria-labelledby={manualToggleId}
+            className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end sm:gap-2.5"
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <span
+                className={cn(
+                  "shrink-0 text-xs font-medium",
+                  isAmbient ? "text-white/60" : "text-slate-400"
+                )}
+              >
+                Desde
+              </span>
+              <div className={cn(fieldWrap, "min-w-0 flex-1")}>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className={innerInput}
+                  placeholder="—"
+                  value={minPrice}
+                  onChange={(e) => setMinStr(e.target.value)}
+                  aria-label="Precio mínimo en MXN"
+                />
+                <span className={mxnChip}>MXN</span>
+              </div>
+            </div>
+
+            <div className={cn("hidden pb-2 text-center text-slate-300 sm:block", isAmbient && "text-white/35")} aria-hidden>
+              —
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <span
+                className={cn(
+                  "shrink-0 text-xs font-medium",
+                  isAmbient ? "text-white/60" : "text-slate-400"
+                )}
+              >
+                Hasta
+              </span>
+              <div className={cn(fieldWrap, "min-w-0 flex-1")}>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className={innerInput}
+                  placeholder="—"
+                  value={maxPrice}
+                  onChange={(e) => setMaxStr(e.target.value)}
+                  aria-label="Precio máximo en MXN"
+                />
+                <span className={mxnChip}>MXN</span>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

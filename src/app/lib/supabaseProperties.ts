@@ -173,6 +173,19 @@ export async function fetchCatalogProperties(client: SupabaseClient) {
   return client.from("properties").select("*").order("updated_at", { ascending: false });
 }
 
+/**
+ * Solo propiedades destacadas (portada). Pocas filas — no usar el listado completo en el home.
+ * Índice recomendado en Postgres: `(featured) WHERE featured = true` o partial index en `featured`.
+ */
+export function fetchFeaturedPropertiesForHome(client: SupabaseClient) {
+  return client
+    .from("properties")
+    .select("*")
+    .eq("featured", true)
+    .order("updated_at", { ascending: false })
+    .limit(MAX_FEATURED_PROPERTIES);
+}
+
 /** Propiedades vinculadas a un desarrollo por `development_tokko_id` (Tokko). */
 export async function fetchPropertiesByDevelopmentTokkoId(client: SupabaseClient, developmentTokkoId: string) {
   const id = developmentTokkoId.trim();
