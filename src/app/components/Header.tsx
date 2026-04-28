@@ -132,12 +132,12 @@ export function Header() {
   const isRentPage = location.pathname === "/renta";
   const isSalePage = location.pathname === "/venta";
   const isDevelopmentsPage = location.pathname === "/desarrollos";
-  const isDevelopmentsSection = location.pathname.startsWith("/desarrollos");
   const isPropertiesSection = location.pathname.startsWith("/propiedades");
   const isServicesPage = location.pathname === "/servicios";
   const isContactPage = location.pathname === "/contacto";
   const isAboutPage = location.pathname === "/nosotros";
-  const lockHeaderInMode2 = isDevelopmentsSection || isPropertiesSection;
+  /** Solo propiedades: lista/mapa sin hero “arriba del todo” como renta/venta — mantener barra compacta. Desarrollos tiene hero como el resto: usar scroll como `p`. */
+  const lockHeaderInMode2 = isPropertiesSection;
   const useOverlayHeader =
     isHome || isRentPage || isSalePage || isDevelopmentsPage || isServicesPage || isContactPage || isAboutPage;
   const rafRef = useRef<number | null>(null);

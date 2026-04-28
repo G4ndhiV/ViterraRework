@@ -20,10 +20,28 @@ import {
   viterraHeroSubtitleClass,
 } from "../config/heroLayout";
 
+function PropertyGridSkeleton() {
+  return (
+    <div className="grid grid-cols-1 items-stretch gap-8 md:grid-cols-2 lg:grid-cols-3" aria-hidden>
+      {Array.from({ length: 6 }).map((_, idx) => (
+        <div key={`sale-skeleton-${idx}`} className="overflow-hidden rounded-none border border-slate-200 bg-white">
+          <div className="h-64 animate-pulse bg-slate-200" />
+          <div className="space-y-4 p-6">
+            <div className="h-6 w-3/4 animate-pulse rounded bg-slate-200" />
+            <div className="h-4 w-2/3 animate-pulse rounded bg-slate-200" />
+            <div className="h-4 w-1/2 animate-pulse rounded bg-slate-200" />
+            <div className="h-10 w-full animate-pulse rounded bg-slate-200" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function SalePage() {
   const reduceMotion = useReducedMotion();
   const [searchParams] = useSearchParams();
-  const { properties } = useCatalogProperties();
+  const { properties, loading } = useCatalogProperties();
   const saleProperties = useMemo(
     () => properties.filter((p) => p.status === "venta"),
     [properties]
@@ -202,8 +220,9 @@ export function SalePage() {
               <div className="flex items-center gap-3">
                 <SlidersHorizontal className="h-5 w-5 text-primary" strokeWidth={1.5} aria-hidden />
                 <p className="font-heading text-sm font-medium text-brand-navy/90 not-italic">
-                  {filteredProperties.length} propiedad{filteredProperties.length !== 1 ? "es" : ""} disponible
-                  {filteredProperties.length !== 1 ? "s" : ""}
+                  {loading
+                    ? "Cargando propiedades..."
+                    : `${filteredProperties.length} propiedad${filteredProperties.length !== 1 ? "es" : ""} disponible${filteredProperties.length !== 1 ? "s" : ""}`}
                 </p>
               </div>
             )}
@@ -267,7 +286,9 @@ export function SalePage() {
             </div>
           </Reveal>
 
-          {viewMode === "grid" ? (
+          {loading ? (
+            <PropertyGridSkeleton />
+          ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 items-stretch md:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredProperties.map((property, index) => (
                 <Reveal key={property.id} className="h-full" delay={Math.min(index * 0.055, 0.4)} y={24}>
@@ -281,7 +302,7 @@ export function SalePage() {
             </Reveal>
           )}
 
-          {filteredProperties.length === 0 && (
+          {!loading && filteredProperties.length === 0 && (
             <motion.div
               className="py-20 text-center"
               initial={reduceMotion ? false : { opacity: 0, y: 12 }}

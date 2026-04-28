@@ -9,10 +9,11 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
+import { Switch } from "../ui/switch";
 import { cn } from "../ui/utils";
 import { copyPublicPageUrl } from "../../lib/copyPublicLink";
 import type { Property } from "../PropertyCard";
-import { Download, Link2 } from "lucide-react";
+import { Download, Link2, Star } from "lucide-react";
 import { ImageGalleryEditor } from "./ImageGalleryEditor";
 import { MAX_FEATURED_PROPERTIES } from "../../lib/supabaseProperties";
 
@@ -236,13 +237,67 @@ export function PropertyFormDialog({
                   "xl:max-h-[min(28rem,calc(100dvh-13rem))] xl:overflow-y-auto xl:pr-1"
                 )}
               >
-                <div>
-                  <h3 className="font-heading text-base text-brand-navy sm:text-lg" style={{ fontWeight: 700 }}>
-                    Datos del inmueble
-                  </h3>
-                  <p className="mt-0.5 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
-                    Información pública en ficha y listados.
-                  </p>
+                <div className="flex flex-col gap-3 border-b border-slate-200/60 pb-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:pb-3">
+                  <div className="min-w-0 sm:flex-1 sm:pt-0.5">
+                    <h3 className="font-heading text-base text-brand-navy sm:text-lg" style={{ fontWeight: 700 }}>
+                      Datos del inmueble
+                    </h3>
+                    <p className="mt-0.5 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
+                      Información pública en ficha y listados.
+                    </p>
+                  </div>
+
+                  <div
+                    className={cn(
+                      "flex w-full shrink-0 items-center gap-2 rounded-xl border px-2.5 py-2 shadow-sm sm:mt-0 sm:max-w-[min(100%,20rem)] sm:py-1.5",
+                      draft.featured
+                        ? "border-amber-300/50 bg-gradient-to-r from-amber-50/90 to-amber-50/20 ring-1 ring-amber-200/30"
+                        : "border-slate-200/80 bg-gradient-to-r from-slate-50/70 to-white ring-1 ring-slate-900/[0.04]"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors",
+                        draft.featured
+                          ? "border-amber-200/80 bg-amber-100/80 text-amber-700"
+                          : "border-slate-200/90 bg-white text-amber-500/80"
+                      )}
+                      aria-hidden
+                    >
+                      <Star
+                        className="h-3.5 w-3.5"
+                        strokeWidth={2}
+                        fill={draft.featured ? "currentColor" : "none"}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1 pr-0.5">
+                      <Label
+                        htmlFor="viterra-property-featured"
+                        className={cn(
+                          "block cursor-pointer text-[12px] leading-tight text-slate-800 sm:text-sm",
+                          !draft.featured && otherFeaturedCount >= MAX_FEATURED_PROPERTIES && "text-slate-500"
+                        )}
+                        style={{ fontWeight: 600 }}
+                      >
+                        <span className="sm:hidden">Todos</span>
+                        <span className="hidden sm:inline">Destacar en la portada</span>
+                      </Label>
+                    </div>
+                    <div className="flex shrink-0 self-center pl-0.5">
+                      <Switch
+                        id="viterra-property-featured"
+                        checked={Boolean(draft.featured)}
+                        disabled={
+                          !draft.featured && otherFeaturedCount >= MAX_FEATURED_PROPERTIES
+                        }
+                        onCheckedChange={(v) =>
+                          setDraft((d) => (d ? { ...d, featured: v } : d))
+                        }
+                        className="data-[state=unchecked]:bg-slate-200/80"
+                        aria-label="Destacar en la portada de inicio"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -385,27 +440,6 @@ export function PropertyFormDialog({
                   }
                 />
               </div>
-            </div>
-            <div className="flex items-start gap-3 rounded-xl border border-slate-200/90 bg-slate-50/80 px-4 py-3">
-              <input
-                id="viterra-property-featured"
-                type="checkbox"
-                checked={Boolean(draft.featured)}
-                disabled={
-                  !draft.featured &&
-                  otherFeaturedCount >= MAX_FEATURED_PROPERTIES
-                }
-                onChange={(e) =>
-                  setDraft((d) => (d ? { ...d, featured: e.target.checked } : d))
-                }
-                className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300"
-              />
-              <label htmlFor="viterra-property-featured" className="cursor-pointer text-sm text-slate-700" style={{ fontWeight: 500 }}>
-                Destacar en la portada (inicio)
-                <span className="mt-1 block text-xs text-slate-500" style={{ fontWeight: 500 }}>
-                  Máximo {MAX_FEATURED_PROPERTIES} propiedades. Otras destacadas ahora: {otherFeaturedCount}.
-                </span>
-              </label>
             </div>
           </div>
         </form>

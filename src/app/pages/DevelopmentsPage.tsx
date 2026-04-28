@@ -1,9 +1,10 @@
 import { motion, useReducedMotion } from "motion/react";
+import { useEffect, useRef } from "react";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
-import { ArrowRight, MapPin, CheckCircle } from "lucide-react";
+import { ArrowRight, Loader2, MapPin, CheckCircle } from "lucide-react";
 import { Link } from "react-router";
-import { useDevelopmentsCatalog } from "../hooks/useDevelopmentsCatalog";
+import { useDevelopmentsCatalogInfinite } from "../hooks/useDevelopmentsCatalog";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
 import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
@@ -18,13 +19,80 @@ import {
   viterraHeroTitleClass,
   viterraHeroSubtitleClass,
 } from "../config/heroLayout";
+import { displayDeliveryDate } from "../data/developments";
+
+function FeaturedRowSkeleton({
+  gridClass,
+  mirror,
+  preview,
+}: {
+  gridClass: string;
+  mirror?: boolean;
+  preview: boolean;
+}) {
+  return (
+    <div className={cn("grid animate-pulse items-center gap-8 md:gap-12", gridClass)}>
+      <div className={cn("h-[500px] rounded-lg bg-brand-navy/10", mirror && !preview && "lg:order-2")} />
+      <div className={cn("space-y-4", mirror && !preview && "lg:order-1")}>
+        <div className="h-4 w-32 rounded bg-brand-navy/15" />
+        <div className="h-9 max-w-md rounded bg-brand-navy/15" />
+        <div className="space-y-2 pt-2">
+          <div className="h-4 rounded bg-brand-navy/10" />
+          <div className="h-4 rounded bg-brand-navy/10" />
+          <div className="h-4 w-4/5 rounded bg-brand-navy/10" />
+        </div>
+        <div className="h-28 rounded-lg bg-brand-navy/10" />
+      </div>
+    </div>
+  );
+}
+
+function GridCardSkeleton() {
+  return (
+    <div className="animate-pulse overflow-hidden rounded-lg border border-brand-navy/10 bg-white">
+      <div className="h-52 bg-brand-navy/10 sm:h-64 md:h-72" />
+      <div className="space-y-3 p-5 sm:p-6 md:p-8">
+        <div className="h-4 w-24 rounded bg-brand-navy/15" />
+        <div className="h-7 rounded bg-brand-navy/15" />
+        <div className="h-14 rounded bg-brand-navy/10" />
+        <div className="h-16 rounded bg-brand-navy/10" />
+      </div>
+    </div>
+  );
+}
 
 export function DevelopmentsPage() {
   const reduceMotion = useReducedMotion();
   const pl = usePreviewLayout();
   const { content } = useSiteContent();
   const page = content.developments;
-  const { developments, loading, error } = useDevelopmentsCatalog(true);
+  const {
+    developments,
+    initialLoading,
+    loadingMore,
+    error,
+    loadMoreError,
+    hasMore,
+    loadMore,
+    reload,
+  } = useDevelopmentsCatalogInfinite(true);
+
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = loadMoreSentinelRef.current;
+    if (!el || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const hit = entries.some((e) => e.isIntersecting);
+        if (hit) void loadMore();
+      },
+      { root: null, rootMargin: "400px 0px", threshold: 0 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loadMore, developments.length]);
+
   const featuredDevelopments = developments.filter((x) => x.featured);
   const otherDevelopments = developments.filter((x) => !x.featured);
 
@@ -51,32 +119,7 @@ export function DevelopmentsPage() {
     },
   } as const;
 
-  if (loading) {
-    return (
-      <div className="viterra-page min-h-screen flex flex-col bg-white">
-        <Header />
-        <div className="flex flex-1 items-center justify-center px-4 py-24 text-slate-600" style={{ fontWeight: 500 }}>
-          Cargando desarrollos…
-        </div>
-        <Footer />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="viterra-page min-h-screen flex flex-col bg-white">
-        <Header />
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-24 text-center">
-          <p className="text-slate-800" style={{ fontWeight: 600 }}>
-            No se pudieron cargar los desarrollos
-          </p>
-          <p className="text-sm text-slate-600">{error}</p>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
+  const featuredGridClass = pl.gridCols("grid-cols-1 lg:grid-cols-2");
 
   return (
     <div className="viterra-page min-h-screen flex flex-col bg-white" >
@@ -90,6 +133,8 @@ export function DevelopmentsPage() {
             src="https://images.adsttc.com/media/images/5ef2/f7ce/b357/6589/8c00/019a/large_jpg/847A0737.jpg?1592981436"
             alt=""
             className="h-full w-full object-cover"
+            decoding="async"
+            fetchPriority="high"
             initial={false}
             animate={
               reduceMotion
@@ -128,8 +173,55 @@ export function DevelopmentsPage() {
       </section>
       </PreviewSectionChrome>
 
+      {error && developments.length === 0 && !initialLoading && (
+        <section className="border-b border-brand-navy/10 bg-white py-14">
+          <div className="mx-auto max-w-lg px-4 text-center sm:px-6">
+            <p className="font-heading text-slate-800" style={{ fontWeight: 600 }}>
+              No se pudieron cargar los desarrollos
+            </p>
+            <p className="mt-2 text-sm text-slate-600">{error}</p>
+            <button
+              type="button"
+              className="mt-6 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-red-hover"
+              onClick={() => void reload()}
+            >
+              Reintentar
+            </button>
+          </div>
+        </section>
+      )}
+
+      {initialLoading && (
+        <>
+          <section className="bg-white py-12 sm:py-16 md:py-24">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+              <div className="mb-8 sm:mb-12">
+                <div className="mb-2 h-4 w-40 max-w-full animate-pulse rounded bg-brand-navy/15 sm:mb-3" />
+                <div className="h-9 w-72 max-w-full animate-pulse rounded bg-brand-navy/15 sm:h-10 md:h-11" />
+              </div>
+              <div className="space-y-10 md:space-y-12">
+                <FeaturedRowSkeleton gridClass={featuredGridClass} preview={pl.preview} />
+                <FeaturedRowSkeleton gridClass={featuredGridClass} mirror preview={pl.preview} />
+              </div>
+            </div>
+          </section>
+          <section className="bg-brand-canvas py-12 sm:py-16 md:py-24">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+              <div className="mb-8 sm:mb-12">
+                <div className="mb-2 h-4 w-36 animate-pulse rounded bg-brand-navy/15 sm:mb-3" />
+                <div className="h-9 w-64 max-w-full animate-pulse rounded bg-brand-navy/15" />
+              </div>
+              <div className={cn("grid gap-8", pl.gridCols("grid-cols-1 md:grid-cols-2"))}>
+                <GridCardSkeleton />
+                <GridCardSkeleton />
+              </div>
+            </div>
+          </section>
+        </>
+      )}
+
       {/* Featured Developments */}
-      {featuredDevelopments.length > 0 && (
+      {!initialLoading && featuredDevelopments.length > 0 && (
         <PreviewSectionChrome blockId="dev-featured" label="Proyectos destacados (títulos)">
         <section className="bg-white py-12 sm:py-16 md:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -161,6 +253,8 @@ export function DevelopmentsPage() {
                       <img
                         src={dev.image}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                       />
                       <div className="absolute left-4 top-4 sm:left-6 sm:top-6">
@@ -192,7 +286,7 @@ export function DevelopmentsPage() {
                       </div>
                       <div>
                         <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Entrega</p>
-                        <p className="font-heading text-lg font-semibold text-brand-navy">{dev.deliveryDate}</p>
+                        <p className="font-heading text-lg font-semibold text-brand-navy">{displayDeliveryDate(dev.deliveryDate)}</p>
                       </div>
                       <div className={pl.colSpan("col-span-2")}>
                         <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Rango de Precios</p>
@@ -235,7 +329,7 @@ export function DevelopmentsPage() {
       )}
 
       {/* Other Developments Grid */}
-      {otherDevelopments.length > 0 && (
+      {!initialLoading && otherDevelopments.length > 0 && (
         <section className="bg-brand-canvas py-12 sm:py-16 md:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <Reveal className="mb-8 sm:mb-12" y={20}>
@@ -259,6 +353,8 @@ export function DevelopmentsPage() {
                       <img
                         src={dev.image}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                       />
                       <div className="absolute left-6 top-6">
@@ -289,7 +385,7 @@ export function DevelopmentsPage() {
                       </div>
                       <div>
                         <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Entrega</p>
-                        <p className="font-heading text-base font-semibold text-brand-navy">{dev.deliveryDate}</p>
+                        <p className="font-heading text-base font-semibold text-brand-navy">{displayDeliveryDate(dev.deliveryDate)}</p>
                       </div>
                     </div>
 
@@ -315,6 +411,43 @@ export function DevelopmentsPage() {
             </div>
           </div>
         </section>
+      )}
+
+      {!initialLoading && !error && developments.length === 0 && (
+        <section className="border-b border-brand-navy/10 bg-white py-16">
+          <div className="mx-auto max-w-xl px-4 text-center text-brand-navy/75">
+            <p className="font-heading text-lg" style={{ fontWeight: 500 }}>
+              No hay desarrollos publicados por ahora.
+            </p>
+          </div>
+        </section>
+      )}
+
+      {!initialLoading && hasMore && developments.length > 0 && (
+        <div ref={loadMoreSentinelRef} className="h-3 w-full shrink-0" aria-hidden />
+      )}
+
+      {(loadingMore || loadMoreError) && developments.length > 0 && (
+        <div className="flex flex-col items-center justify-center gap-3 border-t border-brand-navy/10 bg-white px-4 py-8">
+          {loadingMore && (
+            <>
+              <Loader2 className="h-8 w-8 animate-spin text-primary" strokeWidth={1.75} aria-hidden />
+              <span className="sr-only">Cargando más desarrollos…</span>
+            </>
+          )}
+          {loadMoreError && (
+            <>
+              <p className="text-center text-sm text-red-700">{loadMoreError}</p>
+              <button
+                type="button"
+                className="rounded-lg border border-brand-navy/25 bg-white px-4 py-2 text-sm font-medium text-brand-navy hover:bg-brand-navy/[0.04]"
+                onClick={() => void loadMore()}
+              >
+                Reintentar
+              </button>
+            </>
+          )}
+        </div>
       )}
 
       {/* CTA Section */}

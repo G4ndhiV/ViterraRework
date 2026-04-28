@@ -1,5 +1,10 @@
 import type { User } from "../contexts/AuthContext";
-import { LEAD_STATUS_LABEL, type CustomKanbanStage, type LeadBuiltinStatus } from "../data/leads";
+import {
+  LEAD_STATUS_LABEL,
+  labelForLeadStatus,
+  type CustomKanbanStage,
+  type LeadBuiltinStatus,
+} from "../data/leads";
 import type { UserGroup } from "./userGroups";
 
 export const DEFAULT_PIPELINE_GROUP_ID = "__default__";
@@ -11,6 +16,15 @@ export type GroupPipelineSnapshot = {
   stageOrder: string[];
   stageColors: Record<string, string>;
 };
+
+/** Copia profunda del embudo (etapas, orden y colores) para asignar a otro `group_id`. */
+export function cloneGroupPipelineSnapshot(s: GroupPipelineSnapshot): GroupPipelineSnapshot {
+  return {
+    customStages: s.customStages.map((c) => ({ id: c.id, label: c.label })),
+    stageOrder: [...s.stageOrder],
+    stageColors: { ...s.stageColors },
+  };
+}
 
 export function createEmptyGroupPipelineSnapshot(): GroupPipelineSnapshot {
   return {
@@ -46,11 +60,20 @@ export function normalizeStageOrder(stageOrder: string[], allStageIds: string[])
   ];
 }
 
+function findStageDefById(id: string, defs: CustomKanbanStage[]): CustomKanbanStage | undefined {
+  return defs.find((s) => s.id === id) ?? defs.find((s) => s.id.toLowerCase() === id.toLowerCase());
+}
+
+/**
+ * Antes `normalizeStageOrder` solo consideraba ids presentes en `customStages`, así que un
+ * `stageOrder` guardado sin filas en `customStages` (o desincronizado) quedaba vacío al cargar
+ * y el submódulo Pipeline no mostraba columnas aunque el Kanban sí (por estados en los leads).
+ */
 export function parseGroupPipelineConfigFromUnknown(raw: unknown): GroupPipelineSnapshot {
   const empty = createEmptyGroupPipelineSnapshot();
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return empty;
   const o = raw as Record<string, unknown>;
-  const customStages = Array.isArray(o.customStages) ? o.customStages.filter(isCustomStage) : [];
+  const customStagesFromDb = Array.isArray(o.customStages) ? o.customStages.filter(isCustomStage) : [];
   const stageOrder = Array.isArray(o.stageOrder)
     ? o.stageOrder.filter((x): x is string => typeof x === "string")
     : [];
@@ -58,9 +81,22 @@ export function parseGroupPipelineConfigFromUnknown(raw: unknown): GroupPipeline
     o.stageColors && typeof o.stageColors === "object" && !Array.isArray(o.stageColors)
       ? (o.stageColors as Record<string, string>)
       : {};
-  const allIds = [...customStages.map((s) => s.id)];
-  const normOrder = stageOrder.length > 0 ? normalizeStageOrder(stageOrder, allIds) : [...allIds];
-  return { customStages, stageOrder: normOrder, stageColors };
+  const idsFromStages = customStagesFromDb.map((s) => s.id);
+  const idsFromOrder = [...new Set(stageOrder)];
+  const allStageIds = [...new Set([...idsFromStages, ...idsFromOrder])];
+  const normOrder =
+    stageOrder.length > 0
+      ? normalizeStageOrder(stageOrder, allStageIds)
+      : normalizeStageOrder(customStagesFromDb.map((s) => s.id), allStageIds);
+
+  const mergedCustomStages: CustomKanbanStage[] = normOrder.map((id) => {
+    const def = findStageDefById(id, customStagesFromDb);
+    const labelTrim = def?.label?.trim() ?? "";
+    if (labelTrim) return { id, label: labelTrim };
+    return { id, label: labelForLeadStatus(id, customStagesFromDb) };
+  });
+
+  return { customStages: mergedCustomStages, stageOrder: normOrder, stageColors };
 }
 
 export function migrateLegacyPipelineSnapshot(): GroupPipelineSnapshot | null {
@@ -90,12 +126,16 @@ export function migrateLegacyPipelineSnapshot(): GroupPipelineSnapshot | null {
     ) {
       return null;
     }
-    const allIds = [...customStages.map((s) => s.id)];
+    const allIds = [...new Set([...customStages.map((s) => s.id), ...stageOrder])];
     const normalizedOrder =
       stageOrder.length > 0
         ? normalizeStageOrder(stageOrder, allIds)
-        : [...customStages.map((s) => s.id)];
-    return { customStages, stageOrder: normalizedOrder, stageColors };
+        : normalizeStageOrder([], allIds);
+    return parseGroupPipelineConfigFromUnknown({
+      customStages,
+      stageOrder: normalizedOrder,
+      stageColors,
+    });
   } catch {
     return null;
   }

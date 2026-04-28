@@ -9,6 +9,8 @@ import {
   Plus,
   Search,
   UserCircle2,
+  Filter,
+  Calendar,
 } from "lucide-react";
 import type { User } from "../../contexts/AuthContext";
 import type { Lead } from "../../data/leads";
@@ -155,6 +157,11 @@ export function AdminClientsManager({
   const [propertyFilter, setPropertyFilter] = useState<string>("all");
   const [developmentFilter, setDevelopmentFilter] = useState<string>("all");
   const [ownerFilter, setOwnerFilter] = useState<string>("all");
+  const [leadLinkPresence, setLeadLinkPresence] = useState<"all" | "any" | "none">("all");
+  const [propertyLinkPresence, setPropertyLinkPresence] = useState<"all" | "any" | "none">("all");
+  const [developmentLinkPresence, setDevelopmentLinkPresence] = useState<"all" | "any" | "none">("all");
+  const [phoneListFilter, setPhoneListFilter] = useState<"all" | "with" | "without">("all");
+  const [createdInRange, setCreatedInRange] = useState<"all" | "7d" | "30d" | "90d" | "1y">("all");
 
   const [selected, setSelected] = useState<CrmClient | null>(null);
   const [isNew, setIsNew] = useState(false);
@@ -187,11 +194,32 @@ export function AdminClientsManager({
     return ids;
   }, [currentUser.id, currentUser.role, userGroups]);
 
+  const advisorFilterUserOptions = useMemo(() => {
+    if (currentUser.role === "admin") {
+      return users.filter((u) => u.isActive).sort((a, b) => a.name.localeCompare(b.name, "es"));
+    }
+    if (currentUser.role === "lider_grupo" && groupScopedLeadAssigneeIds) {
+      return users
+        .filter(
+          (u) => u.isActive && groupScopedLeadAssigneeIds.has(u.id.trim().toLowerCase())
+        )
+        .sort((a, b) => a.name.localeCompare(b.name, "es"));
+    }
+    return [];
+  }, [currentUser.role, users, groupScopedLeadAssigneeIds]);
+
   const clientVisibleToCurrentUser = useCallback(
     (client: CrmClient) =>
       clientVisibleToUser(currentUser, client, leadsById, groupScopedLeadAssigneeIds),
     [currentUser, groupScopedLeadAssigneeIds, leadsById]
   );
+
+  const extraListFiltersActive =
+    leadLinkPresence !== "all" ||
+    propertyLinkPresence !== "all" ||
+    developmentLinkPresence !== "all" ||
+    phoneListFilter !== "all" ||
+    createdInRange !== "all";
 
   const scopeClients = useMemo(
     () => clients.filter((client) => clientVisibleToCurrentUser(client)),
@@ -213,11 +241,61 @@ export function AdminClientsManager({
     if (developmentFilter !== "all") {
       list = list.filter((c) => c.developmentIds.includes(developmentFilter));
     }
-    if (ownerFilter !== "all" && canManageAllClients(currentUser)) {
+    if (
+      ownerFilter !== "all" &&
+      (canManageAllClients(currentUser) || currentUser.role === "lider_grupo")
+    ) {
       list = list.filter((c) => c.primaryOwnerUserId === ownerFilter);
     }
+    if (leadLinkPresence === "any") {
+      list = list.filter((c) => c.linkedLeadIds.length > 0);
+    } else if (leadLinkPresence === "none") {
+      list = list.filter((c) => c.linkedLeadIds.length === 0);
+    }
+    if (propertyLinkPresence === "any") {
+      list = list.filter((c) => c.propertyIds.length > 0);
+    } else if (propertyLinkPresence === "none") {
+      list = list.filter((c) => c.propertyIds.length === 0);
+    }
+    if (developmentLinkPresence === "any") {
+      list = list.filter((c) => c.developmentIds.length > 0);
+    } else if (developmentLinkPresence === "none") {
+      list = list.filter((c) => c.developmentIds.length === 0);
+    }
+    if (phoneListFilter === "with") {
+      list = list.filter((c) => Boolean(c.phone?.trim()));
+    } else if (phoneListFilter === "without") {
+      list = list.filter((c) => !c.phone?.trim());
+    }
+    if (createdInRange !== "all") {
+      const now = Date.now();
+      const days: Record<Exclude<typeof createdInRange, "all">, number> = {
+        "7d": 7,
+        "30d": 30,
+        "90d": 90,
+        "1y": 365,
+      };
+      const maxAgeMs = days[createdInRange] * 24 * 60 * 60 * 1000;
+      list = list.filter((c) => {
+        const t = new Date(c.createdAt).getTime();
+        if (Number.isNaN(t)) return false;
+        return now - t <= maxAgeMs;
+      });
+    }
     return list;
-  }, [scopeClients, searchQuery, propertyFilter, developmentFilter, ownerFilter, currentUser.role]);
+  }, [
+    scopeClients,
+    searchQuery,
+    propertyFilter,
+    developmentFilter,
+    ownerFilter,
+    leadLinkPresence,
+    propertyLinkPresence,
+    developmentLinkPresence,
+    phoneListFilter,
+    createdInRange,
+    currentUser.role,
+  ]);
 
   const suggestedLeads = useMemo(() => {
     return leads.filter((lead) => {
@@ -581,7 +659,7 @@ export function AdminClientsManager({
                 autoComplete="off"
               />
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <select
                 value={propertyFilter}
                 onChange={(e) => setPropertyFilter(e.target.value)}
@@ -608,23 +686,130 @@ export function AdminClientsManager({
                   </option>
                 ))}
               </select>
-              {canManageAllClients(currentUser) && (
+              {(canManageAllClients(currentUser) || currentUser.role === "lider_grupo") && (
                 <select
                   value={ownerFilter}
                   onChange={(e) => setOwnerFilter(e.target.value)}
-                  className="h-full min-h-[2.75rem] w-full rounded-2xl border border-slate-200/90 bg-white px-4 py-3 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15 sm:col-span-2 lg:col-span-1"
+                  className="h-full min-h-[2.75rem] w-full rounded-2xl border border-slate-200/90 bg-white px-4 py-3 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
                   style={{ fontWeight: 500 }}
+                  aria-label="Filtrar por asesor titular"
                 >
-                  <option value="all">Todos los asesores</option>
-                  {users
-                    .filter((u) => u.isActive)
-                    .map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name}
-                      </option>
-                    ))}
+                  <option value="all">
+                    {currentUser.role === "lider_grupo"
+                      ? "Todos los asesores (mi alcance)"
+                      : "Todos los asesores"}
+                  </option>
+                  {advisorFilterUserOptions.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
                 </select>
               )}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  <Filter className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  Más filtros
+                </p>
+                {extraListFiltersActive && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLeadLinkPresence("all");
+                      setPropertyLinkPresence("all");
+                      setDevelopmentLinkPresence("all");
+                      setPhoneListFilter("all");
+                      setCreatedInRange("all");
+                    }}
+                    className="text-xs font-medium text-primary decoration-primary/30 hover:underline"
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                <div className="space-y-0.5">
+                  <label className="text-[10px] font-medium uppercase leading-tight tracking-wide text-slate-500">
+                    Leads vinculados
+                  </label>
+                  <select
+                    value={leadLinkPresence}
+                    onChange={(e) => setLeadLinkPresence(e.target.value as "all" | "any" | "none")}
+                    className="h-8 w-full rounded-lg border border-slate-200/90 bg-white px-2.5 pr-7 text-xs text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/15"
+                    style={{ fontWeight: 500 }}
+                  >
+                    <option value="all">Cualquiera</option>
+                    <option value="any">Con al menos un lead</option>
+                    <option value="none">Sin leads</option>
+                  </select>
+                </div>
+                <div className="space-y-0.5">
+                  <label className="text-[10px] font-medium uppercase leading-tight tracking-wide text-slate-500">
+                    Propiedades
+                  </label>
+                  <select
+                    value={propertyLinkPresence}
+                    onChange={(e) => setPropertyLinkPresence(e.target.value as "all" | "any" | "none")}
+                    className="h-8 w-full rounded-lg border border-slate-200/90 bg-white px-2.5 pr-7 text-xs text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/15"
+                    style={{ fontWeight: 500 }}
+                  >
+                    <option value="all">Cualquiera</option>
+                    <option value="any">Con al menos una</option>
+                    <option value="none">Sin vincular</option>
+                  </select>
+                </div>
+                <div className="space-y-0.5">
+                  <label className="text-[10px] font-medium uppercase leading-tight tracking-wide text-slate-500">
+                    Desarrollos
+                  </label>
+                  <select
+                    value={developmentLinkPresence}
+                    onChange={(e) => setDevelopmentLinkPresence(e.target.value as "all" | "any" | "none")}
+                    className="h-8 w-full rounded-lg border border-slate-200/90 bg-white px-2.5 pr-7 text-xs text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/15"
+                    style={{ fontWeight: 500 }}
+                  >
+                    <option value="all">Cualquiera</option>
+                    <option value="any">Con al menos uno</option>
+                    <option value="none">Sin vincular</option>
+                  </select>
+                </div>
+                <div className="space-y-0.5">
+                  <label className="text-[10px] font-medium uppercase leading-tight tracking-wide text-slate-500">
+                    Teléfono
+                  </label>
+                  <select
+                    value={phoneListFilter}
+                    onChange={(e) => setPhoneListFilter(e.target.value as "all" | "with" | "without")}
+                    className="h-8 w-full rounded-lg border border-slate-200/90 bg-white px-2.5 pr-7 text-xs text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/15"
+                    style={{ fontWeight: 500 }}
+                  >
+                    <option value="all">Cualquiera</option>
+                    <option value="with">Con teléfono</option>
+                    <option value="without">Sin teléfono</option>
+                  </select>
+                </div>
+                <div className="space-y-0.5 sm:col-span-2 lg:col-span-1">
+                  <label className="inline-flex items-center gap-1 text-[10px] font-medium uppercase leading-tight tracking-wide text-slate-500">
+                    <Calendar className="h-2.5 w-2.5" strokeWidth={2} aria-hidden />
+                    Alta reciente
+                  </label>
+                  <select
+                    value={createdInRange}
+                    onChange={(e) => setCreatedInRange(e.target.value as typeof createdInRange)}
+                    className="h-8 w-full rounded-lg border border-slate-200/90 bg-white px-2.5 pr-7 text-xs text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/15"
+                    style={{ fontWeight: 500 }}
+                  >
+                    <option value="all">Cualquier fecha</option>
+                    <option value="7d">Últimos 7 días</option>
+                    <option value="30d">Últimos 30 días</option>
+                    <option value="90d">Últimos 90 días</option>
+                    <option value="1y">Último año</option>
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
         </div>

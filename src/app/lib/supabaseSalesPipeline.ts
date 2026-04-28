@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  cloneGroupPipelineSnapshot,
   createDefaultBuiltinPipelineSnapshot,
-  createEmptyGroupPipelineSnapshot,
   DEFAULT_PIPELINE_GROUP_ID,
   parseGroupPipelineConfigFromUnknown,
   type GroupPipelineSnapshot,
@@ -45,7 +45,11 @@ export function buildPipelineByGroupFromSources(
     } else if (gid === DEFAULT_PIPELINE_GROUP_ID) {
       out[gid] = createDefaultBuiltinPipelineSnapshot();
     } else {
-      out[gid] = createEmptyGroupPipelineSnapshot();
+      const generalSnapshot =
+        fromDb.get(DEFAULT_PIPELINE_GROUP_ID) ?? localLegacy[DEFAULT_PIPELINE_GROUP_ID] ?? null;
+      out[gid] = generalSnapshot
+        ? cloneGroupPipelineSnapshot(generalSnapshot)
+        : createDefaultBuiltinPipelineSnapshot();
     }
   }
   for (const [k, v] of Object.entries(localLegacy)) {

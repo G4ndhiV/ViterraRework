@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { Bed, Bath, Square, MapPin, X, ArrowRight } from "lucide-react";
 import { useState, useCallback } from "react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
@@ -115,6 +115,7 @@ export function PropertyCard({
 }: PropertyCardProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const ed = variant === "editorial";
+  const navigate = useNavigate();
 
   const openPreview = useCallback(() => {
     if (!disablePreview) setPreviewOpen(true);
@@ -125,8 +126,8 @@ export function PropertyCard({
   }, [onMapSearchSelect]);
 
   const goToDetails = useCallback(() => {
-    window.location.href = `/propiedades/${property.id}`;
-  }, [property.id]);
+    navigate(`/propiedades/${property.id}`, { state: { property } });
+  }, [navigate, property]);
 
   return (
     <>
@@ -270,6 +271,7 @@ export function PropertyCard({
             {ed ? (
               <Link
                 to={`/propiedades/${property.id}`}
+                state={{ property }}
                 className="mt-4 inline-flex w-fit shrink-0 items-center gap-2 border-b border-brand-navy/20 pb-0.5 text-[10px] font-medium uppercase tracking-[0.2em] text-brand-navy/80 transition-colors hover:border-primary hover:text-primary"
               >
                 Ver detalle
@@ -287,6 +289,7 @@ export function PropertyCard({
                 </button>
                 <Link
                   to={`/propiedades/${property.id}`}
+                  state={{ property }}
                   onClick={() => onMapSearchSelect?.()}
                   className="group/btn inline-flex items-center gap-2 rounded-none px-5 py-2.5 text-sm font-medium text-white transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
                   style={{ fontWeight: 600, backgroundColor: "#C8102E" }}
@@ -299,6 +302,7 @@ export function PropertyCard({
             ) : disablePreview ? (
               <Link
                 to={`/propiedades/${property.id}`}
+                state={{ property }}
                 className="group/btn inline-flex items-center gap-2 rounded-none px-5 py-2.5 text-sm font-medium text-white transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
                 style={{ fontWeight: 600, backgroundColor: "#C8102E" }}
                 onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#a00d25")}
@@ -388,7 +392,7 @@ export function PropertyCard({
                   className="font-heading h-10 w-full rounded-sm bg-primary text-xs font-semibold uppercase tracking-[0.12em] text-primary-foreground hover:bg-brand-red-hover"
                   asChild
                 >
-                  <Link to={`/propiedades/${property.id}`} onClick={() => setPreviewOpen(false)}>
+                  <Link to={`/propiedades/${property.id}`} state={{ property }} onClick={() => setPreviewOpen(false)}>
                     Ver ficha completa
                   </Link>
                 </Button>
