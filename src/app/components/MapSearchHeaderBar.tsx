@@ -105,7 +105,7 @@ export function MapSearchHeaderBar() {
         backgroundImage: `linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.2) 100%)`,
       }}
     >
-      <div className="grid grid-cols-3 items-center gap-2 px-3 py-2 sm:px-4 lg:px-6">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 py-2 sm:px-4 lg:px-6">
         <Link
           to="/"
           className="group inline-flex min-w-0 max-w-full flex-col items-start gap-0.5 justify-self-start"
@@ -114,40 +114,40 @@ export function MapSearchHeaderBar() {
           <span className="font-heading text-[12px] font-medium tracking-[0.22em] text-white sm:text-[13px]">VITERRA</span>
           <span className="h-px w-7 bg-[#C8102E] sm:w-8" aria-hidden />
         </Link>
-        <Link
-          to="/"
-          className="flex shrink-0 items-center justify-center justify-self-center"
-          onClick={close}
-          aria-label="Viterra Grupo Inmobiliario — Inicio"
-        >
-          <span
-            className="inline-flex shrink-0 items-end justify-center overflow-visible"
-            style={{ width: MAP_HEADER_MARK_BOX_W, height: MAP_HEADER_MARK_BOX_H }}
-            aria-hidden
+        <div className="flex flex-col items-center justify-center gap-1 justify-self-center sm:gap-1.5">
+          <Link
+            to="/"
+            className="flex shrink-0 items-center justify-center"
+            onClick={close}
+            aria-label="Viterra Grupo Inmobiliario — Inicio"
           >
-            <img
-              src={MARK_ICON_MONO}
-              alt=""
-              width={1024}
-              height={264}
-              decoding="async"
-              className="block max-h-full object-contain"
-              style={{
-                width: "100%",
-                height: MAP_HEADER_MARK_BOX_H,
-                maxHeight: MAP_HEADER_MARK_BOX_H,
-                objectPosition: "bottom center",
-                transform: `scale(${MAP_HEADER_MARK_SCALE})`,
-                transformOrigin: "bottom center",
-                opacity: 0.96,
-              }}
-            />
-          </span>
-        </Link>
+            <span
+              className="inline-flex shrink-0 items-end justify-center overflow-visible"
+              style={{ width: MAP_HEADER_MARK_BOX_W, height: MAP_HEADER_MARK_BOX_H }}
+              aria-hidden
+            >
+              <img
+                src={MARK_ICON_MONO}
+                alt=""
+                width={1024}
+                height={264}
+                decoding="async"
+                className="block max-h-full object-contain"
+                style={{
+                  width: "100%",
+                  height: MAP_HEADER_MARK_BOX_H,
+                  maxHeight: MAP_HEADER_MARK_BOX_H,
+                  objectPosition: "bottom center",
+                  transform: `scale(${MAP_HEADER_MARK_SCALE})`,
+                  transformOrigin: "bottom center",
+                  opacity: 0.96,
+                }}
+              />
+            </span>
+          </Link>
+          <SocialNavIcons iconSize="sm" className="justify-center" />
+        </div>
         <div className="flex min-w-0 items-center justify-end gap-0.5 justify-self-end sm:gap-1">
-          <div className="min-w-0 max-w-[min(100%,12rem)] overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:max-w-none">
-            <SocialNavIcons iconSize="sm" />
-          </div>
           <button
             type="button"
             className="flex items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-white/90 hover:bg-white/10 sm:text-xs"

@@ -37,6 +37,19 @@ const MARK_ICON_RED = "/images/branding/viterra-mark-red-alpha.png";
 const MARK_MONO_SCALE_FACTOR = 0.88;
 
 /**
+ * Centro horizontal **óptico** de la V respecto al ancho de caja del PNG (0 = borde izq., 1 = borde der.).
+ * El asset es asimétrico: el centro de masa visual queda claramente a la izquierda del centro geométrico.
+ * Ajustar entre ~0.15 y ~0.22 si se sustituye el PNG (sube si la V se ve aún corrida a la derecha).
+ */
+const MARK_LOGO_OPTICAL_CENTER_X_RATIO = 0.005;
+
+/**
+ * Distancia en px desde el borde izquierdo del `<ul>` de redes (tamaño `md`: `p-2`, icono 17px, `sm:gap-2`)
+ * hasta el centro horizontal del 3.er enlace (X). Recalcular si cambian paddings/gaps en `SocialNavIcons`.
+ */
+const MD_SOCIAL_UL_LEFT_TO_X_CENTER_PX = 98.5;
+
+/**
  * Caja fija + scale. La imagen ocupa el 100% del ancho de la caja para que `transform-origin: bottom center`
  * coincida con el centro del layout (si el PNG es más estrecho que la caja, object-fit no desplaza el origen).
  */
@@ -218,6 +231,12 @@ export function Header() {
   const markBoxHMobile = 26;
   const MOBILE_HEADER_MARK_SCALE = 0.92 * MARK_MONO_SCALE_FACTOR;
 
+  /** Centro del 3.er icono (X) bajo el centro óptico de la V: margen izq. del `<ul>` dentro de la caja `markBoxW`. */
+  const desktopSocialMarginLeft =
+    markBoxW * MARK_LOGO_OPTICAL_CENTER_X_RATIO - MD_SOCIAL_UL_LEFT_TO_X_CENTER_PX;
+  /** Columna móvil centra la caja del logo; desplazamos la fila de iconos para compensar el PNG asimétrico. */
+  const mobileSocialTranslateX = -(markBoxWMobile * (0.5 - MARK_LOGO_OPTICAL_CENTER_X_RATIO));
+
   const navLinkClass =
     "font-normal uppercase text-white/85 hover:text-white transition-colors shrink-0";
   /** Modo 1 (nav centrada, inicio de scroll): subrayado blanco. Modo 2 (nav partida): rojo corporativo. */
@@ -297,14 +316,19 @@ export function Header() {
           className={cn("relative overflow-visible border-t border-white/10", inPreviewCanvas ? "hidden" : "hidden lg:block")}
           style={{ minHeight: `${navRowH}px` }}
         >
-          {/* Un solo bloque de redes: no depende del crossfade nav centrado ↔ partido */}
-          <div className="pointer-events-none absolute inset-0 z-[55] flex items-stretch">
-            <div className="pointer-events-auto flex min-w-0 shrink-0 items-center justify-start self-stretch pl-1 pr-2">
-              <SocialNavIcons iconSize="md" />
+          {/* Misma franja que la marca (`left-8` + `markBoxW`): alineación por centro óptico de la V → icono X (ver constantes arriba). */}
+          <div className="pointer-events-none absolute inset-0 z-[55]">
+            <div
+              className="pointer-events-auto absolute left-8 top-0 z-[56] flex h-full items-center justify-start overflow-visible sm:left-10"
+              style={{ width: markBoxW }}
+            >
+              <span className="inline-flex shrink-0" style={{ marginLeft: desktopSocialMarginLeft }}>
+                <SocialNavIcons iconSize="md" />
+              </span>
             </div>
           </div>
           <nav
-            className="absolute inset-0 flex items-stretch px-1 pl-[13.5rem] sm:pl-56"
+            className="absolute inset-0 flex items-stretch px-1 pl-60"
             style={{
               opacity: navCenterOpacity,
               pointerEvents: showCenterNav ? "auto" : "none",
@@ -332,7 +356,7 @@ export function Header() {
           </nav>
 
           <nav
-            className="absolute inset-0 flex items-stretch justify-between px-1 pl-[13.5rem] sm:pl-56"
+            className="absolute inset-0 flex items-stretch justify-between px-1 pl-60"
             style={{
               opacity: navSplitOpacity,
               pointerEvents: showSplitNav ? "auto" : "none",
@@ -378,7 +402,7 @@ export function Header() {
 
         <div
           className={cn(
-            "relative grid min-h-[52px] grid-cols-3 items-center gap-2 border-t-0 px-2 py-1.5 sm:px-3",
+            "relative grid min-h-[56px] grid-cols-[1fr_auto_1fr] items-center gap-2 border-t-0 px-2 py-1.5 sm:min-h-[52px] sm:px-3",
             inPreviewCanvas ? "" : "lg:hidden"
           )}
         >
@@ -393,7 +417,7 @@ export function Header() {
             </span>
             <span className="h-px w-7 shrink-0 bg-[#C8102E] sm:w-8" aria-hidden />
           </Link>
-          <div className="relative z-[52] flex min-w-0 items-center justify-center justify-self-center">
+          <div className="relative z-[52] flex min-w-0 flex-col items-center justify-center gap-1 justify-self-center overflow-visible sm:gap-1.5">
             <Link
               to="/"
               className="flex shrink-0 items-center justify-center overflow-visible rounded-sm"
@@ -428,11 +452,11 @@ export function Header() {
                 </span>
               </span>
             </Link>
-          </div>
-          <div className="relative z-[56] flex min-w-0 max-w-full items-center justify-end gap-0.5 justify-self-end sm:gap-1">
-            <div className="min-w-0 max-w-[min(100%,11.5rem)] overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:max-w-none">
+            <span className="inline-flex shrink-0" style={{ transform: `translateX(${mobileSocialTranslateX}px)` }}>
               <SocialNavIcons iconSize="xs" />
-            </div>
+            </span>
+          </div>
+          <div className="relative z-[56] flex items-center justify-end justify-self-end">
             <button
               type="button"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
