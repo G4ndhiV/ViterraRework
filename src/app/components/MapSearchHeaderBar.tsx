@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router";
 import { useState, useEffect, useRef, useSyncExternalStore, type CSSProperties } from "react";
 import { ChevronDown } from "lucide-react";
 import { VITERRA_NAV_ITEMS, isActiveNavPath } from "../config/siteNav";
-import { SocialHeaderDropdown } from "./SocialHeaderDropdown";
+import { SocialNavIcons } from "./SocialNavIcons";
 import { cn } from "./ui/utils";
 
 const NAVY = { r: 20, g: 28, b: 46 } as const;
@@ -145,12 +145,9 @@ export function MapSearchHeaderBar() {
           </span>
         </Link>
         <div className="flex min-w-0 items-center justify-end gap-0.5 justify-self-end sm:gap-1">
-          <SocialHeaderDropdown
-            triggerClassName="p-2 text-white/85 hover:text-white"
-            menuAlign="end"
-            iconSize="sm"
-            variant="compact"
-          />
+          <div className="min-w-0 max-w-[min(100%,12rem)] overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:max-w-none">
+            <SocialNavIcons iconSize="sm" />
+          </div>
           <button
             type="button"
             className="flex items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-white/90 hover:bg-white/10 sm:text-xs"

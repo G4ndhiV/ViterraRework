@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router";
 import { Menu, X } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { usePreviewCanvas } from "../../contexts/PreviewCanvasContext";
-import { SocialHeaderDropdown } from "./SocialHeaderDropdown";
+import { SocialNavIcons } from "./SocialNavIcons";
 import { cn } from "./ui/utils";
 import { VITERRA_NAV_ITEMS, isActiveNavPath } from "../config/siteNav";
 
@@ -224,8 +224,6 @@ export function Header() {
   const navLinkActiveBase = "text-white font-semibold underline decoration-2 underline-offset-[7px]";
   const navLinkActiveClassCenter = `${navLinkActiveBase} decoration-white`;
   const navLinkActiveClassSplit = `${navLinkActiveBase} decoration-primary`;
-  const iconBtnClass = "p-2 text-white/80 hover:text-white rounded-sm";
-
   return (
     <header
       className={`left-0 right-0 z-50 w-full overflow-visible text-white pt-[env(safe-area-inset-top,0px)] ${
@@ -301,12 +299,12 @@ export function Header() {
         >
           {/* Un solo bloque de redes: no depende del crossfade nav centrado ↔ partido */}
           <div className="pointer-events-none absolute inset-0 z-[55] flex items-stretch">
-            <div className="pointer-events-auto flex w-20 shrink-0 items-center justify-start self-stretch pl-1">
-              <SocialHeaderDropdown triggerClassName={iconBtnClass} menuAlign="start" />
+            <div className="pointer-events-auto flex min-w-0 shrink-0 items-center justify-start self-stretch pl-1 pr-2">
+              <SocialNavIcons iconSize="md" />
             </div>
           </div>
           <nav
-            className="absolute inset-0 flex items-stretch px-1 pl-20"
+            className="absolute inset-0 flex items-stretch px-1 pl-[13.5rem] sm:pl-56"
             style={{
               opacity: navCenterOpacity,
               pointerEvents: showCenterNav ? "auto" : "none",
@@ -334,7 +332,7 @@ export function Header() {
           </nav>
 
           <nav
-            className="absolute inset-0 flex items-stretch justify-between px-1 pl-20"
+            className="absolute inset-0 flex items-stretch justify-between px-1 pl-[13.5rem] sm:pl-56"
             style={{
               opacity: navSplitOpacity,
               pointerEvents: showSplitNav ? "auto" : "none",
@@ -431,11 +429,10 @@ export function Header() {
               </span>
             </Link>
           </div>
-          <div className="relative z-[56] flex items-center justify-end gap-0.5 justify-self-end sm:gap-1">
-            <SocialHeaderDropdown
-              triggerClassName="p-2 text-white/85 hover:text-white"
-              menuAlign="end"
-            />
+          <div className="relative z-[56] flex min-w-0 max-w-full items-center justify-end gap-0.5 justify-self-end sm:gap-1">
+            <div className="min-w-0 max-w-[min(100%,11.5rem)] overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:max-w-none">
+              <SocialNavIcons iconSize="xs" />
+            </div>
             <button
               type="button"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
