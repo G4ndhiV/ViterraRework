@@ -4,12 +4,11 @@ import { Footer } from "../components/Footer";
 import { Link } from "react-router";
 import { ArrowRight } from "lucide-react";
 import { useSiteContent } from "../../contexts/SiteContentContext";
-import { DEFAULT_SITE_CONTENT } from "../../data/siteContent";
 import { mergeSiteSection } from "../../lib/siteContentMerge";
 import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
-import { ServicesNodeGraph } from "../components/ServicesNodeGraph";
-import { Reveal } from "../components/Reveal";
 import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
+import { ServicesSection } from "../components/ServicesSection";
+import { Reveal } from "../components/Reveal";
 import {
   viterraHeroSectionClass,
   viterraHeroCenteredStackClass,
@@ -23,7 +22,6 @@ export function ServicesPage() {
   const reduceMotion = useReducedMotion();
   const { content } = useSiteContent();
   const s = mergeSiteSection("services", content.services);
-  const cards = Array.isArray(s.cards) ? s.cards : DEFAULT_SITE_CONTENT.services.cards;
 
   const heroContainerVariants = {
     hidden: {},
@@ -93,29 +91,7 @@ export function ServicesPage() {
       </section>
       </PreviewSectionChrome>
 
-      <section
-        className="relative overflow-hidden bg-gradient-to-b from-slate-100/90 via-white to-white py-20 sm:py-28"
-        aria-label="Listado de servicios"
-      >
-        <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_85%_55%_at_50%_-8%,rgba(200,16,46,0.07),transparent_55%)]"
-          aria-hidden
-        />
-        <div className="relative mx-auto max-w-6xl px-6 lg:px-8">
-          <Reveal y={18} className="mx-auto mb-10 max-w-2xl text-center sm:mb-12">
-            <p className="font-heading text-[11px] font-semibold uppercase tracking-[0.22em] text-primary sm:text-xs">
-              Catálogo
-            </p>
-            <h2 className="font-heading mt-3 text-balance text-3xl font-light tracking-tight text-brand-navy sm:text-4xl">
-              Servicios a tu medida
-            </h2>
-          </Reveal>
-
-          <Reveal y={20} delay={0.06} className="mx-auto w-full max-w-4xl">
-            <ServicesNodeGraph cards={cards} reduceMotion={!!reduceMotion} />
-          </Reveal>
-        </div>
-      </section>
+      <ServicesSection />
 
       <PreviewSectionChrome blockId="services-cta" label="Llamado a la acción">
       <section className="bg-brand-canvas py-24">

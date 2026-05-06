@@ -2,13 +2,14 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router";
+import { AnimatePresence, motion } from "motion/react";
 import {
   Home,
-  Building,
-  TrendingUp,
-  Shield,
-  FileText,
-  Users,
+  Building2,
+  BarChart3,
+  FileCheck2,
+  Scale,
+  Settings2,
   ArrowRight,
   CheckCircle2,
   type LucideIcon,
@@ -27,79 +28,122 @@ import { cn } from "./ui/utils";
 /** Misma marca mono que el header (sobre fondo corporativo rojo) */
 const VITERRA_MARK_MONO = "/images/branding/viterra-mark-mono-alpha.png";
 
-const CARD_ICONS: readonly LucideIcon[] = [Home, Building, TrendingUp, Shield, FileText, Users];
+const VB = 520;
+const CX = 260;
+const CY = 260;
 
-const VB = 400;
-const CX = 200;
-const CY = 200;
-/** Radio base del hexágono (nodos “en reposo”) — mayor = radios y aristas más largos */
-const R_NODES = 156;
-/** Margen interior del área de vuelo (coords. viewBox) */
-const WANDER_MARGIN = 24;
-/** Amplitud máxima aproximada del vaivén (suma de ondas lentas) */
-const WANDER_AMP = 32;
-/** Etiqueta: offset radial desde el centro del nodo hacia afuera */
-const LABEL_OUTWARD = 74;
+// Hexágono perfecto (viewBox units ~ px)
+const RADIUS = 140;
+const HEX_ANGLES_DEG = [90, 30, 330, 270, 210, 150] as const;
 
-function nodePoint(i: number, n: number) {
-  const a = -Math.PI / 2 + (i * 2 * Math.PI) / n;
+// Movimiento mínimo opcional (solo respiración)
+const WANDER_AMP = 6;
+
+// Jerarquía de tamaños solicitada
+const NODE_INACTIVE = 40;
+const NODE_ACTIVE = 52;
+const NODE_CENTER = 72;
+
+function degToRad(deg: number) {
+  return (deg * Math.PI) / 180;
+}
+
+function hexPointBySlot(slot: number) {
+  const deg = HEX_ANGLES_DEG[Math.max(0, Math.min(HEX_ANGLES_DEG.length - 1, slot))]!;
+  // Fórmula solicitada: cos((deg - 90)...), sin((deg - 90)...)
+  const a = degToRad(deg - 90);
   return {
-    a,
-    x: CX + R_NODES * Math.cos(a),
-    y: CY + R_NODES * Math.sin(a),
+    x: CX + RADIUS * Math.cos(a),
+    y: CY + RADIUS * Math.sin(a),
   };
 }
 
-/** Movimiento orgánico pseudoaleatorio: varias ondas lentas desfasadas por índice */
 function wanderOffset(i: number, tSec: number) {
-  const p = i * 1.713 + (i + 1) * 0.91;
-  const q = i * 2.399 + 0.37;
-  const ox =
-    WANDER_AMP *
-    (0.38 * Math.sin(tSec * 0.064 + p) +
-      0.32 * Math.cos(tSec * 0.05 + q) +
-      0.3 * Math.sin(tSec * 0.033 + p * 1.73));
-  const oy =
-    WANDER_AMP *
-    (0.37 * Math.cos(tSec * 0.059 + q * 1.17) +
-      0.34 * Math.sin(tSec * 0.072 + p) +
-      0.29 * Math.cos(tSec * 0.04 + i * 2.08));
+  const p = i * 1.37 + 0.2;
+  const q = i * 1.91 + 0.6;
+  const ox = WANDER_AMP * (0.55 * Math.sin(tSec * 0.18 + p) + 0.45 * Math.cos(tSec * 0.14 + q));
+  const oy = WANDER_AMP * (0.55 * Math.cos(tSec * 0.16 + q) + 0.45 * Math.sin(tSec * 0.12 + p));
   return { ox, oy };
 }
 
-function clampPoint(x: number, y: number) {
-  const lo = WANDER_MARGIN;
-  const hi = VB - WANDER_MARGIN;
-  return {
-    x: Math.min(hi, Math.max(lo, x)),
-    y: Math.min(hi, Math.max(lo, y)),
-  };
+function normalizeTitle(s: string) {
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
-/** Posición final del nodo + etiqueta siguiendo la dirección radial desde el centro */
-function layoutNode(i: number, n: number, tSec: number, reduceMotion: boolean) {
-  const base = nodePoint(i, n);
-  if (reduceMotion) {
-    const dx = base.x - CX;
-    const dy = base.y - CY;
-    const len = Math.hypot(dx, dy) || 1;
-    const lx = base.x + (dx / len) * LABEL_OUTWARD;
-    const ly = base.y + (dy / len) * LABEL_OUTWARD;
-    return { x: base.x, y: base.y, lx, ly };
+type ServiceSlotKey =
+  | "renta de propiedades"
+  | "venta de propiedades"
+  | "desarrollos inmobiliarios"
+  | "asesoria legal"
+  | "avaluos y valuacion"
+  | "administracion de propiedades";
+
+const SERVICE_SLOT_BY_TITLE: Record<ServiceSlotKey, number> = {
+  // Orden solicitado (horario desde arriba)
+  "renta de propiedades": 0, // top
+  "venta de propiedades": 1, // top-right
+  "desarrollos inmobiliarios": 2, // bottom-right
+  "asesoria legal": 3, // bottom
+  "avaluos y valuacion": 4, // bottom-left
+  "administracion de propiedades": 5, // top-left
+};
+
+function slotForCardTitle(title: string): number | null {
+  const t = normalizeTitle(title);
+  const keys = Object.keys(SERVICE_SLOT_BY_TITLE) as ServiceSlotKey[];
+  for (const k of keys) {
+    if (t.includes(k)) return SERVICE_SLOT_BY_TITLE[k];
   }
+  return null;
+}
+
+function iconForCardTitle(title: string): LucideIcon {
+  const t = normalizeTitle(title);
+  if (t.includes("renta de propiedades")) return Home;
+  if (t.includes("venta de propiedades")) return Building2;
+  if (t.includes("desarrollos inmobiliarios")) return BarChart3;
+  if (t.includes("avaluos y valuacion")) return FileCheck2;
+  if (t.includes("asesoria legal")) return Scale;
+  if (t.includes("administracion de propiedades")) return Settings2;
+  return Home;
+}
+
+function layoutNode(i: number, cards: ServiceCardContent[], tSec: number, reduceMotion: boolean) {
+  const slot = slotForCardTitle(cards[i]?.title ?? "");
+  const base = slot != null ? hexPointBySlot(slot) : hexPointBySlot(i % 6);
+  if (reduceMotion) return { x: base.x, y: base.y };
   const { ox, oy } = wanderOffset(i, tSec);
-  const { x: nx, y: ny } = clampPoint(base.x + ox, base.y + oy);
-  const dx = nx - CX;
-  const dy = ny - CY;
-  const len = Math.hypot(dx, dy) || 1;
-  const lx = nx + (dx / len) * LABEL_OUTWARD;
-  const ly = ny + (dy / len) * LABEL_OUTWARD;
-  const { x: lxC, y: lyC } = clampPoint(lx, ly);
-  return { x: nx, y: ny, lx: lxC, ly: lyC };
+  return { x: base.x + ox, y: base.y + oy };
 }
 
 function pct(v: number) {
   return `${(v / VB) * 100}%`;
+}
+
+function curvedPath(x1: number, y1: number, x2: number, y2: number, bend = 0.16) {
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const nx = -dy;
+  const ny = dx;
+  const len = Math.hypot(nx, ny) || 1;
+  const c1x = mx + (nx / len) * (Math.hypot(dx, dy) * bend);
+  const c1y = my + (ny / len) * (Math.hypot(dx, dy) * bend);
+  return `M ${x1} ${y1} Q ${c1x} ${c1y} ${x2} ${y2}`;
+}
+
+function nodeDepth(y: number) {
+  const t = Math.max(0, Math.min(1, (y - (CY - 220)) / 440));
+  return {
+    scale: 0.9 + t * 0.05,
+    opacity: 0.72 + t * 0.08,
+    blur: 0,
+  };
 }
 
 /** Interpolación exponencial hacia el objetivo; `stiffness` ~10–18 da arrastre fluido a cualquier FPS */
@@ -108,17 +152,7 @@ function smoothScalar(from: number, to: number, dtSec: number, stiffness: number
   return from + (to - from) * a;
 }
 
-type LayoutPoint = { x: number; y: number; lx: number; ly: number };
-
-/** Alineación del título según la posición actual del nodo (mejor con nodos en movimiento) */
-function labelTextAlignFromPos(lx: number, ly: number): string {
-  const dx = lx - CX;
-  const dy = ly - CY;
-  if (Math.abs(dy) >= Math.abs(dx) * 1.05) {
-    return "text-center";
-  }
-  return dx > 0 ? "text-left" : "text-right";
-}
+type LayoutPoint = { x: number; y: number };
 
 type ServicesNodeGraphProps = {
   cards: ServiceCardContent[];
@@ -130,6 +164,7 @@ export function ServicesNodeGraph({ cards, reduceMotion }: ServicesNodeGraphProp
   const uid = useId().replace(/:/g, "");
   const [hovered, setHovered] = useState<number | null>(null);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   const cardsRef = useRef(cards);
   cardsRef.current = cards;
@@ -138,7 +173,7 @@ export function ServicesNodeGraph({ cards, reduceMotion }: ServicesNodeGraphProp
   const lastFrameMsRef = useRef<number | null>(null);
   const [smoothedLayouts, setSmoothedLayouts] = useState<LayoutPoint[]>(() => {
     const nn = Math.max(cards.length, 1);
-    return cards.map((_, i) => layoutNode(i, nn, 0, !!reduceMotion));
+    return cards.map((_, i) => layoutNode(i, cards, 0, !!reduceMotion));
   });
 
   /** Reset de posiciones cuando cambia el número de tarjetas o reduceMotion */
@@ -146,7 +181,7 @@ export function ServicesNodeGraph({ cards, reduceMotion }: ServicesNodeGraphProp
     const rm = !!reduceMotion;
     const list = cardsRef.current;
     if (list.length === 0) return;
-    const init = list.map((_, i) => layoutNode(i, n, 0, rm));
+    const init = list.map((_, i) => layoutNode(i, list, 0, rm));
     smoothRef.current = init;
     setSmoothedLayouts(init);
     lastFrameMsRef.current = null;
@@ -165,7 +200,7 @@ export function ServicesNodeGraph({ cards, reduceMotion }: ServicesNodeGraphProp
       if (cancelled) return;
       const c = cardsRef.current;
       const tSec = (now - t0) * 0.001;
-      const targets = c.map((_, i) => layoutNode(i, n, tSec, false));
+      const targets = c.map((_, i) => layoutNode(i, c, tSec, false));
 
       let dt = 1 / 60;
       if (lastFrameMsRef.current != null) {
@@ -180,8 +215,6 @@ export function ServicesNodeGraph({ cards, reduceMotion }: ServicesNodeGraphProp
         return {
           x: smoothScalar(p.x, tgt.x, dt, STIFF),
           y: smoothScalar(p.y, tgt.y, dt, STIFF),
-          lx: smoothScalar(p.lx, tgt.lx, dt, STIFF),
-          ly: smoothScalar(p.ly, tgt.ly, dt, STIFF),
         };
       });
       smoothRef.current = next;
@@ -197,162 +230,430 @@ export function ServicesNodeGraph({ cards, reduceMotion }: ServicesNodeGraphProp
     };
   }, [reduceMotion, n]);
 
-  const spokeLit = (i: number) => hovered === i || openIndex === i;
+  useEffect(() => {
+    if (cards.length === 0) {
+      setSelectedIndex(0);
+      return;
+    }
+    if (selectedIndex > cards.length - 1) {
+      setSelectedIndex(0);
+    }
+  }, [cards.length, selectedIndex]);
 
   const activeCard = openIndex != null ? cards[openIndex] : null;
-  const ActiveIcon = openIndex != null ? (CARD_ICONS[openIndex] ?? Home) : Home;
+  const ActiveIcon = openIndex != null ? iconForCardTitle(cards[openIndex]?.title ?? "") : Home;
+  const highlighted = hovered ?? selectedIndex;
+  const highlightedCard = cards[highlighted] ?? cards[0] ?? null;
 
   return (
-    <div className="flex w-full flex-col gap-8">
-      {/* Jerarquía: contexto → diagrama (flujo natural de lectura) */}
-      <div
-        className="relative mx-auto w-full max-w-[min(100%,720px)]"
-        role="group"
-        aria-label="Diagrama de servicios: nodo central Viterra y seis servicios conectados"
-      >
-        <div className="relative mx-auto aspect-square w-full max-w-[min(92vw,680px)]">
-          <svg
-            className="pointer-events-none absolute inset-0 h-full w-full select-none"
-            viewBox={`0 0 ${VB} ${VB}`}
-            preserveAspectRatio="xMidYMid meet"
-            shapeRendering="geometricPrecision"
-            aria-hidden
-          >
-            <defs>
-              <filter id={`${uid}-glow`} x="-40%" y="-40%" width="180%" height="180%">
-                <feGaussianBlur stdDeviation="3" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-
-            {Array.from({ length: n }, (_, i) => {
-              const j = (i + 1) % n;
-              const p0 = smoothedLayouts[i]!;
-              const p1 = smoothedLayouts[j]!;
-              const h = hovered;
-              const o = openIndex;
-              const lit = h === i || h === j || o === i || o === j;
+    <div className="mx-auto w-full max-w-[1200px]">
+      {/* Tablet+Mobile: pestañas horizontales (lista) */}
+      <div className="lg:hidden">
+        <div className="mb-6 overflow-x-auto">
+          <div className="flex w-max items-center gap-6 px-2">
+            {cards.map((card, i) => {
+              const isActive = selectedIndex === i;
+              const isHovered = hovered === i;
               return (
-                <line
-                  key={`hull-${i}`}
-                  x1={p0.x}
-                  y1={p0.y}
-                  x2={p1.x}
-                  y2={p1.y}
-                  stroke={lit ? "rgb(200 16 46 / 0.5)" : "rgb(200 16 46 / 0.14)"}
-                  strokeWidth={lit ? 3 : 2}
-                  strokeLinecap="round"
-                  style={{ transition: "stroke 160ms ease, stroke-width 160ms ease" }}
-                />
-              );
-            })}
-
-            {cards.map((_, i) => {
-              const { x, y } = smoothedLayouts[i]!;
-              const lit = spokeLit(i);
-              return (
-                <line
-                  key={`spoke-${i}`}
-                  x1={CX}
-                  y1={CY}
-                  x2={x}
-                  y2={y}
-                  stroke={lit ? "rgb(200 16 46 / 0.95)" : "rgb(200 16 46 / 0.17)"}
-                  strokeWidth={lit ? 3.5 : 1.85}
-                  strokeLinecap="round"
-                  style={{
-                    transition: "stroke 160ms ease, stroke-width 160ms ease",
-                    ...(lit && !reduceMotion ? { filter: `url(#${uid}-glow)` } : {}),
-                  }}
-                />
-              );
-            })}
-          </svg>
-
-          {/* Hub central: cuadrado redondeado (marca + icono) */}
-          <div
-            className="pointer-events-none absolute z-[1] flex items-center justify-center"
-            style={{ left: pct(CX), top: pct(CY), transform: "translate(-50%, -50%)" }}
-          >
-            <div
-              className={cn(
-                "flex h-[7.125rem] w-[7.125rem] flex-col items-center justify-center rounded-2xl bg-primary px-3 py-3 text-white",
-                "shadow-[0_12px_32px_-8px_rgba(20,28,46,0.45),0_0_0_1px_rgb(200_16_46_/_0.35)]",
-                !reduceMotion && "ring-4 ring-primary/20",
-                "sm:h-[8.25rem] sm:w-[8.25rem] sm:px-4 sm:py-4",
-              )}
-            >
-              <img
-                src={VITERRA_MARK_MONO}
-                alt="Viterra"
-                width={512}
-                height={132}
-                decoding="async"
-                className="h-[72%] w-auto min-h-[4.25rem] max-h-[5.85rem] max-w-[96%] object-contain object-center sm:min-h-[5rem] sm:max-h-[6.75rem]"
-              />
-            </div>
-          </div>
-
-          {cards.map((card, i) => {
-            const { x, y, lx, ly } = smoothedLayouts[i]!;
-            const Icon = CARD_ICONS[i] ?? Home;
-            const lit = spokeLit(i);
-            const align = labelTextAlignFromPos(lx, ly);
-
-            return (
-              <PreviewSectionChrome key={`${card.title}-${i}`} blockId={`services-card-${i}`} label={`Tarjeta ${i + 1}`}>
-                <div className="pointer-events-none absolute inset-0 z-[5]">
-                  <div
-                    className={cn("absolute z-[2] max-w-[10.5rem] sm:max-w-[12rem]", align)}
+                <button
+                  key={`tab-${card.title}-${i}`}
+                  type="button"
+                  onMouseEnter={() => setHovered(i)}
+                  onMouseLeave={() => setHovered(null)}
+                  onFocus={() => setHovered(i)}
+                  onBlur={() => setHovered(null)}
+                  onClick={() => setSelectedIndex(i)}
+                  className="flex items-center gap-2 text-left"
+                  aria-label={`Seleccionar servicio: ${card.title}`}
+                >
+                  <span
+                    className="text-[10px] font-medium uppercase"
                     style={{
-                      left: pct(lx),
-                      top: pct(ly),
-                      transform: "translate(-50%, -50%)",
+                      fontFamily:
+                        "\"IBM Plex Mono\", ui-monospace, SFMono-Regular, Menlo, monospace",
+                      color: "#DC2626",
+                      opacity: isActive ? 0.8 : 0.3,
+                      letterSpacing: "0.08em",
                     }}
                   >
-                    <span className="font-heading inline-block text-balance text-[10px] font-medium leading-snug text-brand-navy sm:text-xs">
-                      {card.title}
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span className={cn("text-[13px] font-medium transition-colors", isActive || isHovered ? "text-white" : "text-white/70")}>
+                    {card.title}
+                  </span>
+                  <span
+                    aria-hidden
+                    className="ml-2 h-[2px] w-4 bg-[#DC2626]"
+                    style={{
+                      opacity: isActive || isHovered ? 1 : 0,
+                    }}
+                  />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid items-start gap-10 grid-cols-1 md:grid-cols-2 lg:grid-cols-[25%_40%_35%]">
+        {/* Desktop: lista vertical */}
+        <div className="hidden lg:block w-[200px]">
+          <div>
+            {cards.map((card, i) => {
+              const isActive = selectedIndex === i;
+              const isHovered = hovered === i;
+              const isSep = i < cards.length - 1;
+              return (
+                <button
+                  key={`list-${card.title}-${i}`}
+                  type="button"
+                  onMouseEnter={() => setHovered(i)}
+                  onMouseLeave={() => setHovered(null)}
+                  onFocus={() => setHovered(i)}
+                  onBlur={() => setHovered(null)}
+                  onClick={() => setSelectedIndex(i)}
+                  className="relative w-[200px] py-4 pl-4 pr-2 text-left"
+                  aria-label={`Seleccionar servicio: ${card.title}`}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    borderBottom: isSep ? "1px solid rgba(255,255,255,0.06)" : "none",
+                  }}
+                >
+                  <span
+                    aria-hidden
+                    className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#DC2626] transition-opacity"
+                    style={{ opacity: isActive || isHovered ? 1 : 0.0 }}
+                  />
+                  <div
+                    style={{
+                      fontFamily:
+                        "\"IBM Plex Mono\", ui-monospace, SFMono-Regular, Menlo, monospace",
+                      letterSpacing: "0.08em",
+                    }}
+                    className="text-[10px] font-medium uppercase"
+                  >
+                    <span style={{ color: "#DC2626", opacity: isActive ? 0.8 : 0.3 }}>
+                      {String(i + 1).padStart(2, "0")}
                     </span>
                   </div>
-
                   <div
-                    className="absolute z-[3]"
+                    className={cn(
+                      "mt-2 text-[14px] font-medium transition-colors",
+                      isActive || isHovered ? "text-white" : "text-white/70"
+                    )}
+                  >
+                    {card.title}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Columna central: grafo */}
+        <div className="hidden md:block">
+          <div
+            className="relative mx-auto min-h-[520px] w-full max-w-[860px] overflow-hidden bg-transparent p-1 sm:p-3 flex items-center justify-center"
+            role="group"
+            aria-label="Mapa blueprint de servicios"
+          >
+          {!reduceMotion ? (
+            <>
+              <motion.div
+                className="pointer-events-none absolute -left-24 -top-24 h-64 w-64 rounded-full bg-primary/18 blur-3xl"
+                animate={{ x: [0, 28, 0], y: [0, 10, 0], opacity: [0.38, 0.22, 0.38] }}
+                transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
+                aria-hidden
+              />
+              <motion.div
+                className="pointer-events-none absolute -bottom-20 -right-24 h-72 w-72 rounded-full bg-primary/10 blur-3xl"
+                animate={{ x: [0, -22, 0], y: [0, -18, 0], opacity: [0.22, 0.3, 0.22] }}
+                transition={{ duration: 11, repeat: Infinity, ease: "easeInOut" }}
+                aria-hidden
+              />
+            </>
+          ) : null}
+
+          <div className="relative mx-auto aspect-square w-full max-w-[780px]">
+            {/* Fondo blueprint: grid MUY sutil + radial rojo centrado */}
+            <div
+              className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] [background-size:40px_40px]"
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none absolute left-1/2 top-1/2 h-[400px] w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-full"
+              style={{ background: "radial-gradient(circle, rgba(220,38,38,0.08) 0%, transparent 70%)" }}
+              aria-hidden
+            />
+
+            <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${VB} ${VB}`} preserveAspectRatio="xMidYMid meet" aria-hidden>
+              <defs>
+                <filter id={`${uid}-glow`} x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="3.2" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+                <linearGradient id="redGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="rgb(220 38 38 / 0)" />
+                  <stop offset="50%" stopColor="rgb(220 38 38 / 0.8)" />
+                  <stop offset="100%" stopColor="rgb(220 38 38 / 0)" />
+                </linearGradient>
+                <linearGradient id={`${uid}-line`} x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="rgb(148 163 184 / 0.05)" />
+                  <stop offset="100%" stopColor="rgb(148 163 184 / 0.015)" />
+                </linearGradient>
+              </defs>
+
+              {cards.map((_, i) => {
+                const { x, y } = smoothedLayouts[i]!;
+                const lit = selectedIndex === i;
+                const d = curvedPath(CX, CY, x, y, 0.12);
+                return (
+                  <g key={`conn-${i}`}>
+                    <path
+                      d={d}
+                      stroke="url(#redGradient)"
+                      strokeOpacity={lit ? 1 : 0.3}
+                      strokeWidth={1}
+                      strokeLinecap="round"
+                      fill="none"
+                      style={{
+                        transition: "stroke-width 240ms ease, stroke-opacity 240ms ease",
+                        ...(lit && !reduceMotion ? { filter: `url(#${uid}-glow)` } : {}),
+                      }}
+                    />
+                    {!reduceMotion ? (
+                      <>
+                        <circle r="3" fill="#DC2626" opacity={lit ? 1 : 0.6}>
+                          <animateMotion dur="2s" repeatCount="indefinite" path={d} begin={`${(i * 0.22).toFixed(2)}s`} />
+                        </circle>
+                      </>
+                    ) : null}
+                  </g>
+                );
+              })}
+            </svg>
+
+            <div className="pointer-events-none absolute z-[2] flex items-center justify-center" style={{ left: pct(CX), top: pct(CY), transform: "translate(-50%, -50%)" }}>
+              {!reduceMotion ? (
+                <>
+                  <motion.div
+                    className="absolute h-[15.5rem] w-[15.5rem] rounded-full bg-[radial-gradient(circle,rgba(200,16,46,0.28)_0%,rgba(200,16,46,0.08)_38%,transparent_74%)]"
+                    animate={{ scale: [1, 1.14, 1], opacity: [0.22, 0.52, 0.22] }}
+                    transition={{ duration: 3.8, repeat: Infinity, ease: "easeInOut" }}
+                  />
+                  <motion.div
+                    className="absolute h-[14rem] w-[14rem] rounded-full border border-primary/35"
+                    animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.12, 0.3] }}
+                    transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+                  />
+                </>
+              ) : null}
+              <div
+                className="relative flex items-center justify-center rounded-full bg-[#DC2626] shadow-[0_0_30px_rgba(220,38,38,0.4),0_0_60px_rgba(220,38,38,0.15)]"
+                style={{ width: NODE_CENTER, height: NODE_CENTER, border: "2px solid #DC2626" }}
+              >
+                {!reduceMotion ? (
+                  <>
+                    <motion.div
+                      className="pointer-events-none absolute rounded-full"
+                      style={{ width: 100, height: 100, border: "1px solid rgba(220,38,38,0.4)" }}
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                      aria-hidden
+                    />
+                    <motion.div
+                      className="pointer-events-none absolute rounded-full"
+                      style={{ width: 130, height: 130, border: "1px dashed rgba(220,38,38,0.2)" }}
+                      animate={{ rotate: -360 }}
+                      transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+                      aria-hidden
+                    />
+                  </>
+                ) : null}
+                <img
+                  src={VITERRA_MARK_MONO}
+                  alt="Viterra"
+                  width={512}
+                  height={132}
+                  decoding="async"
+                  className="relative z-[1] h-[28px] w-auto object-contain opacity-100"
+                />
+              </div>
+            </div>
+
+            {cards.map((card, i) => {
+              const { x, y } = smoothedLayouts[i]!;
+              const Icon = iconForCardTitle(card.title);
+              const lit = selectedIndex === i;
+              const isHovered = hovered === i;
+              const depth = nodeDepth(y);
+              return (
+                <PreviewSectionChrome key={`${card.title}-${i}`} blockId={`services-card-${i}`} label={`Tarjeta ${i + 1}`}>
+                  <div
+                    className="absolute z-[5] overflow-visible"
                     style={{
                       left: pct(x),
                       top: pct(y),
                       transform: "translate(-50%, -50%)",
+                      opacity: lit ? 1 : Math.min(0.8, depth.opacity),
+                      filter: lit ? "none" : `blur(${depth.blur}px)`,
                     }}
                   >
-                    <button
+                    <motion.button
                       type="button"
-                      onClick={() => setOpenIndex(i)}
+                      onClick={() => setSelectedIndex(i)}
+                      onDoubleClick={() => setOpenIndex(i)}
                       onMouseEnter={() => setHovered(i)}
                       onMouseLeave={() => setHovered(null)}
-                      onFocus={() => setHovered(i)}
+                      onFocus={() => {
+                        setHovered(i);
+                        setSelectedIndex(i);
+                      }}
                       onBlur={() => setHovered(null)}
+                      whileHover={reduceMotion ? undefined : { scale: 1.1 }}
+                      whileTap={reduceMotion ? undefined : { scale: 0.98 }}
+                      transition={{ type: "spring", stiffness: 340, damping: 24 }}
                       aria-haspopup="dialog"
                       aria-expanded={openIndex === i}
-                      aria-label={`Abrir detalles: ${card.title}`}
+                      aria-label={`Seleccionar servicio: ${card.title}`}
                       className={cn(
-                        "pointer-events-auto flex h-[5.625rem] w-[5.625rem] cursor-pointer items-center justify-center rounded-xl border-2 bg-white",
-                        "shadow-[0_4px_14px_-4px_rgba(20,28,46,0.2)] transition-[box-shadow,transform,border-color] duration-200",
-                        "sm:h-24 sm:w-24",
-                        lit
-                          ? "scale-[1.03] border-primary shadow-[0_6px_20px_-4px_rgba(200,16,46,0.35)]"
-                          : "border-primary/40 hover:scale-[1.02] hover:border-primary hover:shadow-md",
+                        "group pointer-events-auto relative flex items-center justify-center rounded-full transition-all",
+                        lit ? "bg-[#DC2626] text-white" : "bg-[rgba(255,255,255,0.04)]",
                       )}
+                      style={{
+                        width: lit ? NODE_ACTIVE : NODE_INACTIVE,
+                        height: lit ? NODE_ACTIVE : NODE_INACTIVE,
+                        transform: `translateZ(0) scale(${lit ? 1 : depth.scale})`,
+                        border: lit
+                          ? "1px solid #DC2626"
+                          : isHovered
+                            ? "1px solid rgba(220,38,38,0.8)"
+                            : "1px solid rgba(220,38,38,0.25)",
+                        transition: "all 0.25s ease",
+                        boxShadow: lit
+                          ? "0 0 18px rgba(220,38,38,0.35)"
+                          : isHovered
+                            ? "0 0 12px rgba(220,38,38,0.3)"
+                            : "none",
+                      }}
                     >
-                      <Icon className="h-[2.0625rem] w-[2.0625rem] text-primary sm:h-10 sm:w-10" strokeWidth={1.5} aria-hidden />
-                    </button>
+                      {!reduceMotion && lit ? (
+                        <span className="pointer-events-none absolute inset-0 rounded-full">
+                          <span className="absolute inset-0 rounded-full bg-[#DC2626]/25 animate-ping" />
+                        </span>
+                      ) : null}
+                      {lit ? (
+                        <motion.span
+                          layoutId="active-node-ring"
+                          className="absolute inset-0 rounded-full ring-1 ring-white/35"
+                          transition={{ type: "spring", stiffness: 320, damping: 26 }}
+                          aria-hidden
+                        />
+                      ) : null}
+                      <Icon
+                        className={cn(
+                          lit ? "h-[22px] w-[22px] text-white" : "h-[18px] w-[18px]",
+                          !lit && isHovered ? "text-white" : !lit ? "text-white/50" : "",
+                        )}
+                        style={{ transition: "all 0.25s ease" }}
+                        strokeWidth={1.6}
+                        aria-hidden
+                      />
+                    </motion.button>
                   </div>
-                </div>
-              </PreviewSectionChrome>
-            );
-          })}
+                </PreviewSectionChrome>
+              );
+            })}
+          </div>
+          </div>
         </div>
+
+        {/* Columna derecha: panel */}
+        <AnimatePresence mode="wait">
+          {highlightedCard ? (
+            <motion.aside
+              key={`service-side-${highlighted}`}
+              initial={reduceMotion ? false : { opacity: 0, x: 20 }}
+              animate={reduceMotion ? undefined : { opacity: 1, x: 0 }}
+              exit={reduceMotion ? undefined : { opacity: 0, x: -16 }}
+              transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+              className="relative overflow-hidden bg-[#0A0F1E]/88 px-12 py-9"
+            >
+              {/* Separador vertical: gradiente (transparent → rojo → transparent) */}
+              <div
+                className="pointer-events-none absolute left-0 top-0 h-full w-px"
+                style={{
+                  background: "linear-gradient(to bottom, transparent 0%, #DC2626 50%, transparent 100%)",
+                  opacity: 0.9,
+                }}
+                aria-hidden
+              />
+              <div className="pointer-events-none absolute -top-14 right-0 h-40 w-40 rounded-full bg-primary/12 blur-2xl" aria-hidden />
+              <div className="relative z-[1]">
+                <div className="mb-4 flex items-center gap-3">
+                  <span className="relative inline-flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#DC2626]/40" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-[#DC2626]" />
+                  </span>
+                  <span
+                    className="text-[10px] uppercase"
+                    style={{
+                      color: "#DC2626",
+                      letterSpacing: "0.28em",
+                      fontFamily: "\"Poppins\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+                    }}
+                  >
+                    ACTIVE NODE
+                  </span>
+                </div>
+                {/* Watermark de índice */}
+                <div
+                  className="pointer-events-none absolute right-6 top-4 select-none"
+                  style={{
+                    fontSize: 180,
+                    lineHeight: 1,
+                    color: "rgba(255,255,255,0.03)",
+                    zIndex: 0,
+                  }}
+                  aria-hidden
+                >
+                  {String(highlighted + 1).padStart(2, "0")}
+                </div>
+                <h3 className="font-heading text-[42px] leading-[1.02] text-white sm:text-[48px]" style={{ letterSpacing: "-0.02em" }}>
+                  {highlightedCard.title}
+                </h3>
+                <p className="font-heading mt-5 text-[15px] font-light leading-[1.6] text-white/70">
+                  {highlightedCard.description}
+                </p>
+                <ul className="mt-6 grid gap-3">
+                  {(highlightedCard.bullets ?? []).slice(0, 3).map((b) => (
+                    <li key={b} className="font-heading flex items-start gap-3 text-sm text-white/78">
+                      <span className="mt-1.5 h-2 w-2 shrink-0 bg-primary" aria-hidden />
+                      <span className="leading-relaxed">{b}</span>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  onClick={() => setOpenIndex(highlighted)}
+                  className="mt-8 inline-flex w-full items-center justify-center gap-2 bg-primary px-8 py-4 text-sm font-semibold text-white transition-colors hover:bg-white hover:text-primary"
+                  style={{
+                    fontFamily: "\"Poppins\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+                    borderRadius: 0,
+                    borderLeft: "3px solid #991B1B",
+                    padding: "16px 32px",
+                  }}
+                >
+                  Ver detalle completo <span aria-hidden>→</span>
+                </button>
+              </div>
+            </motion.aside>
+          ) : null}
+        </AnimatePresence>
       </div>
 
       <Dialog open={openIndex != null} onOpenChange={(o) => !o && setOpenIndex(null)}>
