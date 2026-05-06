@@ -1,20 +1,15 @@
 import { createBrowserRouter } from "react-router";
+import type { ComponentType } from "react";
 import { RootLayout } from "./RootLayout";
-import { HomePage } from "./pages/HomePage";
-import { RentPage } from "./pages/RentPage";
-import { SalePage } from "./pages/SalePage";
-import { ServicesPage } from "./pages/ServicesPage";
-import { MapSearchPage } from "./pages/MapSearchPage";
-import { PropertyDetailPage } from "./pages/PropertyDetailPage";
-import { PropertiesRedirectPage } from "./pages/PropertiesRedirectPage";
-import { DevelopmentsPage } from "./pages/DevelopmentsPage";
-import { DevelopmentDetailPage } from "./pages/DevelopmentDetailPage";
-import { AboutPage } from "./pages/AboutPage";
-import { ContactPage } from "./pages/ContactPage";
-import { LoginPage } from "./pages/LoginPage";
-import { FirstLoginChangePasswordPage } from "./pages/FirstLoginChangePasswordPage";
-import { AdminPage } from "./pages/AdminPage";
-import { NotFoundPage } from "./pages/NotFoundPage";
+
+const lazyPage = (loader: () => Promise<{ [key: string]: unknown }>, exportName: string) => async () => {
+  const mod = await loader();
+  const Component = mod[exportName];
+  if (!Component) {
+    throw new Error(`No se encontró export "${exportName}" en módulo de ruta.`);
+  }
+  return { Component: Component as ComponentType };
+};
 
 export const router = createBrowserRouter([
   {
@@ -22,63 +17,63 @@ export const router = createBrowserRouter([
     children: [
       {
         path: "/",
-        Component: HomePage,
+        lazy: lazyPage(() => import("./pages/HomePage"), "HomePage"),
       },
       {
         path: "/renta",
-        Component: RentPage,
+        lazy: lazyPage(() => import("./pages/RentPage"), "RentPage"),
       },
       {
         path: "/venta",
-        Component: SalePage,
+        lazy: lazyPage(() => import("./pages/SalePage"), "SalePage"),
       },
       {
         path: "/servicios",
-        Component: ServicesPage,
+        lazy: lazyPage(() => import("./pages/ServicesPage"), "ServicesPage"),
       },
       {
         path: "/propiedades/mapa",
-        Component: MapSearchPage,
+        lazy: lazyPage(() => import("./pages/MapSearchPage"), "MapSearchPage"),
       },
       {
         path: "/propiedades",
-        Component: PropertiesRedirectPage,
+        lazy: lazyPage(() => import("./pages/PropertiesRedirectPage"), "PropertiesRedirectPage"),
       },
       {
         path: "/propiedades/:id",
-        Component: PropertyDetailPage,
+        lazy: lazyPage(() => import("./pages/PropertyDetailPage"), "PropertyDetailPage"),
       },
       {
         path: "/desarrollos",
-        Component: DevelopmentsPage,
+        lazy: lazyPage(() => import("./pages/DevelopmentsPage"), "DevelopmentsPage"),
       },
       {
         path: "/desarrollos/:id",
-        Component: DevelopmentDetailPage,
+        lazy: lazyPage(() => import("./pages/DevelopmentDetailPage"), "DevelopmentDetailPage"),
       },
       {
         path: "/nosotros",
-        Component: AboutPage,
+        lazy: lazyPage(() => import("./pages/AboutPage"), "AboutPage"),
       },
       {
         path: "/contacto",
-        Component: ContactPage,
+        lazy: lazyPage(() => import("./pages/ContactPage"), "ContactPage"),
       },
       {
         path: "/login",
-        Component: LoginPage,
+        lazy: lazyPage(() => import("./pages/LoginPage"), "LoginPage"),
       },
       {
         path: "/admin/cambiar-contrasena",
-        Component: FirstLoginChangePasswordPage,
+        lazy: lazyPage(() => import("./pages/FirstLoginChangePasswordPage"), "FirstLoginChangePasswordPage"),
       },
       {
         path: "/admin",
-        Component: AdminPage,
+        lazy: lazyPage(() => import("./pages/AdminPage"), "AdminPage"),
       },
       {
         path: "*",
-        Component: NotFoundPage,
+        lazy: lazyPage(() => import("./pages/NotFoundPage"), "NotFoundPage"),
       },
     ],
   },

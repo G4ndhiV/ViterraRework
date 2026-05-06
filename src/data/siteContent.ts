@@ -16,6 +16,26 @@ export interface ServiceCardContent {
   linkTo: ServiceCardLink;
 }
 
+export type ContactFaqItem = { question: string; answer: string };
+
+export type ContactDeepLinks = {
+  saleLabel: string;
+  saleHref: string;
+  rentLabel: string;
+  rentHref: string;
+  servicesLabel: string;
+  servicesHref: string;
+};
+
+/** URLs opcionales por red; si faltan, la página usa `SOCIAL_LINKS` del config. */
+export type ContactSocialOverrides = {
+  facebook?: string;
+  instagram?: string;
+  twitter?: string;
+  linkedin?: string;
+  youtube?: string;
+};
+
 export interface SiteContent {
   home: {
     heroImage: string;
@@ -66,6 +86,7 @@ export interface SiteContent {
     quickWhatsappLabel: string;
     quickWhatsappHref: string;
     formTitle: string;
+    formKicker: string;
     successTitle: string;
     successSubtitle: string;
     mapLat: number;
@@ -74,6 +95,25 @@ export interface SiteContent {
     mapPopupAddress: string;
     mapSectionKicker: string;
     mapSectionTitle: string;
+    visitKicker: string;
+    visitTitle: string;
+    visitIntro: string;
+    faqKicker: string;
+    faqTitle: string;
+    faq: ContactFaqItem[];
+    socialKicker: string;
+    socialTitle: string;
+    socialIntro: string;
+    social: ContactSocialOverrides;
+    deepLinks: ContactDeepLinks;
+    advisorCta: string;
+    closingKicker: string;
+    closingTitle: string;
+    closingSubtitle: string;
+    closingBtnPrimary: string;
+    closingBtnPrimaryHref: string;
+    closingBtnSecondary: string;
+    closingBtnSecondaryHref: string;
   };
   services: {
     heroImage: string;
@@ -163,7 +203,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     heroSubtitle: "Estamos aquí para ayudarte a encontrar tu hogar ideal",
     infoTitle: "Información de Contacto",
     addressTitle: "Dirección",
-    addressLines: "Av. Principal 123\nGuadalajara, Jalisco",
+    addressLines: "Cerca de Av Terranova 1455 local 102\nProvidencia 4a Secc., 44639 Zapopan, Jal.",
     phoneTitle: "Teléfono",
     phoneLines: "(123) 456-7890\n(098) 765-4321",
     emailTitle: "Email",
@@ -175,14 +215,65 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     quickWhatsappLabel: "Chatear por WhatsApp",
     quickWhatsappHref: "https://wa.me/1234567890",
     formTitle: "Envíanos un Mensaje",
+    formKicker: "Escríbenos",
     successTitle: "¡Mensaje enviado con éxito!",
     successSubtitle: "Nos pondremos en contacto contigo pronto.",
-    mapLat: 20.676208,
-    mapLng: -103.34721,
+    mapLat: 20.697312,
+    mapLng: -103.386476,
     mapPopupTitle: "Viterra Inmobiliaria",
-    mapPopupAddress: "Av. Principal 123<br/>Guadalajara, Jalisco",
+    mapPopupAddress: "Cerca de Av Terranova 1455 local 102<br/>Providencia 4a Secc., 44639 Zapopan, Jal.",
     mapSectionKicker: "Visítanos",
     mapSectionTitle: "Nuestra Ubicación",
+    visitKicker: "Sede principal",
+    visitTitle: "Visítanos en Zapopan",
+    visitIntro:
+      "Agenda una cita o pásate por nuestras oficinas. Un asesor te orientará con la misma discreción y rigor que aplicamos a cada operación.",
+    faqKicker: "Preguntas frecuentes",
+    faqTitle: "Antes de escribirnos",
+    faq: [
+      {
+        question: "¿En cuánto tiempo responden?",
+        answer:
+          "Normalmente respondemos el mismo día hábil. En picos de demanda puede tomar hasta 24–48 horas; si es urgente, usa WhatsApp.",
+      },
+      {
+        question: "¿Puedo agendar una visita a la oficina?",
+        answer: "Sí. Escríbenos con tu horario preferido y un asesor confirmará la cita por correo o teléfono.",
+      },
+      {
+        question: "¿Cómo preparo una valuación o avalúo?",
+        answer:
+          "Indica en el mensaje tipo de inmueble, colonia y si buscas avalúo certificado o una estimación orientativa. Te diremos el siguiente paso.",
+      },
+      {
+        question: "¿Qué métodos de pago aceptan?",
+        answer: "Depende del servicio. En la primera respuesta te explicamos opciones y documentación requerida.",
+      },
+      {
+        question: "Soy asesor o colaborador",
+        answer: "Si ya tienes cuenta, inicia sesión en el panel. Si no, cuéntanos en el mensaje y te contactamos.",
+      },
+    ],
+    socialKicker: "Redes",
+    socialTitle: "Encuéntranos en línea",
+    socialIntro: "Síguenos para novedades, propiedades destacadas y contenido del sector.",
+    social: {},
+    deepLinks: {
+      saleLabel: "Catálogo de venta",
+      saleHref: "/venta",
+      rentLabel: "Renta",
+      rentHref: "/renta",
+      servicesLabel: "Servicios",
+      servicesHref: "/servicios",
+    },
+    advisorCta: "¿Eres asesor? Inicia sesión",
+    closingKicker: "Siguiente paso",
+    closingTitle: "¿Listo para hablar con un asesor?",
+    closingSubtitle: "Cuéntanos qué buscas: venta, renta, desarrollo o asesoría. Respondemos con propuesta clara y sin compromiso.",
+    closingBtnPrimary: "Enviar otro mensaje",
+    closingBtnPrimaryHref: "#contacto-formulario",
+    closingBtnSecondary: "Ver propiedades en venta",
+    closingBtnSecondaryHref: "/venta",
   },
   services: {
     heroImage:
