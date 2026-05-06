@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -205,6 +205,7 @@ function buildOrbitArc(fromAngle, toAngle, directionHint = null) {
 }
 
 export function ServicesSection() {
+  const [viewportWidth, setViewportWidth] = useState(() => (typeof window !== "undefined" ? window.innerWidth : 1280));
   const [activeIndex, setActiveIndex] = useState(0);
   const [swappedIndex, setSwappedIndex] = useState(null); // nodo de servicio que intercambia lugar con Viterra
   const [clickFx, setClickFx] = useState({ key: 0, x: CENTER, y: CENTER });
@@ -216,8 +217,23 @@ export function ServicesSection() {
   const isSwapped = swappedIndex !== null;
   const graphTargetIndex = activeIndex;
   const viterraPos = isSwapped ? nodeCenter(ANGLES[swappedIndex] ?? 270) : { x: CENTER, y: CENTER };
+  const isCompactLayout = viewportWidth < 1024;
+  const graphScale = useMemo(() => {
+    if (!isCompactLayout) return 1;
+    const safeWidth = Math.max(300, viewportWidth - 48);
+    return Math.max(0.62, Math.min(1, safeWidth / CONTAINER));
+  }, [isCompactLayout, viewportWidth]);
+  const graphShellSize = CONTAINER * graphScale;
 
   const activeId = active?.id ?? "none";
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const onResize = () => setViewportWidth(window.innerWidth);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   useEffect(() => {
     if (swappedIndex === null) {
@@ -248,13 +264,8 @@ export function ServicesSection() {
     const base = activeIndex ?? 0;
     const nextIndex = (base + direction + SERVICES.length) % SERVICES.length;
     setActiveIndex(nextIndex);
-
-    // En modo swap, el nodo Viterra pequeño debe seguir el nuevo nodo seleccionado
-    if (isSwapped) {
-      setSwappedIndex(nextIndex);
-      const p = nodeCenter(ANGLES[nextIndex] ?? 270);
-      setClickFx({ key: Date.now(), x: p.x, y: p.y });
-    }
+    const p = nodeCenter(ANGLES[nextIndex] ?? 270);
+    setClickFx({ key: Date.now(), x: p.x, y: p.y });
   };
 
   const prev = () => shiftService(-1);
@@ -267,11 +278,8 @@ export function ServicesSection() {
     navDirectionRef.current = cwSteps <= ccwSteps ? 1 : -1;
 
     setActiveIndex(targetIndex);
-    if (isSwapped) {
-      setSwappedIndex(targetIndex);
-      const p = nodeCenter(ANGLES[targetIndex] ?? 270);
-      setClickFx({ key: Date.now(), x: p.x, y: p.y });
-    }
+    const p = nodeCenter(ANGLES[targetIndex] ?? 270);
+    setClickFx({ key: Date.now(), x: p.x, y: p.y });
   };
 
   return (
@@ -293,7 +301,7 @@ export function ServicesSection() {
 
       {/* BODY: 2 columns */}
       <div
-        className="grid"
+        className="services-grid grid"
         style={{ gridTemplateColumns: "50% 50%", height: "auto", minHeight: "calc(100dvh - 72px)" }}
       >
         {/* COLUMN A */}
@@ -331,13 +339,26 @@ export function ServicesSection() {
               position: "relative",
               zIndex: 2,
               flex: 1,
+              width: "100%",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
+              minHeight: isCompactLayout ? Math.max(320, graphShellSize + 26) : undefined,
               padding: "28px 8px 16px 8px",
             }}
           >
-            <div style={{ position: "relative", width: CONTAINER, height: CONTAINER, overflow: "visible" }}>
+            <div
+              style={{
+                position: "relative",
+                width: CONTAINER,
+                height: CONTAINER,
+                minWidth: CONTAINER,
+                minHeight: CONTAINER,
+                overflow: "visible",
+                transform: `scale(${graphScale})`,
+                transformOrigin: "center center",
+              }}
+            >
               <svg
                 aria-hidden
                 style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0 }}
@@ -388,9 +409,8 @@ export function ServicesSection() {
                 })() : null}
 
                 {SERVICES.map((_, idx) => {
-                  if (isSwapped && idx !== swappedIndex) return null;
                   const angle = ANGLES[idx] ?? 270;
-                  const edge = isSwapped && idx === swappedIndex ? nodeEdgeByRadius(angle, RETURN_NODE_DIAM / 2) : nodeEdge(angle);
+                  const edge = nodeEdge(angle);
                   const isActive = graphTargetIndex !== null && idx === graphTargetIndex;
                   const gradId = isActive ? `lineActiveGrad-${idx}` : `lineInactiveGrad-${idx}`;
                   return (
@@ -550,12 +570,11 @@ export function ServicesSection() {
 
               {/* Service nodes */}
               {SERVICES.map((s, i) => {
-                if (isSwapped && i !== swappedIndex) return null;
                 const angle = ANGLES[i] ?? 270;
                 const p = nodeCenter(angle);
-                const isReturnNode = isSwapped && i === swappedIndex;
-                const nodeSize = isReturnNode ? RETURN_NODE_DIAM : NODE_DIAM;
-                const isActive = !isReturnNode && graphTargetIndex !== null && i === graphTargetIndex;
+                const isReturnNode = false;
+                const nodeSize = NODE_DIAM;
+                const isActive = graphTargetIndex !== null && i === graphTargetIndex;
                 const isArrivalTarget = graphTargetIndex !== null && i === graphTargetIndex;
 
                 return (
@@ -595,14 +614,8 @@ export function ServicesSection() {
                       type="button"
                       className={`ne-snode${isActive ? " ne-snode--active" : ""}${isArrivalTarget ? " ne-snode--arrival-pulse" : ""}`}
                       onClick={() => {
-                        if (isReturnNode) {
-                          setSwappedIndex(null);
-                          setActiveIndex(null);
-                          setClickFx({ key: Date.now(), x: p.x, y: p.y });
-                          return;
-                        }
                         setActiveIndex(i);
-                        setSwappedIndex(i);
+                        setSwappedIndex(null);
                         setClickFx({ key: Date.now(), x: p.x, y: p.y });
                       }}
                       aria-label={`Servicio ${s.index}`}
@@ -619,11 +632,11 @@ export function ServicesSection() {
                       }
                       animate={{
                         opacity: 1,
-                        scale: isActive ? [1, 1.12, 1] : 1,
-                        backgroundColor: isReturnNode ? "rgba(255,255,255,0.92)" : isActive ? "#B91C1C" : "rgba(15,23,42,0.08)",
-                        borderColor: isReturnNode ? "rgba(185,28,28,0.32)" : isActive ? "#B91C1C" : "rgba(15,23,42,0.28)",
+                        scale: isActive ? [1, 1.1, 1] : 1,
+                        backgroundColor: isActive ? "#B91C1C" : "rgba(15,23,42,0.08)",
+                        borderColor: isActive ? "#B91C1C" : "rgba(15,23,42,0.28)",
                         boxShadow: isActive
-                          ? "0 0 0 4px rgba(185,28,28,0.15), 0 0 20px rgba(185,28,28,0.35)"
+                          ? "0 0 0 3px rgba(185,28,28,0.14), 0 0 16px rgba(185,28,28,0.28)"
                           : "0 0 0 0 rgba(0,0,0,0)",
                       }}
                       transition={{
@@ -648,12 +661,6 @@ export function ServicesSection() {
                         WebkitBackdropFilter: "blur(4px)",
                       }}
                     >
-                      {isReturnNode ? (
-                        <>
-                          <span className="ne-return-base ne-return-base--a" aria-hidden />
-                          <span className="ne-return-base ne-return-base--b" aria-hidden />
-                        </>
-                      ) : null}
                       {isActive ? (
                         <span
                           className="ne-snode-pulse"
@@ -671,30 +678,17 @@ export function ServicesSection() {
                           }}
                         />
                       ) : null}
-                      {isReturnNode ? (
-                        <img
-                          src="/images/branding/viterra-mark-mono-alpha.png"
-                          alt=""
-                          style={{
-                            width: 56,
-                            height: 56,
-                            objectFit: "contain",
-                            filter: "brightness(0) saturate(100%) invert(17%) sepia(93%) saturate(3220%) hue-rotate(350deg) brightness(81%) contrast(92%)",
-                          }}
-                        />
-                      ) : (
-                        <s.icon
-                          className="ne-snode-icon"
-                          size={18}
-                          style={{
-                            color: isActive ? "#ffffff" : "rgba(15,23,42,0.68)",
-                            transition: "color 0.2s ease",
-                          }}
-                        />
-                      )}
+                      <s.icon
+                        className="ne-snode-icon"
+                        size={18}
+                        style={{
+                          color: isActive ? "#ffffff" : "rgba(15,23,42,0.68)",
+                          transition: "color 0.2s ease",
+                        }}
+                      />
                     </motion.button>
 
-                    <div className="ne-tip">{isReturnNode ? "Viterra · Volver a red" : s.name}</div>
+                    <div className="ne-tip">{s.name}</div>
                   </motion.div>
                 );
               })}
@@ -873,7 +867,7 @@ export function ServicesSection() {
           style={{
             background: TOKENS.panel,
             borderLeft: "none",
-            padding: "48px clamp(20px, 2.6vw, 40px) 132px",
+            padding: isCompactLayout ? "32px 18px 44px" : "48px clamp(20px, 2.6vw, 40px) 132px",
             overflow: "hidden",
             position: "relative",
           }}
@@ -899,7 +893,7 @@ export function ServicesSection() {
               <h3
                 style={{
                   fontFamily: FONT_TITLE,
-                  fontSize: "clamp(34px, 3.2vw, 44px)",
+                  fontSize: isCompactLayout ? "clamp(28px, 8vw, 40px)" : "clamp(34px, 3.2vw, 44px)",
                   fontWeight: 600,
                   lineHeight: 1.06,
                   marginBottom: 20,
@@ -917,7 +911,7 @@ export function ServicesSection() {
               <p
                 style={{
                   fontFamily: FONT_UI,
-                  fontSize: 17,
+                  fontSize: isCompactLayout ? 15 : 17,
                   fontWeight: 450,
                   lineHeight: 1.6,
                   color: "rgba(248,250,252,0.86)",
@@ -929,34 +923,11 @@ export function ServicesSection() {
               </p>
 
               <div style={{ marginBottom: 28, display: "grid", gap: 10, position: "relative" }}>
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "flex-end",
-                    paddingRight: 18,
-                    fontFamily: FONT_TITLE,
-                    fontSize: 126,
-                    fontWeight: 700,
-                    fontStyle: "italic",
-                    color: "rgba(248,250,252,0.01)",
-                    filter: "blur(0.7px)",
-                    userSelect: "none",
-                    pointerEvents: "none",
-                    lineHeight: 1,
-                    zIndex: 0,
-                  }}
-                  aria-hidden
-                >
-                  {active.index}
-                </div>
                 {active.benefits.map((b, idx) => (
                   <div
                     key={`${active.id}-${idx}`}
                     style={{
-                      padding: "12px 168px 12px 14px",
+                      padding: isCompactLayout ? "12px 14px" : "12px 168px 12px 14px",
                       borderRadius: 10,
                       background: "rgba(255,255,255,0.03)",
                       boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.07)",
@@ -1258,6 +1229,31 @@ export function ServicesSection() {
           </AnimatePresence>
 
           <style>{`
+            @media (max-width: 1023px) {
+              .services-grid {
+                grid-template-columns: 1fr !important;
+                min-height: auto !important;
+              }
+            }
+
+            @media (max-width: 1023px) {
+              .services-grid > aside {
+                min-height: auto !important;
+              }
+            }
+
+            @media (max-width: 768px) {
+              .services-grid > aside:last-child {
+                padding: 32px 18px 48px !important;
+              }
+            }
+
+            @media (max-width: 600px) {
+              .services-grid > aside:last-child {
+                padding: 28px 16px 40px !important;
+              }
+            }
+
             @keyframes neEmptyGlowPulse {
               0%, 100% { opacity: 0.78; transform: scale(1); }
               50% { opacity: 1; transform: scale(1.05); }

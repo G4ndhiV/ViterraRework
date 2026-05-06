@@ -41,7 +41,7 @@ const MARK_MONO_SCALE_FACTOR = 0.88;
  * El asset es asimétrico: el centro de masa visual queda claramente a la izquierda del centro geométrico.
  * Ajustar entre ~0.15 y ~0.22 si se sustituye el PNG (sube si la V se ve aún corrida a la derecha).
  */
-const MARK_LOGO_OPTICAL_CENTER_X_RATIO = 0.005;
+const MARK_LOGO_OPTICAL_CENTER_X_RATIO = 0.205;
 
 /**
  * Distancia en px desde el borde izquierdo del `<ul>` de redes (tamaño `md`: `p-2`, icono 17px, `sm:gap-2`)
@@ -209,11 +209,6 @@ export function Header() {
   const navTrackEm = lerp(0.12, 0.16, p);
   const navLift = lerp(0, -3, p);
 
-  const navCenterOpacity = 1 - smoothstep01(p, 0.38, 0.74);
-  const navSplitOpacity = smoothstep01(p, 0.44, 0.82);
-  const showCenterNav = navCenterOpacity > 0.04;
-  const showSplitNav = navSplitOpacity > 0.04;
-
   /** Transición marca izquierda: blanco grande → rojo compacto (cruza con el scroll) */
   const compactLeftMark = smoothstep01(p, 0.2, 0.48);
   /** 0 = arriba del todo (marca grande); 1 = header compacto (marca pequeña) */
@@ -234,15 +229,11 @@ export function Header() {
   /** Centro del 3.er icono (X) bajo el centro óptico de la V: margen izq. del `<ul>` dentro de la caja `markBoxW`. */
   const desktopSocialMarginLeft =
     markBoxW * MARK_LOGO_OPTICAL_CENTER_X_RATIO - MD_SOCIAL_UL_LEFT_TO_X_CENTER_PX;
-  /** Columna móvil centra la caja del logo; desplazamos la fila de iconos para compensar el PNG asimétrico. */
-  const mobileSocialTranslateX = -(markBoxWMobile * (0.5 - MARK_LOGO_OPTICAL_CENTER_X_RATIO));
-
   const navLinkClass =
     "font-normal uppercase text-white/85 hover:text-white transition-colors shrink-0";
   /** Modo 1 (nav centrada, inicio de scroll): subrayado blanco. Modo 2 (nav partida): rojo corporativo. */
   const navLinkActiveBase = "text-white font-semibold underline decoration-2 underline-offset-[7px]";
   const navLinkActiveClassCenter = `${navLinkActiveBase} decoration-white`;
-  const navLinkActiveClassSplit = `${navLinkActiveBase} decoration-primary`;
   return (
     <header
       className={`left-0 right-0 z-50 w-full overflow-visible text-white pt-[env(safe-area-inset-top,0px)] ${
@@ -328,13 +319,12 @@ export function Header() {
             </div>
           </div>
           <nav
-            className="absolute inset-0 flex items-stretch px-1 pl-60"
+            className="absolute inset-0 flex items-stretch"
             style={{
-              opacity: navCenterOpacity,
-              pointerEvents: showCenterNav ? "auto" : "none",
               transform: `translateY(${navLift}px)`,
+              paddingLeft: "clamp(9rem, 16vw, 12rem)",
+              paddingRight: "clamp(9rem, 16vw, 12rem)",
             }}
-            aria-hidden={!showCenterNav}
           >
             <div className="flex min-w-0 flex-1 items-center justify-center" style={{ gap: `${navGap}px` }}>
               {VITERRA_NAV_ITEMS.map(([to, label]) => {
@@ -352,63 +342,18 @@ export function Header() {
                 );
               })}
             </div>
-            <div className="flex w-20 shrink-0 items-center justify-end gap-0.5 self-stretch" />
-          </nav>
-
-          <nav
-            className="absolute inset-0 flex items-stretch justify-between px-1 pl-60"
-            style={{
-              opacity: navSplitOpacity,
-              pointerEvents: showSplitNav ? "auto" : "none",
-              transform: `translateY(${navLift}px)`,
-            }}
-            aria-hidden={!showSplitNav}
-          >
-            <div className="flex min-w-0 items-center gap-4 self-stretch xl:gap-5">
-              {VITERRA_NAV_ITEMS.slice(0, 3).map(([to, label]) => {
-                const active = isActiveNavPath(location.pathname, to);
-                return (
-                  <Link
-                    key={`l-${to}`}
-                    to={to}
-                    className={cn(navLinkClass, "text-white/90", active && navLinkActiveClassSplit)}
-                    style={{ fontSize: `${navFontPx}px`, letterSpacing: `${navTrackEm}em` }}
-                    aria-current={active ? "page" : undefined}
-                  >
-                    {label}
-                  </Link>
-                );
-              })}
-            </div>
-            <div className="w-28 shrink-0" aria-hidden />
-            <div className="flex min-w-0 items-center justify-end gap-4 self-stretch xl:gap-5">
-              {VITERRA_NAV_ITEMS.slice(3).map(([to, label]) => {
-                const active = isActiveNavPath(location.pathname, to);
-                return (
-                  <Link
-                    key={`r-${to}`}
-                    to={to}
-                    className={cn(navLinkClass, "text-white/90", active && navLinkActiveClassSplit)}
-                    style={{ fontSize: `${navFontPx}px`, letterSpacing: `${navTrackEm}em` }}
-                    aria-current={active ? "page" : undefined}
-                  >
-                    {label}
-                  </Link>
-                );
-              })}
-            </div>
           </nav>
         </div>
 
         <div
           className={cn(
-            "relative grid min-h-[56px] grid-cols-[1fr_auto_1fr] items-center gap-2 border-t-0 px-2 py-1.5 sm:min-h-[52px] sm:px-3",
+            "relative grid min-h-[56px] grid-cols-[1fr_auto] items-center gap-2 border-t-0 px-2 py-1.5 sm:min-h-[52px] sm:grid-cols-[1fr_auto_1fr] sm:px-3",
             inPreviewCanvas ? "" : "lg:hidden"
           )}
         >
           <Link
             to="/"
-            className="relative z-[56] inline-flex min-w-0 max-w-full flex-col items-start justify-center gap-0.5 justify-self-start"
+            className="relative z-[56] hidden min-w-0 max-w-full flex-col items-start justify-center gap-0.5 justify-self-start sm:inline-flex"
             onClick={() => setIsMenuOpen(false)}
             aria-label="Viterra Grupo Inmobiliario — Inicio"
           >
@@ -417,7 +362,7 @@ export function Header() {
             </span>
             <span className="h-px w-7 shrink-0 bg-[#C8102E] sm:w-8" aria-hidden />
           </Link>
-          <div className="relative z-[52] flex min-w-0 flex-col items-center justify-center gap-1 justify-self-center overflow-visible sm:gap-1.5">
+          <div className="absolute left-1/2 z-[52] flex min-w-0 -translate-x-1/2 flex-col items-center justify-center gap-1 overflow-visible sm:relative sm:left-auto sm:translate-x-0 sm:justify-self-center sm:gap-1.5">
             <Link
               to="/"
               className="flex shrink-0 items-center justify-center overflow-visible rounded-sm"
@@ -452,11 +397,11 @@ export function Header() {
                 </span>
               </span>
             </Link>
-            <span className="inline-flex shrink-0" style={{ transform: `translateX(${mobileSocialTranslateX}px)` }}>
+            <span className="hidden shrink-0 sm:inline-flex">
               <SocialNavIcons iconSize="xs" />
             </span>
           </div>
-          <div className="relative z-[56] flex items-center justify-end justify-self-end">
+          <div className="relative col-start-2 z-[56] flex items-center justify-end justify-self-end sm:col-start-3">
             <button
               type="button"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -502,6 +447,13 @@ export function Header() {
                 </Link>
               );
             })}
+            <div className="pt-3">
+              <div className="border-t border-white/10 pt-3">
+                <div className="flex items-center justify-center">
+                  <SocialNavIcons iconSize="sm" />
+                </div>
+              </div>
+            </div>
           </div>
         </nav>
       )}
