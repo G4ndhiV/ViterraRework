@@ -39,7 +39,8 @@ const MAP_CARD_GAP_ABOVE_DOT_PX = 18;
 /** Separación del borde superior de la tarjeta respecto al punto cuando la tarjeta va debajo del punto. */
 const MAP_CARD_GAP_BELOW_DOT_PX = 14;
 /** Altura aproximada de la tarjeta (imagen + texto + CTA) para decidir si voltea arriba/abajo. */
-const MAP_CARD_ESTIMATED_HEIGHT_PX = 360;
+const MAP_CARD_ESTIMATED_HEIGHT_PX = 460;
+const MAP_CARD_ESTIMATED_WIDTH_PX = 320;
 /** Margen respecto al borde del contenedor del mapa (volteo arriba/abajo). */
 const MAP_CARD_VIEWPORT_PADDING_PX = 16;
 
@@ -115,6 +116,46 @@ function applyFilters(list: Property[], f: MapFilters, zone: SearchZone | null):
   return out;
 }
 
+function computeDisplayCoordinates(list: Property[]): Map<string, { lat: number; lng: number }> {
+  const grouped = new Map<string, Property[]>();
+  const out = new Map<string, { lat: number; lng: number }>();
+
+  for (const p of list) {
+    if (!p.coordinates) continue;
+    const key = `${p.coordinates.lat.toFixed(6)},${p.coordinates.lng.toFixed(6)}`;
+    const bucket = grouped.get(key);
+    if (bucket) bucket.push(p);
+    else grouped.set(key, [p]);
+  }
+
+  grouped.forEach((bucket, key) => {
+    if (bucket.length === 1) {
+      const p = bucket[0];
+      out.set(p.id, { lat: p.coordinates!.lat, lng: p.coordinates!.lng });
+      return;
+    }
+
+    // Separamos propiedades con misma coordenada en un anillo pequeño para distinguir precio/punto.
+    const baseLat = bucket[0].coordinates!.lat;
+    const baseLng = bucket[0].coordinates!.lng;
+    const baseRadiusMeters = Math.min(42, 18 + bucket.length * 2.5);
+    const latMeters = 111_320;
+    const lngMeters = Math.max(1, 111_320 * Math.cos((baseLat * Math.PI) / 180));
+    const seed = key.split("").reduce((s, ch) => s + ch.charCodeAt(0), 0);
+    const phase = (seed % 360) * (Math.PI / 180);
+
+    bucket.forEach((p, idx) => {
+      const angle = phase + (idx / bucket.length) * Math.PI * 2;
+      const ring = baseRadiusMeters + (idx % 2 === 0 ? 0 : 6);
+      const dLat = (Math.sin(angle) * ring) / latMeters;
+      const dLng = (Math.cos(angle) * ring) / lngMeters;
+      out.set(p.id, { lat: baseLat + dLat, lng: baseLng + dLng });
+    });
+  });
+
+  return out;
+}
+
 function applySelectionToCircles(circleMap: Map<string, CircleMarker>, selectedId: string | null) {
   circleMap.forEach((layer, id) => {
     const sel = id === selectedId;
@@ -169,6 +210,7 @@ export function MapSearchPage() {
   const mapPricesGroupRef = useRef<L.LayerGroup | null>(null);
   const circleByPropertyIdRef = useRef<Map<string, CircleMarker>>(new Map());
   const priceMarkerByPropertyIdRef = useRef<Map<string, Marker>>(new Map());
+  const displayCoordByPropertyIdRef = useRef<Map<string, { lat: number; lng: number }>>(new Map());
   const [mapFs, setMapFs] = useState(false);
   /** Coords del contenedor Leaflet (px) + volteo; la tarjeta va dentro del mapa con `overflow-hidden` (estilo Airbnb). */
   const [mapPopupPos, setMapPopupPos] = useState<{
@@ -232,9 +274,41 @@ export function MapSearchPage() {
   resultsRef.current = results;
 
   const selectedProperty = useMemo(
-    () => (selectedPropertyId ? results.find((p) => p.id === selectedPropertyId) ?? null : null),
-    [results, selectedPropertyId]
+    () =>
+      selectedPropertyId
+        ? results.find((p) => p.id === selectedPropertyId) ??
+          catalogProperties.find((p) => p.id === selectedPropertyId) ??
+          null
+        : null,
+    [results, catalogProperties, selectedPropertyId]
   );
+
+  const popupStyle = useMemo(() => {
+    if (!mapPopupPos || !mapRef.current) return null;
+    const size = mapRef.current.getSize();
+    const halfW = MAP_CARD_ESTIMATED_WIDTH_PX / 2;
+    const minX = MAP_CARD_VIEWPORT_PADDING_PX + halfW;
+    const maxX = size.x - MAP_CARD_VIEWPORT_PADDING_PX - halfW;
+    const x = Math.max(minX, Math.min(maxX, mapPopupPos.x));
+
+    const yAboveAnchor = mapPopupPos.y - MAP_CARD_ESTIMATED_HEIGHT_PX;
+    const yBelowAnchor = mapPopupPos.y;
+    const minY = MAP_CARD_VIEWPORT_PADDING_PX;
+    const maxY = size.y - MAP_CARD_VIEWPORT_PADDING_PX - MAP_CARD_ESTIMATED_HEIGHT_PX;
+
+    let top = mapPopupPos.placement === "above" ? yAboveAnchor : yBelowAnchor;
+    if (Number.isFinite(maxY)) {
+      top = Math.max(minY, Math.min(maxY, top));
+    } else {
+      top = minY;
+    }
+
+    return {
+      left: x,
+      top,
+      transform: "translateX(-50%)",
+    } as const;
+  }, [mapPopupPos, selectedProperty]);
 
   const syncMarkers = useCallback((list: Property[]) => {
     const dots = mapDotsGroupRef.current;
@@ -245,10 +319,13 @@ export function MapSearchPage() {
     prices.clearLayers();
     circleByPropertyIdRef.current.clear();
     priceMarkerByPropertyIdRef.current.clear();
+    const displayCoords = computeDisplayCoordinates(list);
+    displayCoordByPropertyIdRef.current = displayCoords;
 
     list.forEach((p) => {
       if (!p.coordinates) return;
-      const { lat, lng } = p.coordinates;
+      const display = displayCoords.get(p.id) ?? p.coordinates;
+      const { lat, lng } = display;
 
       const circle = L.circleMarker([lat, lng], {
         radius: 9,
@@ -302,12 +379,6 @@ export function MapSearchPage() {
     syncMarkers(results);
   }, [results, syncMarkers]);
 
-  useEffect(() => {
-    if (selectedPropertyId && !results.some((p) => p.id === selectedPropertyId)) {
-      setSelectedPropertyId(null);
-    }
-  }, [results, selectedPropertyId]);
-
   useLayoutEffect(() => {
     applySelectionToCircles(circleByPropertyIdRef.current, selectedPropertyId);
     applySelectionToPriceMarkers(priceMarkerByPropertyIdRef.current, selectedPropertyId);
@@ -324,13 +395,14 @@ export function MapSearchPage() {
       return;
     }
     const { lat, lng } = selectedProperty.coordinates;
+    const display = displayCoordByPropertyIdRef.current.get(selectedProperty.id) ?? { lat, lng };
     const update = () => {
       const m = mapRef.current;
       if (!m) return;
       const mapH = m.getSize().y;
       const z = m.getZoom();
       if (z >= ZOOM_SHOW_PRICES) {
-        const pillBottom = m.latLngToContainerPoint(L.latLng(lat + PRICE_LABEL_LAT_OFFSET, lng));
+        const pillBottom = m.latLngToContainerPoint(L.latLng(display.lat + PRICE_LABEL_LAT_OFFSET, display.lng));
         const pillTop = pillBottom.y - PRICE_MARKER_ICON_HEIGHT_PX;
         const pl = pickMapCardPlacement(mapH, { mode: "price", pillBottomY: pillBottom.y });
         const y =
@@ -343,7 +415,7 @@ export function MapSearchPage() {
           placement: pl,
         });
       } else {
-        const dot = m.latLngToContainerPoint(L.latLng(lat, lng));
+        const dot = m.latLngToContainerPoint(L.latLng(display.lat, display.lng));
         const pl = pickMapCardPlacement(mapH, { mode: "dot", dotCenterY: dot.y });
         const y =
           pl === "above"
@@ -398,11 +470,28 @@ export function MapSearchPage() {
 
       L.control.zoom({ position: "bottomright" }).addTo(map);
 
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+      const streetLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; CARTO',
         subdomains: "abcd",
         maxZoom: 20,
-      }).addTo(map);
+      });
+      const satelliteLayer = L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+          attribution:
+            'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+          maxZoom: 20,
+        }
+      );
+      streetLayer.addTo(map);
+      L.control.layers(
+        {
+          Mapa: streetLayer,
+          "Satélite": satelliteLayer,
+        },
+        undefined,
+        { position: "topright" }
+      ).addTo(map);
 
       const dotsGroup = L.layerGroup().addTo(map);
       const pricesGroup = L.layerGroup();
@@ -898,6 +987,49 @@ export function MapSearchPage() {
                     {filterFields}
                   </div>
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (document.fullscreenElement) {
+                      void document.exitFullscreen();
+                    }
+                  }}
+                  className="pointer-events-auto font-heading inline-flex items-center justify-center rounded-none border-2 border-slate-200 bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy shadow-sm transition-colors hover:border-primary hover:text-primary"
+                >
+                  Salir pantalla completa
+                </button>
+              </div>
+            )}
+            {mapFs && (
+              <div className="pointer-events-none absolute left-3 top-3 z-[1006] flex flex-wrap items-center gap-2">
+                {isDrawingMode ? (
+                  <button
+                    type="button"
+                    onClick={toggleDrawingMode}
+                    className="pointer-events-auto font-heading inline-flex items-center justify-center rounded-none border-2 border-primary bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-primary shadow-[0_8px_24px_rgba(0,0,0,0.18)] ring-2 ring-primary/25 hover:bg-red-50"
+                  >
+                    Cancelar trazo
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={zone ? redrawZone : toggleDrawingMode}
+                      className="pointer-events-auto font-heading inline-flex items-center justify-center rounded-none bg-primary px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white shadow-lg shadow-primary/35 transition-all hover:bg-brand-red-hover"
+                    >
+                      {zone ? "Redibujar zona" : "Dibujar zona"}
+                    </button>
+                    {zone && (
+                      <button
+                        type="button"
+                        onClick={clearZone}
+                        className="pointer-events-auto font-heading inline-flex items-center justify-center rounded-none border-2 border-brand-navy/25 bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy shadow-sm transition-colors hover:border-primary hover:text-primary"
+                      >
+                        Quitar zona
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
             )}
             <div
@@ -908,7 +1040,7 @@ export function MapSearchPage() {
             <button
               type="button"
               className={cn(
-                "absolute right-3 z-[1002] flex h-9 w-9 items-center justify-center rounded-none border-2 border-slate-200 bg-white text-slate-800 shadow-md transition-colors hover:bg-slate-50",
+                "absolute left-3 z-[1002] flex h-9 w-9 items-center justify-center rounded-none border-2 border-slate-200 bg-white text-slate-800 shadow-md transition-colors hover:bg-slate-50",
                 isReducedViewport && mobileShowMap ? "top-16" : "top-3"
               )}
               aria-label={mapFs ? "Salir de pantalla completa" : "Pantalla completa"}
@@ -933,12 +1065,7 @@ export function MapSearchPage() {
               <div className="pointer-events-none absolute inset-0 z-[1001] overflow-hidden">
                 <div
                   className="pointer-events-auto absolute w-[min(320px,calc(100vw-2rem))] max-w-[320px] overflow-hidden border-2 border-slate-300 bg-white shadow-[0_10px_40px_rgba(0,0,0,0.22)]"
-                  style={{
-                    left: mapPopupPos.x,
-                    top: mapPopupPos.y,
-                    transform:
-                      mapPopupPos.placement === "above" ? "translate(-50%, -100%)" : "translate(-50%, 0)",
-                  }}
+                  style={popupStyle ?? undefined}
                 >
                   <div className="relative h-[120px] shrink-0 overflow-hidden sm:h-[128px]">
                     <ImageWithFallback

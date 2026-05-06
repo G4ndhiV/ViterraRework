@@ -69,6 +69,7 @@ export function PropertyDetailPage() {
   const property = useMemo(() => properties.find((p) => p.id === id) ?? seededProperty, [properties, id, seededProperty]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [activeTab, setActiveTab] = useState("descripcion");
+  const [mapViewMode, setMapViewMode] = useState<"map" | "satellite">("map");
   const reduceMotion = useReducedMotion();
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);
@@ -109,10 +110,46 @@ export function PropertyDetailPage() {
   }, [property, properties, linkedDevelopment]);
 
   const displayTitle = property?.publicationTitle?.trim() || property?.title || "";
+  const googleMapsUrl = useMemo(() => {
+    if (!property) return null;
+    if (property.coordinates?.lat != null && property.coordinates?.lng != null) {
+      return `https://www.google.com/maps/search/?api=1&query=${property.coordinates.lat},${property.coordinates.lng}`;
+    }
+    const query = [property.fullAddress, property.colony, property.location].filter(Boolean).join(", ").trim();
+    return query ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}` : null;
+  }, [property]);
+  const appleMapsUrl = useMemo(() => {
+    if (!property) return null;
+    if (property.coordinates?.lat != null && property.coordinates?.lng != null) {
+      return `https://maps.apple.com/?ll=${property.coordinates.lat},${property.coordinates.lng}&q=${encodeURIComponent(displayTitle || "Propiedad")}`;
+    }
+    const query = [property.fullAddress, property.colony, property.location].filter(Boolean).join(", ").trim();
+    return query ? `https://maps.apple.com/?q=${encodeURIComponent(query)}` : null;
+  }, [property, displayTitle]);
+  const wazeUrl = useMemo(() => {
+    if (!property) return null;
+    if (property.coordinates?.lat != null && property.coordinates?.lng != null) {
+      return `https://www.waze.com/ul?ll=${property.coordinates.lat}%2C${property.coordinates.lng}&navigate=yes`;
+    }
+    const query = [property.fullAddress, property.colony, property.location].filter(Boolean).join(", ").trim();
+    return query ? `https://www.waze.com/ul?q=${encodeURIComponent(query)}&navigate=yes` : null;
+  }, [property]);
+  const googleMapsSatelliteUrl = useMemo(() => {
+    if (!property) return null;
+    if (property.coordinates?.lat != null && property.coordinates?.lng != null) {
+      return `https://www.google.com/maps?q=${property.coordinates.lat},${property.coordinates.lng}&t=k`;
+    }
+    const query = [property.fullAddress, property.colony, property.location].filter(Boolean).join(", ").trim();
+    return query ? `https://www.google.com/maps?q=${encodeURIComponent(query)}&t=k` : null;
+  }, [property]);
 
   useEffect(() => {
     setCurrentImageIndex(0);
   }, [property?.id, linkedDevelopment?.id]);
+
+  useEffect(() => {
+    setMapViewMode("map");
+  }, [property?.id]);
 
   const hasCatalogFeatureLists = useMemo(() => {
     if (!property) return false;
@@ -183,11 +220,24 @@ export function PropertyDetailPage() {
         const L = await import("leaflet");
         await import("leaflet/dist/leaflet.css");
         const map = L.map(mapRef.current).setView([property.coordinates.lat, property.coordinates.lng], 15);
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+        const streetLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
           subdomains: "abcd",
           maxZoom: 20,
-        }).addTo(map);
+        });
+        const satelliteLayer = L.tileLayer(
+          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+          {
+            attribution:
+              'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+            maxZoom: 20,
+          }
+        );
+        if (mapViewMode === "satellite") {
+          satelliteLayer.addTo(map);
+        } else {
+          streetLayer.addTo(map);
+        }
         const marker = L.divIcon({
           className: "custom-marker",
           html: `
@@ -201,7 +251,11 @@ export function PropertyDetailPage() {
           iconSize: [40, 40],
           iconAnchor: [20, 20],
         });
-        L.marker([property.coordinates.lat, property.coordinates.lng], { icon: marker }).addTo(map);
+        const mapMarker = L.marker([property.coordinates.lat, property.coordinates.lng], { icon: marker }).addTo(map);
+        mapMarker.on("click", () => {
+          const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${property.coordinates!.lat},${property.coordinates!.lng}`;
+          window.open(mapsUrl, "_blank", "noopener,noreferrer");
+        });
         mapInstanceRef.current = map;
       } catch (error) {
         console.error("Error initializing property map:", error);
@@ -217,6 +271,14 @@ export function PropertyDetailPage() {
       mapInstanceRef.current = null;
       return;
     }
+
+    // Si cambia entre Mapa/Satélite, reinicializamos para aplicar la capa seleccionada.
+    try {
+      mapInstanceRef.current?.remove();
+    } catch (error) {
+      console.error("Error resetting property map:", error);
+    }
+    mapInstanceRef.current = null;
 
     let cancelled = false;
     let rafId: number | null = null;
@@ -238,7 +300,7 @@ export function PropertyDetailPage() {
       if (rafId != null) cancelAnimationFrame(rafId);
       if (invalidateId != null) window.clearTimeout(invalidateId);
     };
-  }, [activeTab, property]);
+  }, [activeTab, property, mapViewMode]);
 
   useEffect(() => {
     return () => {
@@ -600,13 +662,89 @@ export function PropertyDetailPage() {
                           </p>
                         ) : null}
                         {property.fullAddress ? (
-                          <p className="text-sm text-slate-700" style={{ fontWeight: 500 }}>
-                            {property.fullAddress}
-                          </p>
+                          <div className="flex items-start gap-2">
+                            {googleMapsUrl ? (
+                              <a
+                                href={googleMapsUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="Abrir dirección en Google Maps"
+                                className="mt-0.5 inline-flex text-slate-500 transition-colors hover:text-slate-900"
+                              >
+                                <MapPin className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                              </a>
+                            ) : null}
+                            <p className="text-sm text-slate-700" style={{ fontWeight: 500 }}>
+                              {property.fullAddress}
+                            </p>
+                          </div>
                         ) : null}
                         <p className="text-sm text-slate-600" style={{ fontWeight: 400 }}>
                           {property.location}
                         </p>
+                        <div className="flex flex-wrap gap-2">
+                          {googleMapsUrl ? (
+                            <a
+                              href={googleMapsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50"
+                              style={{ fontWeight: 600 }}
+                            >
+                              <MapPin className="h-3.5 w-3.5" strokeWidth={1.5} />
+                              Google Maps
+                            </a>
+                          ) : null}
+                          {appleMapsUrl ? (
+                            <a
+                              href={appleMapsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50"
+                              style={{ fontWeight: 600 }}
+                            >
+                              Apple Maps
+                            </a>
+                          ) : null}
+                          {wazeUrl ? (
+                            <a
+                              href={wazeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50"
+                              style={{ fontWeight: 600 }}
+                            >
+                              Waze
+                            </a>
+                          ) : null}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setMapViewMode("map")}
+                            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                              mapViewMode === "map"
+                                ? "border-slate-900 bg-slate-900 text-white"
+                                : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                            }`}
+                            style={{ fontWeight: 600 }}
+                          >
+                            Mapa
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMapViewMode("satellite")}
+                            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                              mapViewMode === "satellite"
+                                ? "border-slate-900 bg-slate-900 text-white"
+                                : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                            }`}
+                            style={{ fontWeight: 600 }}
+                          >
+                            Satélite
+                          </button>
+                        </div>
                         <style>{`
                           .custom-marker {
                             background: none;
@@ -747,7 +885,19 @@ export function PropertyDetailPage() {
                     </p>
                   </div>
                   <div className="mb-2 flex items-start gap-2 text-slate-600">
-                    <MapPin className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                    {googleMapsUrl ? (
+                      <a
+                        href={googleMapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Abrir ubicación en Google Maps"
+                        className="inline-flex text-slate-600 transition-colors hover:text-slate-900"
+                      >
+                        <MapPin className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                      </a>
+                    ) : (
+                      <MapPin className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                    )}
                     <span className="break-words text-sm font-medium" style={{ fontWeight: 500 }}>
                       {property.location}
                     </span>
