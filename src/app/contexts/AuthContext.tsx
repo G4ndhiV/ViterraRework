@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, ReactNode } from "react";
-import type { Session } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { useLocation } from "react-router";
 import { getSupabaseClient } from "../lib/supabaseClient";
 import { withTimeout } from "../lib/withTimeout";
@@ -288,6 +288,28 @@ function mergeTokkoRowIntoUser(base: User, row: Record<string, unknown>): User {
   });
 }
 
+/**
+ * Refuerza rol/permisos desde `tokko_users`. Reintenta: la primera lectura tras login o un timeout
+ * previo puede devolver vacío y sin esto el JWT (sin `role` en metadata) deja al usuario como asesor.
+ */
+async function loadUserWithTokkoMerge(client: SupabaseClient, session: Session): Promise<User> {
+  let appUser = sessionToAppUser(session);
+  const maxAttempts = 4;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const { data, error } = await fetchTokkoUserRow(client, session.user.id);
+    if (!error && data) {
+      return mergeTokkoRowIntoUser(appUser, data as Record<string, unknown>);
+    }
+    if (import.meta.env.DEV && error) {
+      console.warn(`[Viterra] fetchTokkoUserRow intento ${attempt + 1}/${maxAttempts}:`, error.message);
+    }
+    if (attempt < maxAttempts - 1) {
+      await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+    }
+  }
+  return appUser;
+}
+
 /** Fila `tokko_users` → usuario del directorio CRM (misma lógica que el refuerzo por sesión). */
 function directoryUserFromTokkoRow(row: Record<string, unknown>): User {
   const id = String(row.id ?? "");
@@ -354,7 +376,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
-  const TOKKO_USER_ROW_MS = 6_000;
   const TOKKO_DIRECTORY_MS = 6_000;
 
   const mergeSessionUserIntoDirectory = useCallback((appUser: User) => {
@@ -460,22 +481,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = await client.auth.getSession();
     if (!session?.user) return;
 
-    let appUser = sessionToAppUser(session);
-    try {
-      const { data, error } = await withTimeout(
-        fetchTokkoUserRow(client, session.user.id),
-        TOKKO_USER_ROW_MS,
-        "tokko_users (perfil)"
-      );
-      if (!error && data) {
-        appUser = mergeTokkoRowIntoUser(appUser, data as Record<string, unknown>);
-      }
-    } catch {
-      /* Servidor lento o 500: seguimos con metadata de JWT; sin logs en consola de la landing */
-    }
+    const appUser = await loadUserWithTokkoMerge(client, session);
     setUser(appUser);
     void hydrateTokkoDirectory(appUser);
-  }, [TOKKO_USER_ROW_MS, location.pathname, hydrateTokkoDirectory]);
+  }, [location.pathname, hydrateTokkoDirectory]);
 
   useEffect(() => {
     const client = getSupabaseClient();
@@ -489,11 +498,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         return;
       }
-      const appUser = sessionToAppUser(session);
       const c = getSupabaseClient();
       if (c) {
+        // Refuerzo con tokko_users + reintentos (JWT suele no traer role → default asesor).
+        const appUser = await loadUserWithTokkoMerge(c, session);
         setUser(appUser);
       } else {
+        const appUser = sessionToAppUser(session);
         mergeSessionUserIntoDirectory(appUser);
         setUser(appUser);
       }
@@ -565,7 +576,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { session },
     } = await client.auth.getSession();
     const uid = session?.user?.id;
-    if (!uid) {
+    if (!uid || !session?.user) {
       return { ok: true, mustChangePassword: false };
     }
     let flagRow: { must_change_password?: unknown } | null = null;
@@ -582,6 +593,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         flagRow = byEmail.data as { must_change_password?: unknown };
       }
     }
+    const appUser = await loadUserWithTokkoMerge(client, session);
+    setUser(appUser);
+
     if (!flagRow) {
       return { ok: true, mustChangePassword: false };
     }
@@ -716,11 +730,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       return;
     }
-    let appUser = sessionToAppUser(session);
-    const { data, error } = await fetchTokkoUserRow(client, session.user.id);
-    if (!error && data) {
-      appUser = mergeTokkoRowIntoUser(appUser, data as Record<string, unknown>);
-    }
+    const appUser = await loadUserWithTokkoMerge(client, session);
     setUser(appUser);
   }, []);
 
