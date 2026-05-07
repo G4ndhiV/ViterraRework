@@ -17,18 +17,34 @@ export function useCatalogProperties() {
   const [error, setError] = useState<string | null>(null);
   const fetchGenerationRef = useRef(0);
 
-  const reload = useCallback(async () => {
+  /** Sustituye o inserta una ficha tras guardar en admin (evita listado con precio antiguo si el refetch llega con lectura rezagada). */
+  const applySavedProperty = useCallback((p: Property) => {
+    setProperties((prev) => {
+      const i = prev.findIndex((x) => x.id === p.id);
+      if (i === -1) {
+        return [p, ...prev];
+      }
+      const next = [...prev];
+      next[i] = p;
+      return next;
+    });
+  }, []);
+
+  const reload = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = Boolean(opts?.silent);
     const gen = ++fetchGenerationRef.current;
     const client = getSupabaseClient();
     if (!client) {
       if (gen !== fetchGenerationRef.current) return;
       setProperties([]);
       setError("Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY.");
-      setLoading(false);
+      if (!silent) setLoading(false);
       return;
     }
-    setLoading(true);
-    setError(null);
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
 
     try {
       void withTimeout(syncSupabaseAuthSession(client), SYNC_SESSION_TIMEOUT_MS, "Sesión").catch(() => {});
@@ -64,9 +80,14 @@ export function useCatalogProperties() {
       if (gen !== fetchGenerationRef.current) return;
 
       if (lastErr) {
-        setError(lastErr.message);
-        setProperties([]);
+        if (!silent) {
+          setError(lastErr.message);
+          setProperties([]);
+        } else if (import.meta.env.DEV) {
+          console.warn("[catalog] silent reload failed:", lastErr.message);
+        }
       } else {
+        if (silent) setError(null);
         const list = rows ?? [];
         setProperties(list.map((row) => rowToProperty(row)));
         if (import.meta.env.DEV && list.length === 0) {
@@ -74,7 +95,7 @@ export function useCatalogProperties() {
         }
       }
     } finally {
-      if (gen === fetchGenerationRef.current) {
+      if (gen === fetchGenerationRef.current && !silent) {
         setLoading(false);
       }
     }
@@ -84,5 +105,5 @@ export function useCatalogProperties() {
     void reload();
   }, [reload]);
 
-  return { properties, loading, error, reload };
+  return { properties, loading, error, reload, applySavedProperty };
 }

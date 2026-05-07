@@ -39,6 +39,7 @@ import {
   TextSearch,
   Copy,
   Hash,
+  History,
 } from "lucide-react";
 import { AdminSiteEditor } from "../components/admin/AdminSiteEditor";
 import { useAuth, type User } from "../contexts/AuthContext";
@@ -92,6 +93,7 @@ import { copyPublicPageUrl } from "../lib/copyPublicLink";
 import { Property } from "../components/PropertyCard";
 import { useCatalogProperties } from "../hooks/useCatalogProperties";
 import {
+  idFromPropertyWriteResult,
   insertProperty,
   softDeleteProperty,
   updateProperty,
@@ -104,6 +106,16 @@ import {
   upsertDevelopment,
   softDeleteDevelopment,
 } from "../lib/supabaseDevelopments";
+import { insertCatalogActivity } from "../lib/supabaseCatalogActivities";
+import {
+  buildDevelopmentSaveEvent,
+  buildDevelopmentSnapshot,
+  buildPropertySaveEvent,
+  buildPropertySnapshot,
+  isInventoryTimelineAction,
+  type CatalogActivityAction,
+} from "../lib/catalogActivityPayload";
+import { AdminActivitiesModule } from "../components/admin/AdminActivitiesModule";
 import { AGENDA_STORAGE_KEY } from "../data/agenda";
 import { AdminAgendaModule } from "../components/admin/AdminAgendaModule";
 import { PropertyMap } from "../components/PropertyMap";
@@ -165,6 +177,7 @@ type TabType =
   | "agenda"
   | "properties"
   | "developments"
+  | "activities"
   | "company"
   | "messages"
   | "profile";
@@ -227,7 +240,7 @@ export function AdminPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [leadsLoading, setLeadsLoading] = useState(true);
   const [leadsError, setLeadsError] = useState<string | null>(null);
-  const { properties, reload: reloadProperties } = useCatalogProperties();
+  const { properties, reload: reloadProperties, applySavedProperty } = useCatalogProperties();
   const [newPropertyDraftId, setNewPropertyDraftId] = useState(() => crypto.randomUUID());
   const [developments, setDevelopments] = useState<Development[]>([]);
   const [developmentsLoading, setDevelopmentsLoading] = useState(true);
@@ -292,6 +305,34 @@ export function AdminPage() {
   const canAccessCompanyModule = !isAdvisor;
   // Inventario (propiedades/desarrollos) solo editable por administradores.
   const canManageInventory = user?.role === "admin";
+
+  const logCatalogActivity = useCallback(
+    async (row: {
+      entity_type: "property" | "development";
+      entity_id: string;
+      action: CatalogActivityAction;
+      snapshot: Record<string, unknown>;
+      diff?: Record<string, unknown> | null;
+    }) => {
+      const client = getSupabaseClient();
+      if (!client || !user?.id) return;
+      const { error } = await insertCatalogActivity(client, {
+        entity_type: row.entity_type,
+        entity_id: row.entity_id,
+        action: row.action,
+        actor_user_id: user.id,
+        actor_name: user.name,
+        source: "admin",
+        snapshot: row.snapshot,
+        diff: row.diff ?? null,
+      });
+      if (error && import.meta.env.DEV) {
+        console.warn("[Viterra] catalog_activities:", error.message);
+      }
+    },
+    [user]
+  );
+
   // Verificar autenticación y cargar datos
   useEffect(() => {
     if (!authReady) return;
@@ -670,6 +711,7 @@ export function AdminPage() {
 
   const executeDeleteProperty = useCallback(async () => {
     if (!deletePropertyId) return;
+    const deletedSnapshot = properties.find((p) => p.id === deletePropertyId);
     const client = getSupabaseClient();
     if (client) {
       const { error: delErr } = await softDeleteProperty(client, deletePropertyId);
@@ -678,10 +720,19 @@ export function AdminPage() {
         return;
       }
     }
+    if (deletedSnapshot) {
+      void logCatalogActivity({
+        entity_type: "property",
+        entity_id: deletedSnapshot.id,
+        action: "deleted",
+        snapshot: buildPropertySnapshot(deletedSnapshot),
+        diff: null,
+      });
+    }
     await reloadProperties();
     setPropertyForm((f) => (f?.property?.id === deletePropertyId ? null : f));
     setDeletePropertyId(null);
-  }, [deletePropertyId, reloadProperties]);
+  }, [deletePropertyId, logCatalogActivity, properties, reloadProperties]);
 
   const handleDeleteLead = useCallback(async (id: string) => {
     const client = getSupabaseClient();
@@ -696,46 +747,102 @@ export function AdminPage() {
     setLeadDialog((d) => (d?.lead.id === id ? null : d));
   }, []);
 
-  const handleDeleteDevelopment = useCallback(async (id: string) => {
-    const client = getSupabaseClient();
-    if (client) {
-      const { error } = await softDeleteDevelopment(client, id);
-      if (error) {
-        toast.error(error.message);
+  const handleDeleteDevelopment = useCallback(
+    async (id: string) => {
+      const deletedDev = developments.find((d) => d.id === id);
+      const client = getSupabaseClient();
+      if (client) {
+        const { error } = await softDeleteDevelopment(client, id);
+        if (error) {
+          toast.error(error.message);
+          return;
+        }
+        if (deletedDev) {
+          void logCatalogActivity({
+            entity_type: "development",
+            entity_id: deletedDev.id,
+            action: "deleted",
+            snapshot: buildDevelopmentSnapshot(deletedDev),
+            diff: null,
+          });
+        }
+        const { data, error: fetchErr } = await fetchDevelopmentsWithUnits(client, { publicOnly: false });
+        if (fetchErr) toast.error(fetchErr.message);
+        else setDevelopments(data ?? []);
         return;
       }
-      const { data, error: fetchErr } = await fetchDevelopmentsWithUnits(client, { publicOnly: false });
-      if (fetchErr) toast.error(fetchErr.message);
-      else setDevelopments(data ?? []);
-      return;
-    }
-    setDevelopments((prev) => prev.filter((row) => row.id !== id));
-  }, []);
+      if (deletedDev) {
+        void logCatalogActivity({
+          entity_type: "development",
+          entity_id: deletedDev.id,
+          action: "deleted",
+          snapshot: buildDevelopmentSnapshot(deletedDev),
+          diff: null,
+        });
+      }
+      setDevelopments((prev) => prev.filter((row) => row.id !== id));
+    },
+    [developments, logCatalogActivity]
+  );
 
-  const handleSaveDevelopment = useCallback(async (payload: Development) => {
-    const normalizedPayload: Development = {
-      ...payload,
-      featured: Boolean(payload.featured),
-    };
-    const client = getSupabaseClient();
-    if (client) {
-      const res = await upsertDevelopment(client, normalizedPayload);
-      if (res.error) {
-        toast.error(res.error.message);
+  const handleSaveDevelopment = useCallback(
+    async (payload: Development) => {
+      const normalizedPayload: Development = {
+        ...payload,
+        featured: Boolean(payload.featured),
+      };
+      const prev = developments.find((d) => d.id === normalizedPayload.id);
+      const existed = developments.some((d) => d.id === normalizedPayload.id);
+      const client = getSupabaseClient();
+      if (client) {
+        const res = await upsertDevelopment(client, normalizedPayload);
+        if (res.error) {
+          toast.error(res.error.message);
+          return;
+        }
+        const { action, diff } = buildDevelopmentSaveEvent(prev, normalizedPayload, existed);
+        if (isInventoryTimelineAction(action)) {
+          void logCatalogActivity({
+            entity_type: "development",
+            entity_id: normalizedPayload.id,
+            action,
+            snapshot: buildDevelopmentSnapshot(normalizedPayload),
+            diff,
+          });
+        }
+        const { data, error: fetchErr } = await fetchDevelopmentsWithUnits(client, { publicOnly: false });
+        if (fetchErr) {
+          toast.error(fetchErr.message);
+          return;
+        }
+        setDevelopments(data ?? []);
+        toast.success(
+          existed ? "Desarrollo actualizado correctamente." : "Desarrollo añadido correctamente."
+        );
         return;
       }
-      const { data, error: fetchErr } = await fetchDevelopmentsWithUnits(client, { publicOnly: false });
-      if (fetchErr) toast.error(fetchErr.message);
-      else setDevelopments(data ?? []);
-      return;
-    }
-    setDevelopments((prev) => {
-      const exists = prev.some((row) => row.id === normalizedPayload.id);
-      return exists
-        ? prev.map((row) => (row.id === normalizedPayload.id ? normalizedPayload : row))
-        : [...prev, normalizedPayload];
-    });
-  }, []);
+      const { action, diff } = buildDevelopmentSaveEvent(prev, normalizedPayload, existed);
+      if (isInventoryTimelineAction(action)) {
+        void logCatalogActivity({
+          entity_type: "development",
+          entity_id: normalizedPayload.id,
+          action,
+          snapshot: buildDevelopmentSnapshot(normalizedPayload),
+          diff,
+        });
+      }
+      setDevelopments((prevState) => {
+        const existsLocal = prevState.some((row) => row.id === normalizedPayload.id);
+        return existsLocal
+          ? prevState.map((row) => (row.id === normalizedPayload.id ? normalizedPayload : row))
+          : [...prevState, normalizedPayload];
+      });
+      toast.success(
+        existed ? "Desarrollo actualizado correctamente." : "Desarrollo añadido correctamente."
+      );
+    },
+    [developments, logCatalogActivity]
+  );
 
   const leadColumnStatuses = useMemo(() => {
     const base =
@@ -1227,6 +1334,13 @@ export function AdminPage() {
         toast.error("Supabase no configurado.");
         return;
       }
+      const { hasSession } = await syncSupabaseAuthSession(client);
+      if (!hasSession) {
+        toast.error(
+          "No hay sesión activa. Las políticas de seguridad (RLS) solo permiten guardar como usuario autenticado — inicia sesión de nuevo e inténtalo."
+        );
+        return;
+      }
       const prev = properties.find((x) => x.id === normalizedProperty.id);
       const wasFeatured = Boolean(prev?.featured);
       const otherFeatured = properties.filter((x) => x.featured && x.id !== normalizedProperty.id).length;
@@ -1237,16 +1351,49 @@ export function AdminPage() {
         return;
       }
       const exists = properties.some((x) => x.id === normalizedProperty.id);
-      const propRes = exists
+      let propRes = exists
         ? await updateProperty(client, normalizedProperty)
         : await insertProperty(client, normalizedProperty, normalizedProperty.id);
       if (propRes.error) {
         toast.error(propRes.error.message);
         return;
       }
-      await reloadProperties();
+      let returnedId = idFromPropertyWriteResult(propRes.data);
+      if (!returnedId) {
+        await syncSupabaseAuthSession(client);
+        propRes = exists
+          ? await updateProperty(client, normalizedProperty)
+          : await insertProperty(client, normalizedProperty, normalizedProperty.id);
+        if (propRes.error) {
+          toast.error(propRes.error.message);
+          return;
+        }
+        returnedId = idFromPropertyWriteResult(propRes.data);
+      }
+      // No exigir fila devuelta en el JSON: PostgREST a veces no devuelve cuerpo y `error` sigue siendo null.
+      // Refresco en segundo plano: no bloquea la UI; si hubiera discrepancia, el listado silencioso la corrige.
+      if (import.meta.env.DEV && !returnedId && !propRes.error) {
+        console.warn(
+          "[Viterra] Guardado sin id en respuesta; se continúa si no hay error. Revisa políticas RLS si el listado no refleja el cambio."
+        );
+      }
+      applySavedProperty(normalizedProperty);
+      const { action, diff } = buildPropertySaveEvent(prev, normalizedProperty, exists);
+      if (isInventoryTimelineAction(action)) {
+        void logCatalogActivity({
+          entity_type: "property",
+          entity_id: normalizedProperty.id,
+          action,
+          snapshot: buildPropertySnapshot(normalizedProperty),
+          diff,
+        });
+      }
+      void reloadProperties({ silent: true });
+      toast.success(
+        exists ? "Propiedad actualizada correctamente." : "Propiedad añadida al catálogo correctamente."
+      );
     },
-    [properties, reloadProperties, canManageInventory]
+    [applySavedProperty, properties, reloadProperties, canManageInventory, logCatalogActivity]
   );
 
   const handleTogglePropertyFeatured = useCallback(
@@ -1271,10 +1418,11 @@ export function AdminPage() {
         toast.error(error.message);
         return;
       }
+      applySavedProperty({ ...property, featured: next });
       toast.success(next ? "Propiedad destacada en la portada." : "Propiedad ya no aparece destacada en la portada.");
-      await reloadProperties();
+      void reloadProperties({ silent: true });
     },
-    [properties, reloadProperties]
+    [properties, reloadProperties, applySavedProperty]
   );
 
   const openLeadDetail = useCallback(
@@ -1702,6 +1850,13 @@ export function AdminPage() {
         keywords: ["desarrollos", "proyectos", "desarrollo"],
         action: () => setActiveTab("developments"),
       },
+      {
+        id: "activities",
+        title: "Actividades",
+        description: "Timeline del catálogo: propiedades y desarrollos",
+        keywords: ["actividades", "timeline", "historial", "cambios", "precio", "inventario"],
+        action: () => setActiveTab("activities"),
+      },
       ...(canAccessCompanyModule
         ? (isGroupLeader
         ? [
@@ -1952,6 +2107,16 @@ export function AdminPage() {
                   <Building2 className="h-4 w-4" strokeWidth={activeTab === "developments" ? 2 : 1.75} />
                   Desarrollos
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("activities")}
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                    activeTab === "activities" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  <History className="h-4 w-4" strokeWidth={activeTab === "activities" ? 2 : 1.75} />
+                  Actividades
+                </button>
                 {canAccessCompanyModule && (
                   <button
                     type="button"
@@ -2188,6 +2353,7 @@ export function AdminPage() {
               { id: "agenda", label: "Agenda", icon: Calendar },
               { id: "properties", label: "Propiedades", icon: Home },
               { id: "developments", label: "Desarrollos", icon: Building2 },
+              { id: "activities", label: "Actividades", icon: History },
               ...(canAccessCompanyModule
                 ? [{ id: "company", label: isGroupLeader ? "Pipeline de ventas" : "Mi empresa", icon: Briefcase }]
                 : []),
@@ -2904,6 +3070,14 @@ export function AdminPage() {
         )}
 
         {activeTab === "agenda" && <AdminAgendaModule />}
+
+        {activeTab === "activities" && (
+          <AdminActivitiesModule
+            onOpenInModule={(entityType) => {
+              setActiveTab(entityType === "property" ? "properties" : "developments");
+            }}
+          />
+        )}
 
         {/* Properties Tab */}
         {activeTab === "properties" && (
