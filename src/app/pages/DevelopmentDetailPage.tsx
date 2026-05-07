@@ -86,13 +86,14 @@ export function DevelopmentDetailPage() {
   });
   const [submitted, setSubmitted] = useState(false);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
+  const [mapViewMode, setMapViewMode] = useState<"map" | "satellite">("map");
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     const initMap = async () => {
-      if (!mapRef.current || mapInstanceRef.current || !development) return;
+      if (!mapRef.current || !development) return;
 
       try {
         const L = await import("leaflet");
@@ -102,17 +103,24 @@ export function DevelopmentDetailPage() {
           .map(mapRef.current)
           .setView([development.coordinates.lat, development.coordinates.lng], 15);
 
-        (L as any)
-          .tileLayer(
-            "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-            {
+        const isSatellite = mapViewMode === "satellite";
+        const tileLayerUrl = isSatellite
+          ? "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+          : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+        const tileLayerOptions = isSatellite
+          ? {
+              attribution:
+                'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+              maxZoom: 20,
+            }
+          : {
               attribution:
                 '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
               subdomains: "abcd",
               maxZoom: 20,
-            }
-          )
-          .addTo(map);
+            };
+
+        (L as any).tileLayer(tileLayerUrl, tileLayerOptions).addTo(map);
 
         const customIcon = (L as any).divIcon({
           className: "custom-marker",
@@ -128,11 +136,15 @@ export function DevelopmentDetailPage() {
           iconAnchor: [20, 20],
         });
 
-        (L as any)
+        const marker = (L as any)
           .marker([development.coordinates.lat, development.coordinates.lng], {
             icon: customIcon,
           })
           .addTo(map);
+        const googleMapsLink = `https://www.google.com/maps/search/?api=1&query=${development.coordinates.lat},${development.coordinates.lng}`;
+        marker.on("click", () => {
+          window.open(googleMapsLink, "_blank", "noopener,noreferrer");
+        });
 
         mapInstanceRef.current = map;
       } catch (error) {
@@ -149,6 +161,14 @@ export function DevelopmentDetailPage() {
       mapInstanceRef.current = null;
       return;
     }
+
+    // Re-crea el mapa al cambiar entre Mapa/Satélite para aplicar la nueva capa.
+    try {
+      mapInstanceRef.current?.remove();
+    } catch (error) {
+      console.error("Error removing map:", error);
+    }
+    mapInstanceRef.current = null;
 
     let cancelled = false;
     let rafId: number | null = null;
@@ -176,7 +196,7 @@ export function DevelopmentDetailPage() {
       if (rafId != null) cancelAnimationFrame(rafId);
       if (invalidateId != null) window.clearTimeout(invalidateId);
     };
-  }, [activeTab, development]);
+  }, [activeTab, development, mapViewMode]);
 
   useEffect(() => {
     return () => {
@@ -214,6 +234,33 @@ export function DevelopmentDetailPage() {
   const whatsappContactHref = useMemo(
     () => whatsappHrefFromStoredPhone(contactPhoneRaw),
     [contactPhoneRaw]
+  );
+  const locationQuery = useMemo(
+    () =>
+      encodeURIComponent(
+        [development?.fullAddress, development?.colony, development?.location]
+          .filter((v): v is string => Boolean(v?.trim()))
+          .join(", ")
+      ),
+    [development?.fullAddress, development?.colony, development?.location]
+  );
+  const googleMapsUrl = useMemo(
+    () =>
+      development
+        ? `https://www.google.com/maps/search/?api=1&query=${development.coordinates.lat},${development.coordinates.lng}`
+        : "",
+    [development]
+  );
+  const appleMapsUrl = useMemo(
+    () => (locationQuery ? `https://maps.apple.com/?q=${locationQuery}` : ""),
+    [locationQuery]
+  );
+  const wazeUrl = useMemo(
+    () =>
+      development
+        ? `https://www.waze.com/ul?ll=${development.coordinates.lat},${development.coordinates.lng}&navigate=yes`
+        : "",
+    [development]
   );
 
   if (loading) {
@@ -705,6 +752,68 @@ export function DevelopmentDetailPage() {
                         <p className="text-sm text-slate-700" style={{ fontWeight: 500 }}>
                           {[development.fullAddress, development.colony, "Guadalajara, Jalisco"].filter(Boolean).join(", ")}
                         </p>
+                        <div className="flex flex-wrap gap-2">
+                          {googleMapsUrl ? (
+                            <a
+                              href={googleMapsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50"
+                              style={{ fontWeight: 600 }}
+                            >
+                              <MapPin className="h-3.5 w-3.5" strokeWidth={1.5} />
+                              Google Maps
+                            </a>
+                          ) : null}
+                          {appleMapsUrl ? (
+                            <a
+                              href={appleMapsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50"
+                              style={{ fontWeight: 600 }}
+                            >
+                              Apple Maps
+                            </a>
+                          ) : null}
+                          {wazeUrl ? (
+                            <a
+                              href={wazeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50"
+                              style={{ fontWeight: 600 }}
+                            >
+                              Waze
+                            </a>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setMapViewMode("map")}
+                            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                              mapViewMode === "map"
+                                ? "border-slate-900 bg-slate-900 text-white"
+                                : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                            }`}
+                            style={{ fontWeight: 600 }}
+                          >
+                            Mapa
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMapViewMode("satellite")}
+                            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                              mapViewMode === "satellite"
+                                ? "border-slate-900 bg-slate-900 text-white"
+                                : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                            }`}
+                            style={{ fontWeight: 600 }}
+                          >
+                            Satélite
+                          </button>
+                        </div>
                         <style>{`
                           .custom-marker {
                             background: none;

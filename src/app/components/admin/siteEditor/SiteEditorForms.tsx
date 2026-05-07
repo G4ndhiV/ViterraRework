@@ -172,9 +172,18 @@ export function ContactEditorForm({
       </EditorSection>
       )}
 
-      {s("contact-info") && (
-      <EditorSection title="Datos de contacto" sectionId="contact-info">
-        <LabeledField label="Título del bloque">
+      {s("contact-visit") && (
+      <EditorSection title="Visítanos y mapa" sectionId="contact-visit">
+        <LabeledField label="Kicker (pequeño arriba)">
+          <TextInput value={draft.visitKicker} onChange={(v) => p({ visitKicker: v })} />
+        </LabeledField>
+        <LabeledField label="Título principal">
+          <TextInput value={draft.visitTitle} onChange={(v) => p({ visitTitle: v })} />
+        </LabeledField>
+        <LabeledField label="Texto introductorio">
+          <TextArea value={draft.visitIntro} onChange={(v) => p({ visitIntro: v })} rows={3} />
+        </LabeledField>
+        <LabeledField label="Título del bloque (lista)">
           <TextInput value={draft.infoTitle} onChange={(v) => p({ infoTitle: v })} />
         </LabeledField>
         <LabeledField label="Título — Dirección">
@@ -201,6 +210,26 @@ export function ContactEditorForm({
         <LabeledField label="Horario">
           <TextArea value={draft.hoursLines} onChange={(v) => p({ hoursLines: v })} rows={4} />
         </LabeledField>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <LabeledField label="Latitud (mapa)">
+            <NumberInput value={draft.mapLat} onChange={(v) => p({ mapLat: v })} step="any" />
+          </LabeledField>
+          <LabeledField label="Longitud (mapa)">
+            <NumberInput value={draft.mapLng} onChange={(v) => p({ mapLng: v })} step="any" />
+          </LabeledField>
+        </div>
+        <LabeledField label="Título en el mapa (ventana emergente)">
+          <TextInput value={draft.mapPopupTitle} onChange={(v) => p({ mapPopupTitle: v })} />
+        </LabeledField>
+        <LabeledField label="Dirección en el mapa (ventana)" hint="Varias líneas: se respetan en el globo del mapa.">
+          <TextArea value={draft.mapPopupAddress} onChange={(v) => p({ mapPopupAddress: v })} rows={3} />
+        </LabeledField>
+        <LabeledField label="Etiqueta pequeña (encabezado mapa en página)">
+          <TextInput value={draft.mapSectionKicker} onChange={(v) => p({ mapSectionKicker: v })} />
+        </LabeledField>
+        <LabeledField label="Título encabezado mapa en página">
+          <TextInput value={draft.mapSectionTitle} onChange={(v) => p({ mapSectionTitle: v })} />
+        </LabeledField>
       </EditorSection>
       )}
 
@@ -223,6 +252,9 @@ export function ContactEditorForm({
 
       {s("contact-form") && (
       <EditorSection title="Formulario" sectionId="contact-form">
+        <LabeledField label="Kicker (pequeño arriba del título)">
+          <TextInput value={draft.formKicker} onChange={(v) => p({ formKicker: v })} />
+        </LabeledField>
         <LabeledField label="Título del formulario">
           <TextInput value={draft.formTitle} onChange={(v) => p({ formTitle: v })} />
         </LabeledField>
@@ -235,27 +267,135 @@ export function ContactEditorForm({
       </EditorSection>
       )}
 
-      {s("contact-map") && (
-      <EditorSection title="Mapa" sectionId="contact-map">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <LabeledField label="Latitud">
-            <NumberInput value={draft.mapLat} onChange={(v) => p({ mapLat: v })} step="any" />
-          </LabeledField>
-          <LabeledField label="Longitud">
-            <NumberInput value={draft.mapLng} onChange={(v) => p({ mapLng: v })} step="any" />
-          </LabeledField>
-        </div>
-        <LabeledField label="Título en el mapa (ventana)">
-          <TextInput value={draft.mapPopupTitle} onChange={(v) => p({ mapPopupTitle: v })} />
+      {s("contact-faq") && (
+      <EditorSection title="Preguntas frecuentes" sectionId="contact-faq">
+        <LabeledField label="Kicker">
+          <TextInput value={draft.faqKicker} onChange={(v) => p({ faqKicker: v })} />
         </LabeledField>
-        <LabeledField label="Dirección en el mapa (ventana)" hint="Varias líneas: se respetan en el globo del mapa.">
-          <TextArea value={draft.mapPopupAddress} onChange={(v) => p({ mapPopupAddress: v })} rows={3} />
+        <LabeledField label="Título">
+          <TextInput value={draft.faqTitle} onChange={(v) => p({ faqTitle: v })} />
         </LabeledField>
-        <LabeledField label="Etiqueta pequeña (sección mapa abajo)">
-          <TextInput value={draft.mapSectionKicker} onChange={(v) => p({ mapSectionKicker: v })} />
+        {draft.faq.map((item, i) => (
+          <div key={i} className="rounded-lg border border-slate-200 p-4 space-y-3">
+            <p className="text-xs font-semibold text-slate-500">Pregunta {i + 1}</p>
+            <LabeledField label="Pregunta">
+              <TextInput
+                value={item.question}
+                onChange={(v) => {
+                  const faq = draft.faq.map((f, j) => (j === i ? { ...f, question: v } : f));
+                  p({ faq });
+                }}
+              />
+            </LabeledField>
+            <LabeledField label="Respuesta">
+              <TextArea
+                value={item.answer}
+                onChange={(v) => {
+                  const faq = draft.faq.map((f, j) => (j === i ? { ...f, answer: v } : f));
+                  p({ faq });
+                }}
+                rows={3}
+              />
+            </LabeledField>
+          </div>
+        ))}
+      </EditorSection>
+      )}
+
+      {s("contact-social") && (
+      <EditorSection title="Redes y enlaces" sectionId="contact-social">
+        <LabeledField label="Kicker">
+          <TextInput value={draft.socialKicker} onChange={(v) => p({ socialKicker: v })} />
         </LabeledField>
-        <LabeledField label="Título sección mapa">
-          <TextInput value={draft.mapSectionTitle} onChange={(v) => p({ mapSectionTitle: v })} />
+        <LabeledField label="Título">
+          <TextInput value={draft.socialTitle} onChange={(v) => p({ socialTitle: v })} />
+        </LabeledField>
+        <LabeledField label="Texto">
+          <TextArea value={draft.socialIntro} onChange={(v) => p({ socialIntro: v })} rows={2} />
+        </LabeledField>
+        <p className="text-xs text-slate-500">URLs de redes (opcional; vacío = enlaces por defecto del sitio)</p>
+        <LabeledField label="Facebook">
+          <TextInput
+            value={draft.social.facebook ?? ""}
+            onChange={(v) => p({ social: { ...draft.social, facebook: v || undefined } })}
+          />
+        </LabeledField>
+        <LabeledField label="Instagram">
+          <TextInput
+            value={draft.social.instagram ?? ""}
+            onChange={(v) => p({ social: { ...draft.social, instagram: v || undefined } })}
+          />
+        </LabeledField>
+        <LabeledField label="X (Twitter)">
+          <TextInput
+            value={draft.social.twitter ?? ""}
+            onChange={(v) => p({ social: { ...draft.social, twitter: v || undefined } })}
+          />
+        </LabeledField>
+        <LabeledField label="LinkedIn">
+          <TextInput
+            value={draft.social.linkedin ?? ""}
+            onChange={(v) => p({ social: { ...draft.social, linkedin: v || undefined } })}
+          />
+        </LabeledField>
+        <LabeledField label="YouTube">
+          <TextInput
+            value={draft.social.youtube ?? ""}
+            onChange={(v) => p({ social: { ...draft.social, youtube: v || undefined } })}
+          />
+        </LabeledField>
+        <LabeledField label="Texto CTA asesores">
+          <TextInput value={draft.advisorCta} onChange={(v) => p({ advisorCta: v })} />
+        </LabeledField>
+        <LabeledField label="Enlace venta — texto">
+          <TextInput value={draft.deepLinks.saleLabel} onChange={(v) => p({ deepLinks: { ...draft.deepLinks, saleLabel: v } })} />
+        </LabeledField>
+        <LabeledField label="Enlace venta — URL">
+          <TextInput value={draft.deepLinks.saleHref} onChange={(v) => p({ deepLinks: { ...draft.deepLinks, saleHref: v } })} />
+        </LabeledField>
+        <LabeledField label="Enlace renta — texto">
+          <TextInput value={draft.deepLinks.rentLabel} onChange={(v) => p({ deepLinks: { ...draft.deepLinks, rentLabel: v } })} />
+        </LabeledField>
+        <LabeledField label="Enlace renta — URL">
+          <TextInput value={draft.deepLinks.rentHref} onChange={(v) => p({ deepLinks: { ...draft.deepLinks, rentHref: v } })} />
+        </LabeledField>
+        <LabeledField label="Enlace servicios — texto">
+          <TextInput
+            value={draft.deepLinks.servicesLabel}
+            onChange={(v) => p({ deepLinks: { ...draft.deepLinks, servicesLabel: v } })}
+          />
+        </LabeledField>
+        <LabeledField label="Enlace servicios — URL">
+          <TextInput
+            value={draft.deepLinks.servicesHref}
+            onChange={(v) => p({ deepLinks: { ...draft.deepLinks, servicesHref: v } })}
+          />
+        </LabeledField>
+      </EditorSection>
+      )}
+
+      {s("contact-closing") && (
+      <EditorSection title="Cierre" sectionId="contact-closing">
+        <LabeledField label="Kicker">
+          <TextInput value={draft.closingKicker} onChange={(v) => p({ closingKicker: v })} />
+        </LabeledField>
+        <LabeledField label="Título">
+          <TextInput value={draft.closingTitle} onChange={(v) => p({ closingTitle: v })} />
+        </LabeledField>
+        <LabeledField label="Subtítulo">
+          <TextArea value={draft.closingSubtitle} onChange={(v) => p({ closingSubtitle: v })} rows={2} />
+        </LabeledField>
+        <LabeledField label="Botón principal — texto">
+          <TextInput value={draft.closingBtnPrimary} onChange={(v) => p({ closingBtnPrimary: v })} />
+        </LabeledField>
+        <LabeledField label="Botón principal — URL o ancla (#id)">
+          <TextInput value={draft.closingBtnPrimaryHref} onChange={(v) => p({ closingBtnPrimaryHref: v })} />
+        </LabeledField>
+        <LabeledField label="Botón secundario — texto">
+          <TextInput value={draft.closingBtnSecondary} onChange={(v) => p({ closingBtnSecondary: v })} />
+        </LabeledField>
+        <LabeledField label="Botón secundario — URL">
+          <TextInput value={draft.closingBtnSecondaryHref} onChange={(v) => p({ closingBtnSecondaryHref: v })} />
         </LabeledField>
       </EditorSection>
       )}
