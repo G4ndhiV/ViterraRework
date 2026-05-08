@@ -40,6 +40,7 @@ import {
   Copy,
   Hash,
   History,
+  BarChart3,
 } from "lucide-react";
 import { AdminSiteEditor } from "../components/admin/AdminSiteEditor";
 import { useAuth, type User } from "../contexts/AuthContext";
@@ -116,7 +117,11 @@ import {
   type CatalogActivityAction,
 } from "../lib/catalogActivityPayload";
 import { AdminActivitiesModule } from "../components/admin/AdminActivitiesModule";
-import { AGENDA_STORAGE_KEY } from "../data/agenda";
+import {
+  AGENDA_STORAGE_KEY,
+  normalizeStoredAgenda,
+  type AgendaAppointment,
+} from "../data/agenda";
 import { AdminAgendaModule } from "../components/admin/AdminAgendaModule";
 import { PropertyMap } from "../components/PropertyMap";
 import { AdminDevelopmentsManager } from "../components/admin/AdminDevelopmentsManager";
@@ -125,6 +130,7 @@ import { AdminUsersManager } from "../components/admin/AdminUsersManager";
 import { AdminUserProfilePanel } from "../components/admin/AdminUserProfilePanel";
 import { AdvisorDashboard } from "../components/admin/AdvisorDashboard";
 import { GroupLeaderDashboard } from "../components/admin/GroupLeaderDashboard";
+import { KPIsModule } from "../components/admin/kpis/KPIsModule";
 import { PipelineStageReorderRow } from "../components/admin/PipelineStageReorderRow";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
@@ -171,6 +177,7 @@ import { foldSearchText } from "../lib/searchText";
 
 type TabType =
   | "dashboard"
+  | "kpis"
   | "leads"
   | "clients"
   | "pipeline"
@@ -299,6 +306,8 @@ export function AdminPage() {
     null
   );
   const [deletePropertyId, setDeletePropertyId] = useState<string | null>(null);
+  /** Agenda local (localStorage). Se hidrata para alimentar las métricas de citas en KPI's. */
+  const [appointments, setAppointments] = useState<AgendaAppointment[]>([]);
   const isGroupLeader = user?.role === "lider_grupo";
   const isAdmin = user?.role === "admin";
   const isAdvisor = user?.role === "asesor";
@@ -332,6 +341,21 @@ export function AdminPage() {
     },
     [user]
   );
+
+  // Carga la agenda local para alimentar las métricas de citas en KPI's.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(AGENDA_STORAGE_KEY);
+      if (!raw) {
+        setAppointments([]);
+        return;
+      }
+      const parsed = JSON.parse(raw) as unknown;
+      setAppointments(normalizeStoredAgenda(parsed));
+    } catch {
+      setAppointments([]);
+    }
+  }, [activeTab]);
 
   // Verificar autenticación y cargar datos
   useEffect(() => {
@@ -1812,6 +1836,13 @@ export function AdminPage() {
         action: () => setActiveTab("dashboard"),
       },
       {
+        id: "kpis",
+        title: "KPI's",
+        description: "Métricas detalladas, metas y comparativos por rol",
+        keywords: ["kpi", "kpis", "metricas", "métricas", "indicadores", "meta", "metas", "tendencia"],
+        action: () => setActiveTab("kpis"),
+      },
+      {
         id: "leads",
         title: "Leads",
         description: "Pipeline y seguimiento comercial",
@@ -2052,6 +2083,16 @@ export function AdminPage() {
                 >
                   <LayoutDashboard className="h-4 w-4" strokeWidth={activeTab === "dashboard" ? 2 : 1.75} />
                   Dashboard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("kpis")}
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                    activeTab === "kpis" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  <BarChart3 className="h-4 w-4" strokeWidth={activeTab === "kpis" ? 2 : 1.75} />
+                  Reportes
                 </button>
                 <button
                   type="button"
@@ -2349,6 +2390,7 @@ export function AdminPage() {
           <nav className="grid grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Navegación del panel admin">
             {[
               { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+              { id: "kpis", label: "KPI's", icon: BarChart3 },
               { id: "leads", label: "Leads", icon: Users },
               { id: "agenda", label: "Agenda", icon: Calendar },
               { id: "properties", label: "Propiedades", icon: Home },
@@ -2517,6 +2559,20 @@ export function AdminPage() {
               </>
             )}
           </div>
+        )}
+
+        {/* KPI's Tab */}
+        {activeTab === "kpis" && (
+          <KPIsModule
+            user={user}
+            users={users}
+            groups={userGroups}
+            leads={leads}
+            properties={properties}
+            appointments={appointments}
+            customStages={customKanbanStages}
+            stageOrder={pipelineStageOrder}
+          />
         )}
 
         {/* Leads Tab */}
