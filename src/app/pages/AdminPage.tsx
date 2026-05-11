@@ -101,6 +101,11 @@ import {
   updatePropertyFeatured,
   MAX_FEATURED_PROPERTIES,
 } from "../lib/supabaseProperties";
+import {
+  sortCatalogProperties,
+  CATALOG_PROPERTY_SORT_OPTIONS,
+  type CatalogPropertySortKey,
+} from "../lib/catalogPropertySort";
 import type { Development } from "../data/developments";
 import {
   fetchDevelopmentsWithUnits,
@@ -268,6 +273,7 @@ export function AdminPage() {
   const [propertyLocationFilter, setPropertyLocationFilter] = useState("all");
   /** Misma noción que en desarrollos: todas / solo destacadas (portada) / sin destacar. */
   const [propertyFeaturedFilter, setPropertyFeaturedFilter] = useState<"all" | "featured" | "normal">("all");
+  const [propertyCatalogSort, setPropertyCatalogSort] = useState<CatalogPropertySortKey>("newest");
   const [expandedLeaderGroupId, setExpandedLeaderGroupId] = useState<string | null>(null);
   const [propertyInventoryView, setPropertyInventoryView] = useState<"cards" | "list" | "map">("cards");
   const [adminHeaderQuery, setAdminHeaderQuery] = useState("");
@@ -1743,39 +1749,56 @@ export function AdminPage() {
     setLeadsTableSectionCollapsed((prev) => ({ ...prev, [statusId]: !prev[statusId] }));
   }, []);
 
-  const filteredProperties = properties.filter((property) => {
-    const q = foldSearchText(propertySearchQuery);
-    const matchesSearch = !q || (
-      foldSearchText(property.title).includes(q) ||
-      foldSearchText(property.location).includes(q) ||
-      foldSearchText(property.type).includes(q) ||
-      foldSearchText(property.status).includes(q)
-    );
-    const refQ = foldSearchText(propertyReferenceCodeQuery);
-    const matchesReferenceCode =
-      !refQ || foldSearchText(property.referenceCode ?? "").includes(refQ);
-    const matchesOperation =
-      propertyOperationFilter === "all" || property.status === propertyOperationFilter;
-    const matchesType =
-      propertyTypeFilter === "all" || property.type === propertyTypeFilter;
-    const matchesLocation =
-      propertyLocationFilter === "all" || property.location === propertyLocationFilter;
+  const propertiesMatchingInventoryFilters = useMemo(
+    () =>
+      properties.filter((property) => {
+        const q = foldSearchText(propertySearchQuery);
+        const matchesSearch =
+          !q ||
+          foldSearchText(property.title).includes(q) ||
+          foldSearchText(property.location).includes(q) ||
+          foldSearchText(property.type).includes(q) ||
+          foldSearchText(property.status).includes(q);
+        const refQ = foldSearchText(propertyReferenceCodeQuery);
+        const matchesReferenceCode =
+          !refQ || foldSearchText(property.referenceCode ?? "").includes(refQ);
+        const matchesOperation =
+          propertyOperationFilter === "all" || property.status === propertyOperationFilter;
+        const matchesType =
+          propertyTypeFilter === "all" || property.type === propertyTypeFilter;
+        const matchesLocation =
+          propertyLocationFilter === "all" || property.location === propertyLocationFilter;
 
-    const matchesFeatured =
-      propertyFeaturedFilter === "all" ||
-      (propertyFeaturedFilter === "featured"
-        ? Boolean(property.featured)
-        : !property.featured);
+        const matchesFeatured =
+          propertyFeaturedFilter === "all" ||
+          (propertyFeaturedFilter === "featured"
+            ? Boolean(property.featured)
+            : !property.featured);
 
-    return (
-      matchesSearch &&
-      matchesReferenceCode &&
-      matchesOperation &&
-      matchesType &&
-      matchesLocation &&
-      matchesFeatured
-    );
-  });
+        return (
+          matchesSearch &&
+          matchesReferenceCode &&
+          matchesOperation &&
+          matchesType &&
+          matchesLocation &&
+          matchesFeatured
+        );
+      }),
+    [
+      properties,
+      propertySearchQuery,
+      propertyReferenceCodeQuery,
+      propertyOperationFilter,
+      propertyTypeFilter,
+      propertyLocationFilter,
+      propertyFeaturedFilter,
+    ]
+  );
+
+  const filteredProperties = useMemo(
+    () => sortCatalogProperties(propertiesMatchingInventoryFilters, propertyCatalogSort),
+    [propertiesMatchingInventoryFilters, propertyCatalogSort]
+  );
   const propertyTypeOptions = useMemo(
     () => Array.from(new Set(properties.map((p) => p.type).filter(Boolean))),
     [properties]
@@ -3238,7 +3261,7 @@ export function AdminPage() {
                 </div>
               </div>
               <div className="mt-4 relative">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-5">
                   <select
                     value={propertyFeaturedFilter}
                     onChange={(e) =>
@@ -3281,6 +3304,20 @@ export function AdminPage() {
                     {propertyLocationOptions.map((opt) => (
                       <option key={opt} value={opt}>
                         {opt}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={propertyCatalogSort}
+                    onChange={(e) =>
+                      setPropertyCatalogSort(e.target.value as CatalogPropertySortKey)
+                    }
+                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                    aria-label="Ordenar inventario"
+                  >
+                    {CATALOG_PROPERTY_SORT_OPTIONS.map(({ value, label }) => (
+                      <option key={value} value={value}>
+                        {label}
                       </option>
                     ))}
                   </select>
