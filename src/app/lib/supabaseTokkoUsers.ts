@@ -16,8 +16,8 @@ export async function fetchTokkoUserRow(client: SupabaseClient, userId: string) 
 }
 
 /** Listado para el módulo Equipo y accesos (respeta RLS del proyecto). */
-export function fetchAllTokkoUsersForDirectory(client: SupabaseClient) {
-  return client.from("tokko_users").select("*").order("email", { ascending: true, nullsFirst: false });
+export async function fetchAllTokkoUsersForDirectory(client: SupabaseClient) {
+  return await client.from("tokko_users").select("*").order("email", { ascending: true, nullsFirst: false });
 }
 
 type TokkoUserAccessPayload = {

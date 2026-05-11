@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { LucideIcon } from "lucide-react";
 import {
   Building2,
   Briefcase,
@@ -99,7 +100,7 @@ const profilePermissionCards: Array<{
   value: UserPermission;
   label: string;
   description: string;
-  Icon: (props: { className?: string; strokeWidth?: number }) => JSX.Element;
+  Icon: LucideIcon;
 }> = [
   {
     value: "manage_leads",

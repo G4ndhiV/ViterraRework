@@ -185,7 +185,6 @@ type TabType =
   | "kpis"
   | "leads"
   | "clients"
-  | "pipeline"
   | "agenda"
   | "properties"
   | "developments"
@@ -1573,6 +1572,49 @@ export function AdminPage() {
   const totalLeads = leadsForUser.length;
   const newLeads = leadsForUser.filter((l) => l.status === "nuevo").length;
   const closedDeals = leadsForUser.filter((l) => l.status === "cerrado").length;
+
+  /** Últimos 6 meses calendario: altas por `createdAt`, cierres por mes de `updatedAt` o `lastContact` (solo status cerrado). */
+  const dashboardLeadTrendData = useMemo(() => {
+    const monthLabel = (y: number, m0: number) => {
+      const d = new Date(y, m0, 1);
+      const raw = d.toLocaleDateString("es", { month: "short" });
+      const cleaned = raw.replace(/\.$/, "").trim();
+      return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    };
+    const now = new Date();
+    const rows: { month: string; leads: number; conversiones: number }[] = [];
+    const monthKeys: string[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const y = d.getFullYear();
+      const m = d.getMonth();
+      monthKeys.push(`${y}-${String(m + 1).padStart(2, "0")}`);
+      rows.push({ month: monthLabel(y, m), leads: 0, conversiones: 0 });
+    }
+    const keyIndex = (yk: string) => monthKeys.indexOf(yk);
+    const parseMonthKey = (raw: string | undefined): string | null => {
+      if (!raw) return null;
+      const d = new Date(raw.includes("T") ? raw : `${raw}T12:00:00`);
+      if (Number.isNaN(d.getTime())) return null;
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    };
+    for (const lead of leadsForUser) {
+      const createdKey = parseMonthKey(lead.createdAt);
+      if (createdKey !== null) {
+        const idx = keyIndex(createdKey);
+        if (idx >= 0) rows[idx].leads += 1;
+      }
+      if (lead.status === "cerrado") {
+        const closeKey = parseMonthKey(lead.updatedAt || lead.lastContact);
+        if (closeKey !== null) {
+          const idx = keyIndex(closeKey);
+          if (idx >= 0) rows[idx].conversiones += 1;
+        }
+      }
+    }
+    return rows;
+  }, [leadsForUser]);
+
   const totalProperties = properties.length;
   const propertiesForSale = properties.filter(p => p.status === "venta").length;
   const propertiesForRent = properties.filter(p => p.status === "alquiler").length;
@@ -1812,16 +1854,6 @@ export function AdminPage() {
     [properties]
   );
 
-  // Datos para gráficas - tonos elegantes
-  const trendData = [
-    { month: "Ene", leads: 12, conversiones: 3 },
-    { month: "Feb", leads: 15, conversiones: 4 },
-    { month: "Mar", leads: 18, conversiones: 5 },
-    { month: "Abr", leads: 14, conversiones: 3 },
-    { month: "May", leads: 20, conversiones: 6 },
-    { month: "Jun", leads: 25, conversiones: 8 },
-  ];
-
   const leadsBySourceData = [
     { name: "Website", value: leadsForUser.filter((l) => l.source === "Website").length },
     { name: "Facebook", value: leadsForUser.filter((l) => l.source === "Facebook").length },
@@ -1881,7 +1913,7 @@ export function AdminPage() {
         id: "kpis",
         title: "KPI's",
         description: "Métricas detalladas, metas y comparativos por rol",
-        keywords: ["kpi", "kpis", "metricas", "métricas", "indicadores", "meta", "metas", "tendencia"],
+        keywords: ["kpi", "kpis", "reportes", "metricas", "métricas", "indicadores", "meta", "metas", "tendencia"],
         action: () => setActiveTab("kpis"),
       },
       {
@@ -2134,7 +2166,7 @@ export function AdminPage() {
                   }`}
                 >
                   <BarChart3 className="h-4 w-4" strokeWidth={activeTab === "kpis" ? 2 : 1.75} />
-                  Reportes
+                  KPI's
                 </button>
                 <button
                   type="button"
@@ -2434,6 +2466,7 @@ export function AdminPage() {
               { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
               { id: "kpis", label: "KPI's", icon: BarChart3 },
               { id: "leads", label: "Leads", icon: Users },
+              ...(canAccessClients ? [{ id: "clients", label: "Clientes", icon: UserCircle2 }] : []),
               { id: "agenda", label: "Agenda", icon: Calendar },
               { id: "properties", label: "Propiedades", icon: Home },
               { id: "developments", label: "Desarrollos", icon: Building2 },
@@ -2540,7 +2573,7 @@ export function AdminPage() {
                   <p className="mt-1 text-sm text-slate-500" style={{ fontWeight: 500 }}>Últimos 6 meses</p>
                 </div>
                 <ResponsiveContainer width="100%" height={280}>
-                  <AreaChart data={trendData}>
+                  <AreaChart data={dashboardLeadTrendData}>
                     <defs>
                       <linearGradient id="colorLeadsElegant" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#141c2e" stopOpacity={0.12}/>
