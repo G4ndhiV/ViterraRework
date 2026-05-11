@@ -247,7 +247,8 @@ export function AdminPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [leadsLoading, setLeadsLoading] = useState(true);
   const [leadsError, setLeadsError] = useState<string | null>(null);
-  const { properties, reload: reloadProperties, applySavedProperty } = useCatalogProperties();
+  const { properties, reload: reloadProperties, patchProperty: patchCatalogProperty } =
+    useCatalogProperties();
   const [newPropertyDraftId, setNewPropertyDraftId] = useState(() => crypto.randomUUID());
   const [developments, setDevelopments] = useState<Development[]>([]);
   const [developmentsLoading, setDevelopmentsLoading] = useState(true);
@@ -1437,16 +1438,30 @@ export function AdminPage() {
           return;
         }
       }
+      const prevFeatured = Boolean(property.featured);
+      patchCatalogProperty(property.id, { featured: next });
+      setPropertyForm((f) =>
+        f?.mode === "edit" && f.property?.id === property.id
+          ? { ...f, property: { ...f.property, featured: next } }
+          : f
+      );
+
       const { error } = await updatePropertyFeatured(client, property.id, next);
       if (error) {
+        patchCatalogProperty(property.id, { featured: prevFeatured });
+        setPropertyForm((f) =>
+          f?.mode === "edit" && f.property?.id === property.id
+            ? { ...f, property: { ...f.property, featured: prevFeatured } }
+            : f
+        );
         toast.error(error.message);
         return;
       }
       applySavedProperty({ ...property, featured: next });
       toast.success(next ? "Propiedad destacada en la portada." : "Propiedad ya no aparece destacada en la portada.");
-      void reloadProperties({ silent: true });
+      void reloadProperties();
     },
-    [properties, reloadProperties, applySavedProperty]
+    [properties, reloadProperties, patchCatalogProperty]
   );
 
   const openLeadDetail = useCallback(

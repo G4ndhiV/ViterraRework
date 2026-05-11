@@ -101,9 +101,14 @@ export function useCatalogProperties() {
     }
   }, []);
 
+  /** Actualiza una fila en memoria (p. ej. destacado) sin esperar un refetch completo. */
+  const patchProperty = useCallback((id: string, patch: Partial<Property>) => {
+    setProperties((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  }, []);
+
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  return { properties, loading, error, reload, applySavedProperty };
+  return { properties, loading, error, reload, patchProperty };
 }
