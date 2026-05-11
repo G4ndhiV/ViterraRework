@@ -429,78 +429,6 @@ export function DevelopmentDetailPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                <div className="min-w-0 flex-1">
-                  <h1
-                    className="mb-2 break-words text-[1.75rem] font-semibold leading-tight tracking-tight text-slate-900 sm:text-2xl md:text-3xl"
-                    style={{ fontWeight: 700 }}
-                  >
-                    {development.name}
-                  </h1>
-                  <div className="mb-2 flex items-start gap-2 text-slate-600">
-                    <MapPin className="h-4 w-4 shrink-0" strokeWidth={1.5} />
-                    <span className="break-words text-sm font-medium" style={{ fontWeight: 500 }}>
-                      {development.fullAddress}
-                      {development.colony ? `, ${development.colony}` : ""}
-                    </span>
-                  </div>
-                  {development.colony ? (
-                    <p className="mb-3 text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                      <span className="text-slate-500">Colonia:</span>{" "}
-                      <span className="text-slate-900">{development.colony}</span>
-                    </p>
-                  ) : null}
-                </div>
-                <div className="text-left sm:text-right">
-                  <p
-                    className="mb-1 text-xs uppercase tracking-wide text-slate-500"
-                    style={{ letterSpacing: "0.05em", fontWeight: 500 }}
-                  >
-                    Desde
-                  </p>
-                  <p className="text-xl font-semibold text-slate-900 md:text-2xl" style={{ fontWeight: 700 }}>
-                    {precioDesdeTexto(development.priceRange)}
-                  </p>
-                  {(development.priceRange ?? "").includes(" - ") ? (
-                    <p className="mt-1 max-w-[18rem] text-xs text-slate-500 sm:ml-auto sm:text-right" style={{ fontWeight: 500 }}>
-                      Rango: {development.priceRange}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 md:gap-4 md:p-4">
-                <div className="text-center">
-                  <Building2 className="mx-auto mb-1 h-5 w-5 text-slate-600" strokeWidth={1.5} />
-                  <p className="text-base font-semibold text-slate-900 md:text-lg" style={{ fontWeight: 600 }}>
-                    {development.units}
-                  </p>
-                  <p className="text-xs text-slate-600" style={{ fontWeight: 500 }}>
-                    Unidades
-                  </p>
-                </div>
-                <div className="border-x border-slate-200 text-center">
-                  <Home className="mx-auto mb-1 h-5 w-5 text-slate-600" strokeWidth={1.5} />
-                  <p className="text-base font-semibold text-slate-900 md:text-lg" style={{ fontWeight: 600 }}>
-                    {development.type}
-                  </p>
-                  <p className="text-xs text-slate-600" style={{ fontWeight: 500 }}>
-                    Tipo
-                  </p>
-                </div>
-                <div className="text-center">
-                  <Calendar className="mx-auto mb-1 h-5 w-5 text-slate-600" strokeWidth={1.5} />
-                  <p className="text-base font-semibold text-slate-900 md:text-lg" style={{ fontWeight: 600 }}>
-                    {displayDeliveryDate(development.deliveryDate)}
-                  </p>
-                  <p className="text-xs text-slate-600" style={{ fontWeight: 500 }}>
-                    Entrega
-                  </p>
-                </div>
-              </div>
-            </div>
-
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-200">
                 <div className="flex overflow-x-auto">
@@ -950,23 +878,78 @@ export function DevelopmentDetailPage() {
           <div className="min-w-0 lg:col-span-1">
             <div className="space-y-6 lg:sticky lg:top-24">
               <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-                <p
-                  className="mb-1 text-xs uppercase tracking-wide text-slate-500"
-                  style={{ letterSpacing: "0.05em", fontWeight: 500 }}
-                >
-                  Desde
-                </p>
-                <p className="mb-1 text-3xl font-semibold text-slate-900" style={{ fontWeight: 700 }}>
-                  {precioDesdeTexto(development.priceRange)}
-                </p>
-                {(development.priceRange ?? "").includes(" - ") ? (
-                  <p className="mb-6 text-xs text-slate-500" style={{ fontWeight: 500 }}>
-                    Rango: {development.priceRange}
-                  </p>
-                ) : (
-                  <div className="mb-6" />
-                )}
+                <div className="mb-4">
+                  <h1
+                    className="mb-2 break-words text-[1.75rem] font-semibold leading-tight tracking-tight text-slate-900 sm:text-2xl md:text-3xl"
+                    style={{ fontWeight: 700 }}
+                  >
+                    {development.name}
+                  </h1>
+                  <div className="mb-3">
+                    <p
+                      className="mb-1 text-xs uppercase tracking-wide text-slate-500"
+                      style={{ letterSpacing: "0.05em", fontWeight: 500 }}
+                    >
+                      Desde
+                    </p>
+                    <p className="text-xl font-semibold text-slate-900 md:text-2xl" style={{ fontWeight: 700 }}>
+                      {precioDesdeTexto(development.priceRange)}
+                    </p>
+                    {(development.priceRange ?? "").includes(" - ") ? (
+                      <p className="mt-1 text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                        Rango: {development.priceRange}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="mb-2 flex items-start gap-2 text-slate-600">
+                    <MapPin className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                    <span className="break-words text-sm font-medium" style={{ fontWeight: 500 }}>
+                      {development.fullAddress}
+                      {development.colony ? `, ${development.colony}` : ""}
+                    </span>
+                  </div>
+                  {development.colony ? (
+                    <p className="text-sm text-slate-600" style={{ fontWeight: 500 }}>
+                      <span className="text-slate-500">Colonia:</span>{" "}
+                      <span className="text-slate-900">{development.colony}</span>
+                    </p>
+                  ) : null}
+                </div>
 
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 md:p-4">
+                  <div className="grid grid-cols-2 gap-2 md:gap-4">
+                    <div className="text-center">
+                      <Building2 className="mx-auto mb-1 h-5 w-5 text-slate-600" strokeWidth={1.5} />
+                      <p className="text-base font-semibold text-slate-900 md:text-lg" style={{ fontWeight: 600 }}>
+                        {development.units}
+                      </p>
+                      <p className="text-xs text-slate-600" style={{ fontWeight: 500 }}>
+                        Unidades
+                      </p>
+                    </div>
+                    <div className="border-l border-slate-200 text-center">
+                      <Home className="mx-auto mb-1 h-5 w-5 text-slate-600" strokeWidth={1.5} />
+                      <p className="text-base font-semibold text-slate-900 md:text-lg" style={{ fontWeight: 600 }}>
+                        {development.type}
+                      </p>
+                      <p className="text-xs text-slate-600" style={{ fontWeight: 500 }}>
+                        Tipo
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 border-t border-slate-200 pt-3 text-center">
+                    <Calendar className="mx-auto mb-1 h-5 w-5 text-slate-600" strokeWidth={1.5} />
+                    <p className="text-base font-semibold text-slate-900 md:text-lg" style={{ fontWeight: 600 }}>
+                      {displayDeliveryDate(development.deliveryDate)}
+                    </p>
+                    <p className="text-xs text-slate-600" style={{ fontWeight: 500 }}>
+                      Entrega
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                 <div className="space-y-3">
                   <Link
                     to="/contacto"
