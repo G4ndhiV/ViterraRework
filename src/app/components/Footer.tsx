@@ -110,7 +110,7 @@ export function Footer() {
             <ul className="space-y-4 text-sm">
               <li className="flex items-start gap-3 group">
                 <MapPin className="w-5 h-5 text-slate-400 group-hover:text-white flex-shrink-0 mt-0.5 transition-colors" strokeWidth={1.5} />
-                <span className="group-hover:text-white transition-colors" style={{ fontWeight: 400 }}>Av. Principal 123, Guadalajara, Jalisco</span>
+                <span className="group-hover:text-white transition-colors" style={{ fontWeight: 400 }}>Cerca de Av Terranova 1455 local 102, Providencia 4a Secc., 44639 Zapopan, Jal.</span>
               </li>
               <li className="flex items-center gap-3 group">
                 <Phone className="w-5 h-5 text-slate-400 group-hover:text-white flex-shrink-0 transition-colors" strokeWidth={1.5} />

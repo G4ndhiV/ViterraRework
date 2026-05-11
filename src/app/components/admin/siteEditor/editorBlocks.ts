@@ -13,10 +13,12 @@ export const EDITOR_PAGE_BLOCKS: Record<SiteKey, { id: string; label: string }[]
   ],
   contact: [
     { id: "contact-hero", label: "Cabecera" },
-    { id: "contact-info", label: "Datos de contacto" },
-    { id: "contact-whatsapp", label: "WhatsApp" },
+    { id: "contact-visit", label: "Visítanos y mapa" },
+    { id: "contact-whatsapp", label: "WhatsApp (CTA rápido)" },
     { id: "contact-form", label: "Formulario" },
-    { id: "contact-map", label: "Mapa" },
+    { id: "contact-faq", label: "Preguntas frecuentes" },
+    { id: "contact-social", label: "Redes y enlaces" },
+    { id: "contact-closing", label: "Cierre" },
   ],
   services: [
     { id: "services-hero", label: "Cabecera" },

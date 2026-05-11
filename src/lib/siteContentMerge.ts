@@ -21,5 +21,18 @@ export function mergeSiteSection<K extends keyof SiteContent>(key: K, section: u
     }
   }
 
+  if (key === "contact") {
+    const co = merged as SiteContent["contact"];
+    const def = DEFAULT_SITE_CONTENT.contact;
+    const faq = Array.isArray(co.faq) ? co.faq : def.faq;
+    const deepLinks =
+      co.deepLinks && typeof co.deepLinks === "object"
+        ? { ...def.deepLinks, ...co.deepLinks }
+        : def.deepLinks;
+    const social =
+      co.social && typeof co.social === "object" ? { ...def.social, ...co.social } : def.social;
+    return { ...def, ...co, faq, deepLinks, social } as SiteContent[K];
+  }
+
   return merged;
 }

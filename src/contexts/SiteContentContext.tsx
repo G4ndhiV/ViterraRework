@@ -14,6 +14,35 @@ type SiteContentContextValue = {
 
 const SiteContentContext = createContext<SiteContentContextValue | null>(null);
 
+const LEGACY_CONTACT_ADDRESS = "Av. Principal 123\nGuadalajara, Jalisco";
+const LEGACY_MAP_POPUP_ADDRESS = "Av. Principal 123<br/>Guadalajara, Jalisco";
+const LEGACY_VISIT_TITLE = "Visítanos en Guadalajara";
+const LEGACY_MAP_LAT = 20.676208;
+const LEGACY_MAP_LNG = -103.34721;
+const UPDATED_CONTACT_ADDRESS = "Cerca de Av Terranova 1455 local 102\nProvidencia 4a Secc., 44639 Zapopan, Jal.";
+const UPDATED_MAP_POPUP_ADDRESS = "Cerca de Av Terranova 1455 local 102<br/>Providencia 4a Secc., 44639 Zapopan, Jal.";
+const UPDATED_VISIT_TITLE = "Visítanos en Zapopan";
+const UPDATED_MAP_LAT = 20.697312;
+const UPDATED_MAP_LNG = -103.386476;
+
+function normalizeLegacyContact(content: SiteContent): SiteContent {
+  const next = { ...content, contact: { ...content.contact } };
+  if (next.contact.addressLines === LEGACY_CONTACT_ADDRESS) {
+    next.contact.addressLines = UPDATED_CONTACT_ADDRESS;
+  }
+  if (next.contact.mapPopupAddress === LEGACY_MAP_POPUP_ADDRESS) {
+    next.contact.mapPopupAddress = UPDATED_MAP_POPUP_ADDRESS;
+  }
+  if (next.contact.visitTitle === LEGACY_VISIT_TITLE) {
+    next.contact.visitTitle = UPDATED_VISIT_TITLE;
+  }
+  if (next.contact.mapLat === LEGACY_MAP_LAT && next.contact.mapLng === LEGACY_MAP_LNG) {
+    next.contact.mapLat = UPDATED_MAP_LAT;
+    next.contact.mapLng = UPDATED_MAP_LNG;
+  }
+  return next;
+}
+
 function loadMerged(): SiteContent {
   try {
     const raw = localStorage.getItem(SITE_CONTENT_KEY);
@@ -25,7 +54,7 @@ function loadMerged(): SiteContent {
     for (const key of keys) {
       repaired[key] = mergeSiteSection(key, first[key]);
     }
-    return repaired;
+    return normalizeLegacyContact(repaired);
   } catch {
     return DEFAULT_SITE_CONTENT;
   }

@@ -41,7 +41,7 @@ const MARK_MONO_SCALE_FACTOR = 0.88;
  * El asset es asimétrico: el centro de masa visual queda claramente a la izquierda del centro geométrico.
  * Ajustar entre ~0.15 y ~0.22 si se sustituye el PNG (sube si la V se ve aún corrida a la derecha).
  */
-const MARK_LOGO_OPTICAL_CENTER_X_RATIO = 0.205;
+const MARK_LOGO_OPTICAL_CENTER_X_RATIO = 0.005;
 
 /**
  * Distancia en px desde el borde izquierdo del `<ul>` de redes (tamaño `md`: `p-2`, icono 17px, `sm:gap-2`)

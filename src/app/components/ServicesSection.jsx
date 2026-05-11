@@ -286,7 +286,7 @@ export function ServicesSection() {
     <section
       style={{
         height: "auto",
-        minHeight: "calc(100dvh - 72px)",
+        minHeight: "calc(100dvh - var(--viterra-sticky-header-offset, 72px) - 24px)",
         width: "100%",
         background: "#FFFFFF",
         marginTop: 0,
@@ -302,7 +302,11 @@ export function ServicesSection() {
       {/* BODY: 2 columns */}
       <div
         className="services-grid grid"
-        style={{ gridTemplateColumns: "50% 50%", height: "auto", minHeight: "calc(100dvh - 72px)" }}
+        style={{
+          gridTemplateColumns: "50% 50%",
+          height: "auto",
+          minHeight: "calc(100dvh - var(--viterra-sticky-header-offset, 72px) - 24px)",
+        }}
       >
         {/* COLUMN A */}
         <aside
@@ -344,7 +348,7 @@ export function ServicesSection() {
               alignItems: "center",
               justifyContent: "center",
               minHeight: isCompactLayout ? Math.max(320, graphShellSize + 26) : undefined,
-              padding: "28px 8px 16px 8px",
+            padding: isCompactLayout ? "24px 8px 14px 8px" : "20px 8px 12px 8px",
             }}
           >
             <div
@@ -867,11 +871,11 @@ export function ServicesSection() {
           style={{
             background: TOKENS.panel,
             borderLeft: "none",
-            padding: isCompactLayout ? "32px 18px 44px" : "48px clamp(20px, 2.6vw, 40px) 132px",
+            padding: isCompactLayout ? "28px 16px 36px" : "34px clamp(18px, 2.3vw, 34px) 86px",
             overflow: "hidden",
             position: "relative",
           }}
-          className="flex min-h-[calc(100dvh-72px)] flex-col"
+          className="flex min-h-[calc(100dvh-var(--viterra-sticky-header-offset,72px)-24px)] flex-col"
         >
           <AnimatePresence mode="wait" initial={false}>
             {active ? (

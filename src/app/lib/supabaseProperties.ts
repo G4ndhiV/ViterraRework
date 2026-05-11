@@ -167,6 +167,24 @@ export function rowToProperty(row: PropertyRow): Property {
   };
 }
 
+/** PostgREST devuelve `data` como array en insert/update con `.select()`; normaliza el id devuelto. */
+export function idFromPropertyWriteResult(data: unknown): string | undefined {
+  if (data == null) return undefined;
+  if (Array.isArray(data)) {
+    const first = data[0];
+    if (first && typeof first === "object" && "id" in first) {
+      const v = (first as { id: unknown }).id;
+      return v != null ? String(v) : undefined;
+    }
+    return undefined;
+  }
+  if (typeof data === "object" && "id" in data) {
+    const v = (data as { id: unknown }).id;
+    return v != null ? String(v) : undefined;
+  }
+  return undefined;
+}
+
 export async function fetchCatalogProperties(client: SupabaseClient) {
   /** No filtramos por `deleted_at IS NULL`: en datos sincronizados desde Tokko a veces nunca queda NULL y el listado quedaría vacío. El borrado en admin sigue usando `softDeleteProperty`. */
   /** `select('*')` incluye `bedrooms` y `bathrooms`; `rowToProperty` las mapea al modelo. */
@@ -264,7 +282,7 @@ export async function insertProperty(client: SupabaseClient, p: Property, explic
     credit_eligible: null,
     tags: [] as string[],
   };
-  return client.from("properties").insert(row);
+  return client.from("properties").insert(row).select("id");
 }
 
 export async function updateProperty(client: SupabaseClient, p: Property) {
@@ -297,7 +315,8 @@ export async function updateProperty(client: SupabaseClient, p: Property) {
       featured: Boolean(p.featured),
       payload: { source: "viterra_admin", lastEdit: ts } as Record<string, unknown>,
     })
-    .eq("id", p.id);
+    .eq("id", p.id)
+    .select("id");
 }
 
 export async function updatePropertyFeatured(client: SupabaseClient, id: string, featured: boolean) {
