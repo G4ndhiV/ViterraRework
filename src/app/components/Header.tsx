@@ -74,7 +74,7 @@ function ViterraMarkLeftHero({
       aria-hidden
     >
       <img
-        src={MARK_ICON_MONO}
+        src={MARK_ICON_RED}
         alt=""
         width={1024}
         height={264}
