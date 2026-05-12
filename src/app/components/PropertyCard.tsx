@@ -261,12 +261,12 @@ export function PropertyCard({
                 style={!ed ? { fontWeight: 700 } : undefined}
               >
                 ${property.price.toLocaleString()}
+                {property.status === "alquiler" && (
+                  <span className={cn("ml-1 text-xs font-medium not-italic", ed ? "font-heading text-brand-navy/45" : "text-slate-500")} style={!ed ? { fontWeight: 500 } : undefined}>
+                    / mes
+                  </span>
+                )}
               </p>
-              {property.status === "alquiler" && (
-                <p className={cn("text-xs font-medium not-italic", ed ? "font-heading text-brand-navy/45" : "text-slate-500")} style={!ed ? { fontWeight: 500 } : undefined}>
-                  / mes
-                </p>
-              )}
             </div>
             {ed ? (
               <Link
