@@ -6,6 +6,7 @@ import {
   fetchDevelopmentsWithUnits,
   fetchDevelopmentsPage,
   fetchDevelopmentById,
+  type LinkedPropertyStats,
 } from "../lib/supabaseDevelopments";
 import { fetchPropertiesByDevelopmentTokkoId } from "../lib/supabaseProperties";
 
@@ -55,7 +56,7 @@ export function useDevelopmentsCatalogInfinite(publicOnly = false, pageSize = DE
   const [error, setError] = useState<string | null>(null);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
-  const linkedRef = useRef<Map<string, number> | undefined>(undefined);
+  const linkedRef = useRef<Map<string, LinkedPropertyStats> | undefined>(undefined);
   const loadingMoreRef = useRef(false);
 
   const loadPage = useCallback(
