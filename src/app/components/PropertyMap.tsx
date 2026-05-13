@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Layers } from "lucide-react";
+import { Layers, MapPin } from "lucide-react";
 import type { Property } from "./PropertyCard";
 
 interface PropertyMapProps {
@@ -17,6 +17,7 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
   const streetLayerRef = useRef<any>(null);
   const satelliteLayerRef = useRef<any>(null);
   const [mapMode, setMapMode] = useState<MapMode>("map");
+  const [mapReady, setMapReady] = useState(false);
 
   const propertiesWithCoordinates = properties.filter((p) => p.coordinates);
 
@@ -53,6 +54,7 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
         markersLayerRef.current = (L as any).layerGroup().addTo(map);
 
         streetLayerRef.current.addTo(map);
+        setMapReady(true);
       } catch (error) {
         console.error("Error initializing property map:", error);
       }
@@ -71,6 +73,7 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
       markersLayerRef.current = null;
       streetLayerRef.current = null;
       satelliteLayerRef.current = null;
+      setMapReady(false);
     };
   }, []);
 
@@ -143,6 +146,15 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
           border: 1px solid rgba(20, 28, 46, 0.14);
         }
       `}</style>
+      {!mapReady && (
+        <div className={`${mapHeightClassName} absolute inset-0 z-[501] flex flex-col items-center justify-center overflow-hidden rounded-lg border border-brand-navy/10 bg-slate-100`}>
+          <div className="relative mb-4">
+            <div className="h-10 w-10 animate-spin rounded-full border-[3px] border-brand-navy/15 border-t-primary" />
+            <MapPin className="absolute inset-0 m-auto h-4 w-4 text-primary" strokeWidth={2} />
+          </div>
+          <p className="font-heading text-sm font-medium text-brand-navy/60">Cargando mapa…</p>
+        </div>
+      )}
       <button
         type="button"
         onClick={() => setMapMode((prev) => (prev === "map" ? "satellite" : "map"))}

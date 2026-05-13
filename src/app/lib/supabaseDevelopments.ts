@@ -87,29 +87,46 @@ function groupUnitsByDevelopment(rows: DevelopmentUnitRow[] | null): Map<string,
   return m;
 }
 
+export type LinkedPropertyStats = {
+  count: number;
+  minPrice: number | null;
+  maxPrice: number | null;
+};
+
 /**
- * Cuenta propiedades por `development_tokko_id` (keys en minúsculas) para cruzar con `developments.tokko_id`.
+ * Cuenta propiedades y recoge precios mín/máx por `development_tokko_id` (keys en minúsculas)
+ * para cruzar con `developments.tokko_id`.
  */
-async function fetchLinkedPropertyCountByTokkoLower(
+async function fetchLinkedPropertyStatsByTokko(
   client: SupabaseClient
-): Promise<Map<string, number>> {
-  const res = await client.from("properties").select("development_tokko_id");
-  const m = new Map<string, number>();
+): Promise<Map<string, LinkedPropertyStats>> {
+  const res = await client.from("properties").select("development_tokko_id, price");
+  const m = new Map<string, LinkedPropertyStats>();
   if (res.error) return m;
   for (const raw of res.data ?? []) {
-    const row = raw as { development_tokko_id?: string | null };
+    const row = raw as { development_tokko_id?: string | null; price?: number | null };
     const tid = typeof row.development_tokko_id === "string" ? row.development_tokko_id.trim() : "";
     if (!tid) continue;
     const key = tid.toLowerCase();
-    m.set(key, (m.get(key) ?? 0) + 1);
+    const stats = m.get(key) ?? { count: 0, minPrice: null, maxPrice: null };
+    stats.count += 1;
+    const p = typeof row.price === "number" && row.price > 0 ? row.price : null;
+    if (p !== null) {
+      stats.minPrice = stats.minPrice === null ? p : Math.min(stats.minPrice, p);
+      stats.maxPrice = stats.maxPrice === null ? p : Math.max(stats.maxPrice, p);
+    }
+    m.set(key, stats);
   }
   return m;
 }
 
-function linkedPropertyCountForRow(row: DevelopmentRow, byTokko: Map<string, number>): number {
+function linkedStatsForRow(
+  row: DevelopmentRow,
+  byTokko: Map<string, LinkedPropertyStats>
+): LinkedPropertyStats {
   const tokko = typeof row.tokko_id === "string" ? row.tokko_id.trim() : "";
-  if (!tokko) return 0;
-  return byTokko.get(tokko.toLowerCase()) ?? 0;
+  if (!tokko) return { count: 0, minPrice: null, maxPrice: null };
+  return byTokko.get(tokko.toLowerCase()) ?? { count: 0, minPrice: null, maxPrice: null };
 }
 
 /** Prioridad: unidades del catálogo `properties`; si no hay vínculo, inventario manual; luego columna `units`. */
@@ -123,10 +140,46 @@ function resolveDisplayedUnits(
   return row.units ?? 0;
 }
 
+function formatPriceMXN(price: number): string {
+  return price.toLocaleString("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+}
+
+function computePriceRange(
+  units: DevelopmentUnit[],
+  linkedPrices: { minPrice: number | null; maxPrice: number | null },
+  fallback: string
+): string {
+  let min: number | null = null;
+  let max: number | null = null;
+
+  for (const u of units) {
+    if (u.price > 0) {
+      min = min === null ? u.price : Math.min(min, u.price);
+      max = max === null ? u.price : Math.max(max, u.price);
+    }
+  }
+
+  if (linkedPrices.minPrice !== null) {
+    min = min === null ? linkedPrices.minPrice : Math.min(min, linkedPrices.minPrice);
+  }
+  if (linkedPrices.maxPrice !== null) {
+    max = max === null ? linkedPrices.maxPrice : Math.max(max, linkedPrices.maxPrice);
+  }
+
+  if (min === null || max === null) return fallback;
+  if (min === max) return formatPriceMXN(min);
+  return `${formatPriceMXN(min)} – ${formatPriceMXN(max)}`;
+}
+
 export function rowToDevelopment(
   row: DevelopmentRow,
   units: DevelopmentUnit[],
-  linkedPropertyCount = 0
+  linkedStats: LinkedPropertyStats = { count: 0, minPrice: null, maxPrice: null }
 ): Development {
   const imgs = Array.isArray(row.images) ? row.images : [];
   const primary = row.image?.trim() || imgs[0] || "";
@@ -142,9 +195,9 @@ export function rowToDevelopment(
     image: primary,
     images: imgs.length > 0 ? imgs : primary ? [primary] : [],
     status,
-    units: resolveDisplayedUnits(row, units, linkedPropertyCount),
+    units: resolveDisplayedUnits(row, units, linkedStats.count),
     deliveryDate: row.delivery_date ?? "",
-    priceRange: row.price_range ?? "",
+    priceRange: computePriceRange(units, linkedStats, row.price_range ?? ""),
     amenities: Array.isArray(row.amenities) ? row.amenities : [],
     services: Array.isArray(row.services) ? row.services : [],
     additionalFeatures: Array.isArray(row.additional_features) ? row.additional_features : [],
@@ -178,12 +231,12 @@ export async function fetchDevelopmentsWithUnits(
   const ids = rows.map((r) => r.id);
   const [unitRes, linkedByTokko] = await Promise.all([
     client.from("development_units").select("*").in("development_id", ids),
-    fetchLinkedPropertyCountByTokkoLower(client),
+    fetchLinkedPropertyStatsByTokko(client),
   ]);
   if (unitRes.error) return { data: [] as Development[], error: unitRes.error };
   const byDev = groupUnitsByDevelopment((unitRes.data ?? []) as DevelopmentUnitRow[]);
   const data = rows.map((r) =>
-    rowToDevelopment(r, byDev.get(r.id) ?? [], linkedPropertyCountForRow(r, linkedByTokko))
+    rowToDevelopment(r, byDev.get(r.id) ?? [], linkedStatsForRow(r, linkedByTokko))
   );
   return { data, error: null };
 }
@@ -193,7 +246,7 @@ export type FetchDevelopmentsPageOpts = {
   limit: number;
   offset: number;
   /** Reutilizar el mapa de propiedades vinculadas entre páginas (una sola consulta ligera al inicio). */
-  linkedByTokko?: Map<string, number>;
+  linkedByTokko?: Map<string, LinkedPropertyStats>;
 };
 
 /**
@@ -202,7 +255,7 @@ export type FetchDevelopmentsPageOpts = {
  */
 export async function fetchDevelopmentsPage(client: SupabaseClient, opts: FetchDevelopmentsPageOpts) {
   const linkedByTokko =
-    opts.linkedByTokko ?? (await fetchLinkedPropertyCountByTokkoLower(client));
+    opts.linkedByTokko ?? (await fetchLinkedPropertyStatsByTokko(client));
 
   let q = client.from("developments").select("*");
   if (opts.publicOnly) {
@@ -214,7 +267,11 @@ export async function fetchDevelopmentsPage(client: SupabaseClient, opts: FetchD
     .range(opts.offset, opts.offset + opts.limit - 1);
 
   if (devRes.error) {
-    return { data: [] as Development[], error: devRes.error, linkedByTokko };
+    return {
+      data: [] as Development[],
+      error: devRes.error,
+      linkedByTokko,
+    };
   }
 
   const rows = (devRes.data ?? []) as DevelopmentRow[];
@@ -230,7 +287,7 @@ export async function fetchDevelopmentsPage(client: SupabaseClient, opts: FetchD
 
   const byDev = groupUnitsByDevelopment((unitRes.data ?? []) as DevelopmentUnitRow[]);
   const data = rows.map((r) =>
-    rowToDevelopment(r, byDev.get(r.id) ?? [], linkedPropertyCountForRow(r, linkedByTokko))
+    rowToDevelopment(r, byDev.get(r.id) ?? [], linkedStatsForRow(r, linkedByTokko))
   );
   return { data, error: null, linkedByTokko };
 }
@@ -273,11 +330,11 @@ export async function fetchDevelopmentById(
   if (!row) return { data: null, error: null };
   const [unitRes, linkedByTokko] = await Promise.all([
     client.from("development_units").select("*").eq("development_id", id),
-    fetchLinkedPropertyCountByTokkoLower(client),
+    fetchLinkedPropertyStatsByTokko(client),
   ]);
   if (unitRes.error) return { data: null, error: unitRes.error };
   const units = groupUnitsByDevelopment((unitRes.data ?? []) as DevelopmentUnitRow[]).get(id) ?? [];
-  const linked = linkedPropertyCountForRow(row, linkedByTokko);
+  const linked = linkedStatsForRow(row, linkedByTokko);
   return { data: rowToDevelopment(row, units, linked), error: null };
 }
 

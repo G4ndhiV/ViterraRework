@@ -212,6 +212,7 @@ export function MapSearchPage() {
   const priceMarkerByPropertyIdRef = useRef<Map<string, Marker>>(new Map());
   const displayCoordByPropertyIdRef = useRef<Map<string, { lat: number; lng: number }>>(new Map());
   const [mapFs, setMapFs] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
   /** Coords del contenedor Leaflet (px) + volteo; la tarjeta va dentro del mapa con `overflow-hidden` (estilo Airbnb). */
   const [mapPopupPos, setMapPopupPos] = useState<{
     x: number;
@@ -629,6 +630,8 @@ export function MapSearchPage() {
       container.addEventListener("pointerup", onPointerUp);
       container.addEventListener("pointercancel", onPointerCancel);
 
+      setMapReady(true);
+
       setTimeout(() => {
         if (cancelled || !mapRef.current) return;
         map.invalidateSize();
@@ -666,6 +669,7 @@ export function MapSearchPage() {
       mapPricesGroupRef.current = null;
       drawnRef.current = null;
       mapRef.current = null;
+      setMapReady(false);
       mapInstance?.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mapa: un solo montaje
@@ -1034,8 +1038,17 @@ export function MapSearchPage() {
             )}
             <div
               ref={mapEl}
-              className="absolute inset-0 z-0 bg-slate-300 [&_.leaflet-container]:!filter-none [&_.leaflet-tile-pane]:!filter-none"
+              className="absolute inset-0 z-0 bg-slate-100 [&_.leaflet-container]:!filter-none [&_.leaflet-tile-pane]:!filter-none"
             />
+            {!mapReady && (
+              <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center bg-slate-100">
+                <div className="relative mb-4">
+                  <div className="h-12 w-12 animate-spin rounded-full border-[3px] border-brand-navy/15 border-t-primary" />
+                  <MapPin className="absolute inset-0 m-auto h-5 w-5 text-primary" strokeWidth={2} />
+                </div>
+                <p className="font-heading text-sm font-medium text-brand-navy/60">Cargando mapa…</p>
+              </div>
+            )}
 
             <button
               type="button"

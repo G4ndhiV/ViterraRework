@@ -48,7 +48,7 @@ export interface Development {
 /** Valor mostrado en el sitio público cuando no hay fecha de entrega en catálogo. */
 export function displayDeliveryDate(value: string | undefined | null): string {
   const t = String(value ?? "").trim();
-  return t.length > 0 ? t : "Por definir...";
+  return t.length > 0 ? t : "Por definir";
 }
 
 /** @deprecated Sin datos mock; el catálogo viene de Supabase. */

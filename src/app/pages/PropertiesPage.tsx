@@ -6,6 +6,12 @@ import { SearchBar, SearchFilters } from "../components/SearchBar";
 import { PropertyCard, type Property } from "../components/PropertyCard";
 import { PropertyMap } from "../components/PropertyMap";
 import { useCatalogProperties } from "../hooks/useCatalogProperties";
+import {
+  sortCatalogProperties,
+  CATALOG_PROPERTY_SORT_OPTIONS,
+  type CatalogPropertySortKey,
+} from "../lib/catalogPropertySort";
+import { applyAdvancedPropertyFilters } from "../lib/applyAdvancedPropertyFilters";
 import { SlidersHorizontal, Building2, Map, LayoutGrid, MapPinned } from "lucide-react";
 
 export function PropertiesPage() {
@@ -19,8 +25,13 @@ export function PropertiesPage() {
     [properties]
   );
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
-  const [sortBy, setSortBy] = useState("newest");
+  const [sortBy, setSortBy] = useState<CatalogPropertySortKey>("newest");
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
+
+  const displayedProperties = useMemo(
+    () => sortCatalogProperties(filteredProperties, sortBy),
+    [filteredProperties, sortBy]
+  );
 
   useEffect(() => {
     setFilteredProperties(properties);
@@ -58,6 +69,8 @@ export function PropertiesPage() {
       filtered = filtered.filter((property) => property.price <= Number(filters.maxPrice));
     }
 
+    filtered = applyAdvancedPropertyFilters(filtered, filters);
+
     setFilteredProperties(filtered);
   }, [properties]);
 
@@ -69,44 +82,33 @@ export function PropertiesPage() {
       status: searchParams.get("status") || "",
       minPrice: searchParams.get("minPrice") || "",
       maxPrice: searchParams.get("maxPrice") || "",
+      minBedrooms: searchParams.get("minBedrooms") || "",
+      minBathrooms: searchParams.get("minBathrooms") || "",
+      minArea: searchParams.get("minArea") || "",
+      maxArea: searchParams.get("maxArea") || "",
     };
 
     const hasFilters =
-      filters.query || filters.type || filters.status || filters.minPrice || filters.maxPrice;
+      filters.query ||
+      filters.type ||
+      filters.status ||
+      filters.minPrice ||
+      filters.maxPrice ||
+      filters.minBedrooms ||
+      filters.minBathrooms ||
+      filters.minArea ||
+      filters.maxArea;
 
     if (hasFilters) {
       handleSearch(filters);
     }
   }, [searchParams, handleSearch]);
 
-  const handleSort = (value: string) => {
-    setSortBy(value);
-    let sorted = [...filteredProperties];
-
-    switch (value) {
-      case "price-low":
-        sorted.sort((a, b) => a.price - b.price);
-        break;
-      case "price-high":
-        sorted.sort((a, b) => b.price - a.price);
-        break;
-      case "area-large":
-        sorted.sort((a, b) => b.area - a.area);
-        break;
-      case "area-small":
-        sorted.sort((a, b) => a.area - b.area);
-        break;
-      default:
-        // newest - keep original order
-        break;
-    }
-
-    setFilteredProperties(sorted);
-  };
-
   return (
-    <div className="viterra-page min-h-screen flex flex-col bg-white" >
+    <div className="viterra-page min-h-screen flex flex-col bg-white">
       <Header />
+
+      <main className="flex min-h-0 flex-1 flex-col">
 
       {/* Page Header */}
       <section className="relative min-h-[58vh] sm:min-h-[64vh] md:min-h-[72vh] flex flex-col justify-center bg-brand-navy overflow-hidden py-14 md:py-20">
@@ -133,8 +135,8 @@ export function PropertiesPage() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-12 pb-6 border-b border-slate-200">
             <div className="flex items-center gap-4">
               <p className="text-slate-600 font-medium" style={{ fontWeight: 500 }}>
-                Mostrando <span className="text-slate-900 font-semibold" style={{ fontWeight: 700 }}>{filteredProperties.length}</span>{" "}
-                {filteredProperties.length === 1 ? "propiedad" : "propiedades"}
+                Mostrando <span className="text-slate-900 font-semibold" style={{ fontWeight: 700 }}>{displayedProperties.length}</span>{" "}
+                {displayedProperties.length === 1 ? "propiedad" : "propiedades"}
               </p>
               
               {/* View Toggle */}
@@ -177,37 +179,37 @@ export function PropertiesPage() {
               </div>
               <select
                 value={sortBy}
-                onChange={(e) => handleSort(e.target.value)}
+                onChange={(e) => setSortBy(e.target.value as CatalogPropertySortKey)}
                 className="px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-slate-900 transition-all text-sm font-medium"
                 style={{ fontWeight: 500 }}
               >
-                <option value="newest">Más Recientes</option>
-                <option value="price-low">Precio: Menor a Mayor</option>
-                <option value="price-high">Precio: Mayor a Menor</option>
-                <option value="area-large">Área: Mayor a Menor</option>
-                <option value="area-small">Área: Menor a Mayor</option>
+                {CATALOG_PROPERTY_SORT_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
 
           {/* Map View */}
-          {viewMode === "map" && filteredProperties.length > 0 && (
+          {viewMode === "map" && displayedProperties.length > 0 && (
             <div className="mb-8">
-              <PropertyMap properties={filteredProperties} />
+              <PropertyMap properties={displayedProperties} />
             </div>
           )}
 
           {/* Properties Grid */}
-          {viewMode === "grid" && filteredProperties.length > 0 && (
+          {viewMode === "grid" && displayedProperties.length > 0 && (
             <div className="grid grid-cols-1 items-stretch md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {filteredProperties.map((property) => (
+              {displayedProperties.map((property) => (
                 <PropertyCard key={property.id} property={property} />
               ))}
             </div>
           )}
 
           {/* No Results */}
-          {filteredProperties.length === 0 && (
+          {displayedProperties.length === 0 && (
             <div className="text-center py-24 bg-slate-50 rounded-lg border border-slate-200">
               <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Building2 className="w-10 h-10 text-slate-400" strokeWidth={1.5} />
@@ -222,6 +224,8 @@ export function PropertiesPage() {
           )}
         </div>
       </section>
+
+      </main>
 
       <Footer />
     </div>

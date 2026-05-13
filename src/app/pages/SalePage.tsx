@@ -7,16 +7,27 @@ import { SearchBar, SearchFilters } from "../components/SearchBar";
 import { PropertyCard, type Property } from "../components/PropertyCard";
 import { PropertyMap } from "../components/PropertyMap";
 import { useCatalogProperties } from "../hooks/useCatalogProperties";
+import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
+import { useSiteContent } from "../../contexts/SiteContentContext";
+import { mergeSiteSection } from "../../lib/siteContentMerge";
+import {
+  sortCatalogProperties,
+  CATALOG_PROPERTY_SORT_OPTIONS,
+  type CatalogPropertySortKey,
+} from "../lib/catalogPropertySort";
+import { applyAdvancedPropertyFilters } from "../lib/applyAdvancedPropertyFilters";
 import { SlidersHorizontal, Map, LayoutGrid } from "lucide-react";
 import { Reveal } from "../components/Reveal";
 import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
+import { PreviewFieldPulse } from "../components/admin/siteEditor/PreviewFieldPulse";
+import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
+import { HeroBackdropMedia } from "../components/HeroBackdropMedia";
 import { cn } from "../components/ui/utils";
 import {
   viterraHeroSectionClass,
   viterraHeroCenteredStackClass,
   viterraHeroCenteredInnerClass,
   viterraHeroMainClass,
-  viterraHeroTitleClass,
   viterraHeroSubtitleClass,
 } from "../config/heroLayout";
 
@@ -40,6 +51,9 @@ function PropertyGridSkeleton() {
 
 export function SalePage() {
   const reduceMotion = useReducedMotion();
+  const pl = usePreviewLayout();
+  const { content } = useSiteContent();
+  const hero = mergeSiteSection("sale", content.sale);
   const [searchParams] = useSearchParams();
   const { properties, loading } = useCatalogProperties();
   const saleProperties = useMemo(
@@ -48,8 +62,13 @@ export function SalePage() {
   );
   const catalogPrices = useMemo(() => saleProperties.map((p) => p.price), [saleProperties]);
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
-  const [sortBy, setSortBy] = useState("newest");
+  const [sortBy, setSortBy] = useState<CatalogPropertySortKey>("newest");
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
+
+  const displayedProperties = useMemo(
+    () => sortCatalogProperties(filteredProperties, sortBy),
+    [filteredProperties, sortBy]
+  );
 
   useEffect(() => {
     setFilteredProperties(saleProperties);
@@ -79,6 +98,8 @@ export function SalePage() {
       filtered = filtered.filter((property) => property.price <= Number(filters.maxPrice));
     }
 
+    filtered = applyAdvancedPropertyFilters(filtered, filters);
+
     setFilteredProperties(filtered);
   }, [saleProperties]);
 
@@ -89,37 +110,25 @@ export function SalePage() {
       status: "venta",
       minPrice: searchParams.get("minPrice") || "",
       maxPrice: searchParams.get("maxPrice") || "",
+      minBedrooms: searchParams.get("minBedrooms") || "",
+      minBathrooms: searchParams.get("minBathrooms") || "",
+      minArea: searchParams.get("minArea") || "",
+      maxArea: searchParams.get("maxArea") || "",
     };
 
-    const hasFilters = filters.query || filters.type || filters.minPrice || filters.maxPrice;
+    const hasFilters =
+      filters.query ||
+      filters.type ||
+      filters.minPrice ||
+      filters.maxPrice ||
+      filters.minBedrooms ||
+      filters.minBathrooms ||
+      filters.minArea ||
+      filters.maxArea;
     if (hasFilters) {
       handleSearch(filters);
     }
   }, [searchParams, handleSearch]);
-
-  const handleSort = (value: string) => {
-    setSortBy(value);
-    let sorted = [...filteredProperties];
-
-    switch (value) {
-      case "price-low":
-        sorted.sort((a, b) => a.price - b.price);
-        break;
-      case "price-high":
-        sorted.sort((a, b) => b.price - a.price);
-        break;
-      case "area-large":
-        sorted.sort((a, b) => b.area - a.area);
-        break;
-      case "area-small":
-        sorted.sort((a, b) => a.area - b.area);
-        break;
-      default:
-        break;
-    }
-
-    setFilteredProperties(sorted);
-  };
 
   const heroContainerVariants = {
     hidden: {},
@@ -144,28 +153,21 @@ export function SalePage() {
     <div className="viterra-page min-h-screen flex flex-col bg-white" >
       <Header />
 
+      <main className="flex min-h-0 flex-1 flex-col">
+      <PreviewSectionChrome blockId="sale-hero" label="Cabecera">
       <section className={viterraHeroSectionClass}>
         <div className="absolute inset-0 z-0 overflow-hidden">
-          <motion.img
-            src="https://plus.unsplash.com/premium_photo-1661954372617-15780178eb2e?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8bHV4dXJ5JTIwaG91c2V8ZW58MHx8MHx8fDA%3D"
-            alt="Propiedades en Venta"
-            className="h-full w-full object-cover"
-            initial={false}
-            animate={
-              reduceMotion
-                ? { scale: 1.05 }
-                : { scale: [1.05, 1.07, 1.05] }
-            }
-            transition={
-              reduceMotion
-                ? { duration: 0 }
-                : { duration: 22, repeat: Infinity, ease: "easeInOut" }
-            }
-          />
-          <div
-            className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60"
-            aria-hidden
-          />
+          <PreviewFieldPulse blockId="sale-hero" fieldKey="sale-hero-bg" layout="cover" className="h-full w-full">
+            <HeroBackdropMedia
+              src={hero.heroImage ?? ""}
+              fallbackSrc="https://plus.unsplash.com/premium_photo-1661954372617-15780178eb2e?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8bHV4dXJ5JTIwaG91c2V8ZW58MHx8MHx8fDA%3D"
+              reduceMotion={!!reduceMotion}
+            />
+            <div
+              className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60"
+              aria-hidden
+            />
+          </PreviewFieldPulse>
         </div>
 
         <div className={viterraHeroCenteredStackClass}>
@@ -176,19 +178,30 @@ export function SalePage() {
             animate="visible"
           >
             <ViterraHeroTopClusterAnimated
-              kicker="Viterra · Listados"
+              kicker={
+                <PreviewFieldPulse blockId="sale-hero" fieldKey="sale-hero-kicker" className="inline-block">
+                  {hero.heroKicker}
+                </PreviewFieldPulse>
+              }
               itemVariants={heroItemVariants}
               reduceMotion={!!reduceMotion}
             />
             <motion.div variants={heroItemVariants} className={viterraHeroMainClass}>
-              <h1 className={viterraHeroTitleClass}>Propiedades en Venta</h1>
+              <h1 className={pl.heroTitleClass()}>
+                <PreviewFieldPulse blockId="sale-hero" fieldKey="sale-hero-title" className="block">
+                  {hero.heroTitle}
+                </PreviewFieldPulse>
+              </h1>
             </motion.div>
             <motion.p variants={heroItemVariants} className={viterraHeroSubtitleClass}>
-              Invierte en tu patrimonio con las mejores opciones del mercado
+              <PreviewFieldPulse blockId="sale-hero" fieldKey="sale-hero-subtitle" className="block w-full">
+                {hero.heroSubtitle}
+              </PreviewFieldPulse>
             </motion.p>
           </motion.div>
         </div>
       </section>
+      </PreviewSectionChrome>
 
       <section className="border-b border-brand-navy/10 bg-brand-canvas py-12">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
@@ -222,7 +235,7 @@ export function SalePage() {
                 <p className="font-heading text-sm font-medium text-brand-navy/90 not-italic">
                   {loading
                     ? "Cargando propiedades..."
-                    : `${filteredProperties.length} propiedad${filteredProperties.length !== 1 ? "es" : ""} disponible${filteredProperties.length !== 1 ? "s" : ""}`}
+                    : `${displayedProperties.length} propiedad${displayedProperties.length !== 1 ? "es" : ""} disponible${displayedProperties.length !== 1 ? "s" : ""}`}
                 </p>
               </div>
             )}
@@ -273,14 +286,14 @@ export function SalePage() {
               {viewMode === "grid" && (
                 <select
                   value={sortBy}
-                  onChange={(e) => handleSort(e.target.value)}
+                  onChange={(e) => setSortBy(e.target.value as CatalogPropertySortKey)}
                   className="font-heading rounded-lg border border-brand-navy/15 bg-white px-4 py-2 text-sm font-normal text-brand-navy not-italic transition-shadow duration-200 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                 >
-                  <option value="newest">Más recientes</option>
-                  <option value="price-low">Precio: Menor a mayor</option>
-                  <option value="price-high">Precio: Mayor a menor</option>
-                  <option value="area-large">Área: Mayor a menor</option>
-                  <option value="area-small">Área: Menor a mayor</option>
+                  {CATALOG_PROPERTY_SORT_OPTIONS.map(({ value, label }) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
                 </select>
               )}
             </div>
@@ -290,7 +303,7 @@ export function SalePage() {
             <PropertyGridSkeleton />
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 items-stretch md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {filteredProperties.map((property, index) => (
+              {displayedProperties.map((property, index) => (
                 <Reveal key={property.id} className="h-full" delay={Math.min(index * 0.055, 0.4)} y={24}>
                   <PropertyCard property={property} disablePreview />
                 </Reveal>
@@ -298,11 +311,11 @@ export function SalePage() {
             </div>
           ) : (
             <Reveal y={20}>
-              <PropertyMap properties={filteredProperties} mapHeightClassName="h-[58vh] min-h-[320px] max-h-[460px]" />
+              <PropertyMap properties={displayedProperties} mapHeightClassName="h-[58vh] min-h-[320px] max-h-[460px]" />
             </Reveal>
           )}
 
-          {!loading && filteredProperties.length === 0 && (
+          {!loading && displayedProperties.length === 0 && (
             <motion.div
               className="py-20 text-center"
               initial={reduceMotion ? false : { opacity: 0, y: 12 }}
@@ -316,6 +329,8 @@ export function SalePage() {
           )}
         </div>
       </section>
+
+      </main>
 
       <Footer />
     </div>

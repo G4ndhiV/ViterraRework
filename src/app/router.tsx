@@ -1,6 +1,7 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, Navigate } from "react-router";
 import type { ComponentType } from "react";
 import { RootLayout } from "./RootLayout";
+import { AdminLayout } from "./pages/admin/AdminLayout";
 
 const lazyPage = (loader: () => Promise<{ [key: string]: unknown }>, exportName: string) => async () => {
   const mod = await loader();
@@ -26,6 +27,10 @@ export const router = createBrowserRouter([
       {
         path: "/venta",
         lazy: lazyPage(() => import("./pages/SalePage"), "SalePage"),
+      },
+      {
+        path: "/servicios/d/:slug",
+        lazy: lazyPage(() => import("./pages/ServiceDetailPage"), "ServiceDetailPage"),
       },
       {
         path: "/servicios",
@@ -69,7 +74,19 @@ export const router = createBrowserRouter([
       },
       {
         path: "/admin",
-        lazy: lazyPage(() => import("./pages/AdminPage"), "AdminPage"),
+        /** Contenedor mínimo: eager para que al refrescar no espere un chunk vacío antes del workspace. */
+        Component: AdminLayout,
+        children: [
+          { index: true, element: <Navigate to="/admin/dashboard" replace /> },
+          {
+            path: "site-preview-frame",
+            lazy: lazyPage(() => import("./pages/admin/SitePreviewFramePage"), "SitePreviewFramePage"),
+          },
+          {
+            path: "*",
+            lazy: lazyPage(() => import("./pages/admin/AdminWorkspace"), "AdminWorkspace"),
+          },
+        ],
       },
       {
         path: "*",
