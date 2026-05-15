@@ -93,8 +93,13 @@ export interface Lead {
   createdAtIso?: string;
   lastContact: string;
   updatedAt?: string;
-  /** Fecha ISO en que se realizó el soft-delete (`deleted_at` en Supabase). */
+  /** Fecha ISO en que se realizó el soft-delete (`deleted_at` en Supabase). Puede venir de Tokko u del CRM. */
   deletedAt?: string | null;
+  /**
+   * Marca de archivo solo cuando el admin elimina el lead desde el panel (no confundir con `deleted_at`
+   * de Tokko, que a veces viene informado en filas activas).
+   */
+  crmSoftDeletedAt?: string | null;
 }
 
 /**
@@ -299,6 +304,12 @@ export function normalizeStoredLead(raw: Partial<Lead> & Record<string, unknown>
       typeof raw.deletedAt === "string" && raw.deletedAt
         ? raw.deletedAt
         : raw.deletedAt === null
+          ? null
+          : undefined,
+    crmSoftDeletedAt:
+      typeof raw.crmSoftDeletedAt === "string" && raw.crmSoftDeletedAt.trim()
+        ? raw.crmSoftDeletedAt
+        : raw.crmSoftDeletedAt === null
           ? null
           : undefined,
   };

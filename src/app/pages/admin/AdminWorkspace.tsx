@@ -533,8 +533,8 @@ export function AdminWorkspace() {
         return;
       }
 
-      // El admin carga `fetchAllLeadsForAdmin` para que el módulo Consultas pueda mostrar los soft-deleted
-      // en la pestaña «Descartados»; el resto de vistas filtra por `lead.deletedAt == null` en `leadsForUser`.
+      // El admin usa `fetchAllLeadsForAdmin` (orden por creación). «Descartados» en Consultas usa
+      // `crmSoftDeletedAt` + `perdido`, no `deleted_at` de Tokko (ver `softDeleteLead`).
       const leadsLoader = user?.role === "admin" ? fetchAllLeadsForAdmin : fetchActiveLeads;
       const leadsP = needsLeads
         ? leadsLoader(client)
@@ -799,15 +799,21 @@ export function AdminWorkspace() {
   const stageColumnColors = activePipeline.stageColors;
 
   const leadsForUser = useMemo(
-    /** Excluye soft-deleted: solo el módulo Consultas (admin) los muestra en su tab «Descartados». */
-    () => filterLeadsForUser(leads, user).filter((l) => l.deletedAt == null),
+    () =>
+      filterLeadsForUser(leads, user).filter(
+        (l) => l.crmSoftDeletedAt == null || String(l.crmSoftDeletedAt).trim() === ""
+      ),
     [leads, user]
   );
 
-  const leadsInActivePipeline = useMemo(
-    () => leadsForUser.filter((l) => l.pipelineGroupId === activePipelineGroupId),
-    [leadsForUser, activePipelineGroupId]
-  );
+  const leadsInActivePipeline = useMemo(() => {
+    // "General" es la vista agregada (label: todos los equipos), no solo el bucket `__default__`.
+    if (activePipelineGroupId === DEFAULT_PIPELINE_GROUP_ID) {
+      const allowed = new Set(allowedPipelineGroupIds);
+      return leadsForUser.filter((l) => allowed.has(l.pipelineGroupId));
+    }
+    return leadsForUser.filter((l) => l.pipelineGroupId === activePipelineGroupId);
+  }, [leadsForUser, activePipelineGroupId, allowedPipelineGroupIds]);
 
   const canConfigureActivePipeline = useMemo(
     () => (user ? canConfigurePipelineForGroup(user, activePipelineGroupId, userGroups) : false),
@@ -936,25 +942,30 @@ export function AdminWorkspace() {
 
   const handleDeleteLead = useCallback(
     async (id: string) => {
+      const lead = leads.find((l) => l.id === id);
+      if (!lead) return;
+
       const client = getSupabaseClient();
       if (client) {
-        const { error: delLeadErr } = await softDeleteLead(client, id);
+        const { error: delLeadErr } = await softDeleteLead(client, lead);
         if (delLeadErr) {
           toast.error(delLeadErr.message);
           return;
         }
       }
       const ts = new Date().toISOString();
-      // El admin conserva los leads soft-deleted en estado para verlos en Consultas → Descartados.
-      // El resto de roles los quita del listado local (no acceden al módulo Consultas).
+      const archived: Lead = { ...lead, crmSoftDeletedAt: ts, deletedAt: ts, updatedAt: ts };
+
+      // El admin conserva el lead en estado para Consultas → Descartados (`crmSoftDeletedAt`).
+      // El resto de roles lo quita del listado local.
       if (user?.role === "admin") {
-        setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, deletedAt: ts } : l)));
+        setLeads((prev) => prev.map((l) => (l.id === id ? archived : l)));
       } else {
         setLeads((prev) => prev.filter((l) => l.id !== id));
       }
       setLeadDialog((d) => (d?.lead.id === id ? null : d));
     },
-    [user?.role]
+    [user?.role, leads]
   );
 
   const handleDeleteDevelopment = useCallback(

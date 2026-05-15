@@ -11,6 +11,8 @@ type LeadPayloadShape = {
   clientNotes?: LeadClientNote[];
   relatedPropertyId?: string;
   relatedDevelopmentId?: string;
+  /** Seteado solo al archivar desde el CRM (`softDeleteLead`); no usar `deleted_at` de Tokko como descartado. */
+  crmSoftDeletedAt?: string;
 };
 
 function parsePayload(raw: unknown): LeadPayloadShape {
@@ -59,17 +61,25 @@ export function rowToLead(row: Record<string, unknown>): Lead {
         : row.deleted_at === null
           ? null
           : undefined,
+    crmSoftDeletedAt:
+      typeof payload.crmSoftDeletedAt === "string" && payload.crmSoftDeletedAt.trim()
+        ? payload.crmSoftDeletedAt
+        : undefined,
   } as Partial<Lead> & Record<string, unknown>);
 }
 
 function leadPayloadForDb(lead: Lead): Record<string, unknown> {
-  return {
+  const out: Record<string, unknown> = {
     pipelineGroupId: lead.pipelineGroupId,
     activity: lead.activity ?? [],
     clientNotes: lead.clientNotes ?? [],
     relatedPropertyId: lead.relatedPropertyId ?? null,
     relatedDevelopmentId: lead.relatedDevelopmentId ?? null,
   };
+  if (lead.crmSoftDeletedAt != null && String(lead.crmSoftDeletedAt).trim() !== "") {
+    out.crmSoftDeletedAt = lead.crmSoftDeletedAt;
+  }
+  return out;
 }
 
 function leadToInsertRow(lead: Lead, ts: string) {
@@ -118,9 +128,9 @@ export async function fetchActiveLeads(client: SupabaseClient) {
 }
 
 /**
- * Devuelve todos los leads (incluye soft-deleted) ordenados por fecha de creación descendente.
- * Pensado para el módulo `Consultas` del admin, donde los leads descartados/eliminados se muestran
- * en su propio tab. El resto del CRM debe filtrar `lead.deletedAt == null` al consumir esta lista.
+ * Devuelve todos los leads ordenados por fecha de creación descendente.
+ * `deleted_at` en filas Tokko no implica “descartado en el CRM”; usar solo `payload.crmSoftDeletedAt`
+ * (véase `softDeleteLead`) y `status === 'perdido'` en Consultas.
  */
 export async function fetchAllLeadsForAdmin(client: SupabaseClient) {
   const res = await client.from("leads").select("*").order("created_at", { ascending: false });
@@ -157,7 +167,22 @@ export async function updateLead(client: SupabaseClient, lead: Lead) {
   return client.from("leads").update(row).eq("id", lead.id);
 }
 
-export async function softDeleteLead(client: SupabaseClient, id: string) {
+/** Archiva el lead en panel: `deleted_at` + `payload.crmSoftDeletedAt` (fusiona con payload existente). */
+export async function softDeleteLead(client: SupabaseClient, lead: Lead) {
   const ts = nowIso();
-  return client.from("leads").update({ deleted_at: ts, updated_at: ts, synced_at: ts }).eq("id", id);
+  const archived: Lead = { ...lead, crmSoftDeletedAt: ts, updatedAt: ts };
+  const patch = leadPayloadForDb(archived) as Record<string, unknown>;
+
+  const existing = await client.from("leads").select("payload").eq("id", lead.id).maybeSingle();
+  const prevPayload =
+    existing.data?.payload && typeof existing.data.payload === "object" && !Array.isArray(existing.data.payload)
+      ? (existing.data.payload as Record<string, unknown>)
+      : {};
+
+  const payload = { ...prevPayload, ...patch };
+
+  return client
+    .from("leads")
+    .update({ deleted_at: ts, updated_at: ts, synced_at: ts, payload })
+    .eq("id", lead.id);
 }

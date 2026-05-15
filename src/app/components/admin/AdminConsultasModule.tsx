@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { DateRange } from "react-day-picker";
+import { endOfDay, format, isSameDay, startOfDay } from "date-fns";
+import { es } from "date-fns/locale";
 import {
   Building2,
   CalendarDays,
@@ -35,14 +38,15 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
+import { Calendar } from "../ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { LeadPriorityBadge } from "./LeadPriorityBadge";
 import { cn } from "../ui/utils";
 
 type ConsultasTab = "todos" | "asignados" | "descartados";
 
-type RelatedInventoryOption =
-  | { kind: "property"; id: string; label: string }
-  | { kind: "development"; id: string; label: string };
+/** Filtro por tipo de vínculo al catálogo (no por propiedad/desarrollo concreto). */
+type InventoryKindFilter = "all" | "property" | "development";
 
 type Props = {
   leads: Lead[];
@@ -63,12 +67,13 @@ type Props = {
   currentUserName: string;
 };
 
-function isLeadDeleted(lead: Lead): boolean {
-  return lead.deletedAt != null;
+/** Archivado explícito desde el panel (payload `crmSoftDeletedAt`). No usar `deleted_at` de Tokko aquí. */
+function isCrmArchivedLead(lead: Lead): boolean {
+  return lead.crmSoftDeletedAt != null && String(lead.crmSoftDeletedAt).trim() !== "";
 }
 
 function isLeadDiscarded(lead: Lead): boolean {
-  return isLeadDeleted(lead) || lead.status === "perdido";
+  return isCrmArchivedLead(lead) || lead.status === "perdido";
 }
 
 function isLeadAssigned(lead: Lead): boolean {
@@ -126,6 +131,131 @@ function groupIdsForUser(userId: string, groups: UserGroup[]): string[] {
 const FIELD_CLASS =
   "h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-navy shadow-sm placeholder:text-slate-400 focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-primary/15";
 
+/** Fecha local (yyyy-MM-dd) en que se creó el lead para comparar con “hoy”. */
+function leadCreationLocalDateKey(lead: Lead): string | null {
+  const iso = lead.createdAtIso?.trim();
+  if (iso) {
+    const t = Date.parse(iso);
+    if (!Number.isNaN(t)) return format(new Date(t), "yyyy-MM-dd");
+  }
+  const d = lead.createdAt?.trim();
+  if (d) {
+    const m = d.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+/** Texto del botón tipo Airbnb: un solo control para rango inicio–fin. */
+function formatCreationDateRangeLabel(range: DateRange | undefined): string {
+  if (!range?.from) return "Selecciona fechas";
+  if (!range.to) {
+    return `${format(range.from, "d MMM yyyy", { locale: es })} – …`;
+  }
+  if (isSameDay(range.from, range.to)) {
+    return format(range.from, "d MMM yyyy", { locale: es });
+  }
+  const sameYear = range.from.getFullYear() === range.to.getFullYear();
+  const left = format(range.from, sameYear ? "d MMM" : "d MMM yyyy", { locale: es });
+  const right = format(range.to, "d MMM yyyy", { locale: es });
+  return `${left} – ${right}`;
+}
+
+/** Popover + calendario con estado local: abrir o cambiar fechas no re-renderiza la lista masiva del padre. */
+function ConsultasCreationDateRangeFilter({
+  value,
+  onChange,
+}: {
+  value: DateRange | undefined;
+  onChange: (next: DateRange | undefined) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<DateRange | undefined>(() =>
+    value ? { from: value.from, to: value.to } : undefined
+  );
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+
+  useEffect(() => {
+    if (!open) setDraft(value ? { from: value.from, to: value.to } : undefined);
+  }, [value, open]);
+
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (nextOpen) {
+        const nextDraft = value ? { from: value.from, to: value.to } : undefined;
+        setDraft(nextDraft);
+        draftRef.current = nextDraft;
+        setOpen(true);
+        return;
+      }
+      setOpen(false);
+      onChange(draftRef.current);
+    },
+    [onChange, value]
+  );
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            FIELD_CLASS,
+            "inline-flex items-center justify-between gap-2 text-left outline-none transition hover:border-slate-300",
+            !value?.from && "text-slate-400"
+          )}
+          aria-label="Elegir rango de fechas de creación"
+        >
+          <span className="min-w-0 truncate" style={{ fontWeight: 500 }}>
+            {formatCreationDateRangeLabel(value)}
+          </span>
+          <CalendarDays className="h-4 w-4 shrink-0 text-slate-400" strokeWidth={1.75} aria-hidden />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-auto max-w-[calc(100vw-1.5rem)] border-slate-200 p-0 shadow-lg duration-0 animate-none data-[state=open]:animate-none data-[state=closed]:animate-none"
+        align="start"
+      >
+        <Calendar
+          mode="range"
+          locale={es}
+          selected={draft}
+          onSelect={setDraft}
+          numberOfMonths={2}
+          showOutsideDays={false}
+          classNames={{
+            day_today: "font-normal aria-selected:opacity-100",
+          }}
+        />
+        <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-2 py-2">
+          <button
+            type="button"
+            className="rounded-md px-2.5 py-1.5 text-xs text-slate-600 transition hover:bg-slate-100 hover:text-brand-navy"
+            style={{ fontWeight: 600 }}
+            onClick={() => {
+              setDraft(undefined);
+              onChange(undefined);
+            }}
+          >
+            Borrar fechas
+          </button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 border-slate-200 bg-white text-xs text-brand-navy"
+            style={{ fontWeight: 600 }}
+            onClick={() => handleOpenChange(false)}
+          >
+            Listo
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function AdminConsultasModule({
   leads,
   users,
@@ -143,15 +273,14 @@ export function AdminConsultasModule({
   const [tab, setTab] = useState<ConsultasTab>("todos");
   const [groupFilter, setGroupFilter] = useState<string>("all");
   const [advisorFilter, setAdvisorFilter] = useState<string>("all");
-  const [clientQuery, setClientQuery] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [inventoryFilter, setInventoryFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [creationDateRange, setCreationDateRange] = useState<DateRange | undefined>();
+  const [inventoryFilter, setInventoryFilter] = useState<InventoryKindFilter>("all");
   const [reassignTarget, setReassignTarget] = useState<Lead | null>(null);
 
-  const tabFilteredAll = useMemo(() => leads.filter((l) => !isLeadDeleted(l)), [leads]);
+  const tabFilteredAll = useMemo(() => leads.filter((l) => !isCrmArchivedLead(l)), [leads]);
   const tabFilteredAsignados = useMemo(
-    () => leads.filter((l) => !isLeadDeleted(l) && isLeadAssigned(l)),
+    () => leads.filter((l) => !isCrmArchivedLead(l) && isLeadAssigned(l)),
     [leads]
   );
   const tabFilteredDescartados = useMemo(
@@ -181,16 +310,6 @@ export function AdminConsultasModule({
     const memberSet = new Set(grp.memberIds);
     return advisorOptions.filter((u) => memberSet.has(u.id));
   }, [groupFilter, advisorOptions, groups]);
-
-  const inventoryOptions = useMemo<RelatedInventoryOption[]>(() => {
-    const props: RelatedInventoryOption[] = properties
-      .map((p) => ({ kind: "property" as const, id: p.id, label: p.title || "Propiedad sin título" }))
-      .sort((a, b) => a.label.localeCompare(b.label, "es"));
-    const devs: RelatedInventoryOption[] = developments
-      .map((d) => ({ kind: "development" as const, id: d.id, label: d.name || "Desarrollo sin nombre" }))
-      .sort((a, b) => a.label.localeCompare(b.label, "es"));
-    return [...props, ...devs];
-  }, [properties, developments]);
 
   const propertyById = useMemo(() => {
     const map = new Map<string, Property>();
@@ -237,9 +356,11 @@ export function AdminConsultasModule({
   );
 
   const filteredLeads = useMemo(() => {
-    const q = foldSearchText(clientQuery);
-    const fromTs = dateFrom ? Date.parse(`${dateFrom}T00:00:00`) : null;
-    const toTs = dateTo ? Date.parse(`${dateTo}T23:59:59.999`) : null;
+    const q = foldSearchText(searchQuery);
+    const rangeFrom = creationDateRange?.from;
+    const rangeTo = creationDateRange?.to;
+    const fromTs = rangeFrom ? startOfDay(rangeFrom).getTime() : null;
+    const toTs = rangeTo ? endOfDay(rangeTo).getTime() : null;
 
     return tabSourceLeads.filter((lead) => {
       // Equipo
@@ -270,9 +391,31 @@ export function AdminConsultasModule({
         }
       }
 
-      // Cliente (texto libre)
+      // Búsqueda global: cliente, asesor, propiedad o desarrollo vinculado
       if (q) {
-        const haystack = [lead.name, lead.email, lead.phone].map(foldSearchText).join(" ");
+        const advisorUser = userByLead.get(lead.id);
+        const linkedProperty = lead.relatedPropertyId ? propertyById.get(lead.relatedPropertyId) : undefined;
+        const linkedDevelopment = lead.relatedDevelopmentId
+          ? developmentById.get(lead.relatedDevelopmentId)
+          : undefined;
+        const inventoryLabels = [
+          linkedProperty?.title ?? "",
+          linkedDevelopment?.name ?? "",
+          lead.relatedPropertyId && !linkedProperty ? "Propiedad eliminada" : "",
+          lead.relatedDevelopmentId && !linkedDevelopment ? "Desarrollo eliminado" : "",
+        ];
+        const haystack = [
+          lead.name,
+          lead.email,
+          lead.phone,
+          lead.assignedTo,
+          advisorUser?.name ?? "",
+          advisorUser?.email ?? "",
+          resolveAssigneeName(lead.assignedToUserId ?? "", users),
+          ...inventoryLabels,
+        ]
+          .map(foldSearchText)
+          .join(" ");
         if (!haystack.includes(q)) return false;
       }
 
@@ -285,14 +428,11 @@ export function AdminConsultasModule({
         if (toTs != null && ts > toTs) return false;
       }
 
-      // Propiedad / desarrollo
-      if (inventoryFilter !== "all") {
-        const [kind, id] = inventoryFilter.split(":");
-        if (kind === "property") {
-          if (lead.relatedPropertyId !== id) return false;
-        } else if (kind === "development") {
-          if (lead.relatedDevelopmentId !== id) return false;
-        }
+      // Tipo de vínculo: propiedad vs desarrollo (no filtra por inmueble concreto)
+      if (inventoryFilter === "property") {
+        if (!lead.relatedPropertyId?.trim()) return false;
+      } else if (inventoryFilter === "development") {
+        if (!lead.relatedDevelopmentId?.trim()) return false;
       }
 
       return true;
@@ -301,13 +441,14 @@ export function AdminConsultasModule({
     tabSourceLeads,
     groupFilter,
     advisorFilter,
-    clientQuery,
-    dateFrom,
-    dateTo,
+    searchQuery,
+    creationDateRange,
     inventoryFilter,
     users,
     groups,
     userByLead,
+    propertyById,
+    developmentById,
   ]);
 
   const tabCounts = useMemo(
@@ -319,20 +460,27 @@ export function AdminConsultasModule({
     [tabFilteredAll, tabFilteredAsignados, tabFilteredDescartados]
   );
 
+  const leadsCreatedTodayCount = useMemo(() => {
+    const todayKey = format(new Date(), "yyyy-MM-dd");
+    let n = 0;
+    for (const l of leads) {
+      if (leadCreationLocalDateKey(l) === todayKey) n += 1;
+    }
+    return n;
+  }, [leads]);
+
   const filtersActive =
     groupFilter !== "all" ||
     advisorFilter !== "all" ||
-    clientQuery.trim() !== "" ||
-    dateFrom !== "" ||
-    dateTo !== "" ||
+    searchQuery.trim() !== "" ||
+    creationDateRange?.from != null ||
     inventoryFilter !== "all";
 
   const clearFilters = () => {
     setGroupFilter("all");
     setAdvisorFilter("all");
-    setClientQuery("");
-    setDateFrom("");
-    setDateTo("");
+    setSearchQuery("");
+    setCreationDateRange(undefined);
     setInventoryFilter("all");
   };
 
@@ -351,8 +499,9 @@ export function AdminConsultasModule({
                 Bandeja de leads
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
-                Revisa todos los leads creados, los que ya están asignados y los descartados. Filtra por equipo, asesor,
-                cliente, fecha o propiedad/desarrollo, y reasigna a otro asesor cuando lo necesites.
+                Revisa todos los leads creados, los que ya están asignados y los descartados. Filtra por equipo, asesor
+                o tipo de inventario, busca por cliente / asesor / propiedad o desarrollo, por fecha, y reasigna cuando lo
+                necesites.
               </p>
             </div>
             <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:justify-end">
@@ -370,8 +519,9 @@ export function AdminConsultasModule({
             </div>
           </div>
 
-          <div className="mt-6 inline-flex w-full items-stretch overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-100/70 p-1 sm:w-auto">
-            {(["todos", "asignados", "descartados"] as const).map((id) => {
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="inline-flex w-fit max-w-full shrink-0 self-start items-stretch overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-100/70 p-1 sm:self-auto">
+              {(["todos", "asignados", "descartados"] as const).map((id) => {
               const active = tab === id;
               const label =
                 id === "todos" ? "Todos" : id === "asignados" ? "Asignados" : "Descartados";
@@ -402,6 +552,19 @@ export function AdminConsultasModule({
                 </button>
               );
             })}
+            </div>
+            <p
+              className="inline-flex max-w-full flex-wrap items-center justify-end gap-x-2 gap-y-1 self-end rounded-xl border border-slate-200/90 bg-white/85 px-3 py-2 text-xs text-slate-600 shadow-sm ring-1 ring-slate-900/[0.03] sm:ml-3 sm:shrink-0"
+              style={{ fontWeight: 500 }}
+            >
+              <ClipboardList className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={1.75} aria-hidden />
+              <span className="text-right">
+                <span className="font-semibold tabular-nums text-brand-navy">{leadsCreatedTodayCount}</span>{" "}
+                {leadsCreatedTodayCount === 1 ? "consulta creada hoy" : "consultas creadas hoy"}
+                <span className="text-slate-400"> · </span>
+                <span className="text-slate-500">{format(new Date(), "d MMM yyyy", { locale: es })}</span>
+              </span>
+            </p>
           </div>
         </div>
       </header>
@@ -412,116 +575,91 @@ export function AdminConsultasModule({
           Filtros
         </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-          <label className="flex flex-col gap-1.5 xl:col-span-1">
-            <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500" style={{ fontWeight: 600 }}>
-              Equipo
-            </span>
-            <select
-              value={groupFilter}
-              onChange={(e) => {
-                setGroupFilter(e.target.value);
-                setAdvisorFilter("all");
-              }}
-              className={FIELD_CLASS}
-            >
-              <option value="all">Todos los equipos</option>
-              <option value={DEFAULT_PIPELINE_GROUP_ID}>General (sin equipo)</option>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1.5 xl:col-span-1">
-            <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500" style={{ fontWeight: 600 }}>
-              Asesor
-            </span>
-            <select
-              value={advisorFilter}
-              onChange={(e) => setAdvisorFilter(e.target.value)}
-              className={FIELD_CLASS}
-            >
-              <option value="all">Todos los asesores</option>
-              <option value="__unassigned__">Sin asignar</option>
-              {filteredAdvisorOptions.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="relative flex flex-col gap-1.5 xl:col-span-2">
-            <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500" style={{ fontWeight: 600 }}>
-              Cliente
-            </span>
-            <span className="absolute inset-y-0 left-3 top-[1.6rem] flex items-start pt-2.5 text-slate-400">
-              <Search className="h-4 w-4" strokeWidth={1.75} />
-            </span>
-            <input
-              type="search"
-              value={clientQuery}
-              onChange={(e) => setClientQuery(e.target.value)}
-              placeholder="Nombre, email o teléfono"
-              className={cn(FIELD_CLASS, "pl-9")}
-            />
-          </label>
-
-          <div className="flex flex-col gap-1.5 xl:col-span-2">
-            <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500" style={{ fontWeight: 600 }}>
-              Fecha de creación
-            </span>
-            <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
+            <label className="relative flex min-w-0 flex-col gap-1.5 lg:col-span-8">
+              <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500" style={{ fontWeight: 600 }}>
+                Búsqueda
+              </span>
+              <span className="absolute inset-y-0 left-3 top-[1.6rem] flex items-start pt-2.5 text-slate-400">
+                <Search className="h-4 w-4" strokeWidth={1.75} />
+              </span>
               <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                aria-label="Desde"
-                className={FIELD_CLASS}
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cliente, asesor, propiedad o desarrollo…"
+                className={cn(FIELD_CLASS, "pl-9")}
+                aria-label="Buscar por cliente, asesor, propiedad o desarrollo"
               />
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                aria-label="Hasta"
-                className={FIELD_CLASS}
-              />
+            </label>
+
+            <div className="flex min-w-0 flex-col gap-1.5 lg:col-span-4">
+              <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500" style={{ fontWeight: 600 }}>
+                Fecha de creación
+              </span>
+              <ConsultasCreationDateRangeFilter value={creationDateRange} onChange={setCreationDateRange} />
             </div>
           </div>
 
-          <label className="flex flex-col gap-1.5 md:col-span-2 xl:col-span-6">
-            <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500" style={{ fontWeight: 600 }}>
-              Propiedad / desarrollo
-            </span>
-            <select
-              value={inventoryFilter}
-              onChange={(e) => setInventoryFilter(e.target.value)}
-              className={FIELD_CLASS}
-            >
-              <option value="all">Todas las propiedades y desarrollos</option>
-              <optgroup label="Propiedades">
-                {inventoryOptions
-                  .filter((o) => o.kind === "property")
-                  .map((o) => (
-                    <option key={`p:${o.id}`} value={`property:${o.id}`}>
-                      {o.label}
-                    </option>
-                  ))}
-              </optgroup>
-              <optgroup label="Desarrollos">
-                {inventoryOptions
-                  .filter((o) => o.kind === "development")
-                  .map((o) => (
-                    <option key={`d:${o.id}`} value={`development:${o.id}`}>
-                      {o.label}
-                    </option>
-                  ))}
-              </optgroup>
-            </select>
-          </label>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500" style={{ fontWeight: 600 }}>
+                Equipo
+              </span>
+              <select
+                value={groupFilter}
+                onChange={(e) => {
+                  setGroupFilter(e.target.value);
+                  setAdvisorFilter("all");
+                }}
+                className={FIELD_CLASS}
+              >
+                <option value="all">Todos los equipos</option>
+                <option value={DEFAULT_PIPELINE_GROUP_ID}>General (sin equipo)</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500" style={{ fontWeight: 600 }}>
+                Asesor
+              </span>
+              <select
+                value={advisorFilter}
+                onChange={(e) => setAdvisorFilter(e.target.value)}
+                className={FIELD_CLASS}
+              >
+                <option value="all">Todos los asesores</option>
+                <option value="__unassigned__">Sin asignar</option>
+                {filteredAdvisorOptions.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500" style={{ fontWeight: 600 }}>
+                Propiedad / desarrollo
+              </span>
+              <select
+                value={inventoryFilter}
+                onChange={(e) => setInventoryFilter(e.target.value as InventoryKindFilter)}
+                className={FIELD_CLASS}
+                aria-label="Filtrar por tipo: propiedad o desarrollo"
+              >
+                <option value="all">Todos (propiedades y desarrollos)</option>
+                <option value="property">Solo leads vinculados a propiedad</option>
+                <option value="development">Solo leads vinculados a desarrollo</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         {filtersActive && (
@@ -608,7 +746,7 @@ export function AdminConsultasModule({
                     : "Sin inventario vinculado");
               const inventoryImage = linkedProperty?.image ?? linkedDevelopment?.image ?? "";
               const teamLabel = groupNameForLead(lead);
-              const isDeleted = isLeadDeleted(lead);
+              const isArchived = isCrmArchivedLead(lead);
               const isLost = lead.status === "perdido";
 
               return (
@@ -662,13 +800,13 @@ export function AdminConsultasModule({
                             <h3 className="truncate text-base text-brand-navy" style={{ fontWeight: 700 }}>
                               {lead.name || "Cliente sin nombre"}
                             </h3>
-                            {isDeleted && (
+                            {isArchived && (
                               <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-red-700" style={{ fontWeight: 600 }}>
                                 <Trash2 className="h-3 w-3" strokeWidth={1.8} />
                                 Eliminado
                               </span>
                             )}
-                            {!isDeleted && isLost && (
+                            {!isArchived && isLost && (
                               <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-amber-700" style={{ fontWeight: 600 }}>
                                 Perdido
                               </span>
@@ -704,15 +842,15 @@ export function AdminConsultasModule({
                           <button
                             type="button"
                             onClick={() => setReassignTarget(lead)}
-                            disabled={isDeleted}
+                            disabled={isArchived}
                             className={cn(
                               "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs shadow-sm transition",
-                              isDeleted
+                              isArchived
                                 ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
                                 : "border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
                             )}
                             style={{ fontWeight: 600 }}
-                            title={isDeleted ? "El lead fue eliminado y no se puede reasignar" : "Reasignar a otro asesor"}
+                            title={isArchived ? "El lead fue archivado en el CRM y no se puede reasignar" : "Reasignar a otro asesor"}
                           >
                             <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.8} />
                             Reasignar
