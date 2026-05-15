@@ -1,5 +1,5 @@
 import { useLocation } from "react-router";
-import { Facebook, Instagram, Linkedin, Youtube, Link as LinkIcon, MessageCircle } from "lucide-react";
+import { Facebook, Instagram, Youtube, Link as LinkIcon, MessageCircle } from "lucide-react";
 import { useSiteContent } from "../../contexts/SiteContentContext";
 import { useSitePreviewVirtualPath } from "../../contexts/SitePreviewVirtualPathContext";
 import { mergeSiteSection } from "../../lib/siteContentMerge";
@@ -9,7 +9,6 @@ import { cn } from "./ui/utils";
 const iconById: Partial<Record<HeaderSocialIconId, typeof Facebook>> = {
   facebook: Facebook,
   instagram: Instagram,
-  linkedin: Linkedin,
   youtube: Youtube,
   tiktok: LinkIcon,
   threads: LinkIcon,

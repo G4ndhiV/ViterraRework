@@ -13,7 +13,6 @@ import {
   ChevronDown,
   Facebook,
   Instagram,
-  Linkedin,
   Globe,
   Youtube,
   ArrowRight,
@@ -96,8 +95,6 @@ function ContactSocialGlyph({
       return <Facebook className={strokeIcon} strokeWidth={1.5} aria-hidden />;
     case "instagram":
       return <Instagram className={strokeIcon} strokeWidth={1.5} aria-hidden />;
-    case "linkedin":
-      return <Linkedin className={strokeIcon} strokeWidth={1.5} aria-hidden />;
     case "youtube":
       return <Youtube className={strokeIcon} strokeWidth={1.5} aria-hidden />;
     case "whatsapp":
@@ -372,7 +369,7 @@ export function ContactPage() {
     <div className="viterra-page flex min-h-screen flex-col bg-white">
       <Header />
 
-      <main className="flex min-h-0 flex-1 flex-col">
+      <main className="relative z-40 flex min-h-0 flex-1 flex-col">
       <PreviewSectionChrome blockId="contact-hero" label="Cabecera">
         <section className={viterraHeroSectionClass}>
           <div className="absolute inset-0 z-0 overflow-hidden">
@@ -530,8 +527,13 @@ export function ContactPage() {
                   </div>
                 </div>
 
-                <div className={cn("relative min-h-[min(560px,72svh)]", pl.colSpan("lg:col-span-7"))}>
-                  <div className="pointer-events-none absolute right-4 top-4 z-[1000] max-w-[min(100%,280px)] rounded-lg border border-white/40 bg-white/90 p-4 shadow-lg backdrop-blur-md">
+                <div
+                  className={cn(
+                    "relative isolate z-0 min-h-[min(560px,72svh)]",
+                    pl.colSpan("lg:col-span-7")
+                  )}
+                >
+                  <div className="pointer-events-none absolute right-4 top-4 z-[30] max-w-[min(100%,280px)] rounded-lg border border-white/40 bg-white/90 p-4 shadow-lg backdrop-blur-md">
                     <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-brand-navy/50">
                       <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-mapSectionKicker" className="inline-block">
                         {c.mapSectionKicker}
@@ -570,13 +572,13 @@ export function ContactPage() {
                     blockId="contact-visit"
                     fieldKey="contact-visit-mapLat"
                     layout="cover"
-                    className="absolute inset-0 z-0 min-h-0"
+                    className="relative z-0 min-h-[min(420px,52svh)] sm:min-h-[min(480px,60svh)] md:min-h-[min(560px,72svh)]"
                   >
                     <PreviewFieldPulse
                       blockId="contact-visit"
                       fieldKey="contact-visit-mapLng"
                       layout="cover"
-                      className="absolute inset-0 h-full w-full min-h-0"
+                      className="relative h-full min-h-[inherit] w-full"
                     >
                       <motion.div
                         ref={mapRef}
@@ -791,16 +793,18 @@ export function ContactPage() {
                     />
                   </div>
 
-                  <motion.button
-                    type="submit"
-                    whileHover={reduceMotion ? undefined : { y: -2 }}
-                    whileTap={reduceMotion ? undefined : { scale: 0.98 }}
-                    transition={{ type: "spring", stiffness: 420, damping: 24 }}
-                    className="group inline-flex w-full items-center justify-center gap-2 border border-brand-navy px-10 py-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-navy transition-colors hover:bg-brand-navy hover:text-white sm:w-auto"
-                  >
-                    <Send className="h-4 w-4 transition-transform group-hover:translate-x-0.5" strokeWidth={1.5} />
-                    Enviar mensaje
-                  </motion.button>
+                  <div className="flex justify-center">
+                    <motion.button
+                      type="submit"
+                      whileHover={reduceMotion ? undefined : { y: -2 }}
+                      whileTap={reduceMotion ? undefined : { scale: 0.98 }}
+                      transition={{ type: "spring", stiffness: 420, damping: 24 }}
+                      className="group inline-flex items-center justify-center gap-2 border border-brand-navy px-10 py-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-navy transition-colors hover:bg-brand-navy hover:text-white"
+                    >
+                      <Send className="h-4 w-4 transition-transform group-hover:translate-x-0.5" strokeWidth={1.5} />
+                      Enviar mensaje
+                    </motion.button>
+                  </div>
 
                   <p className="text-center text-xs text-brand-navy/50">* Campos obligatorios</p>
                 </form>
@@ -928,33 +932,7 @@ export function ContactPage() {
             </Reveal>
 
             <Reveal y={16} delay={0.12} className="mt-12">
-              <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[11px] uppercase tracking-[0.16em] text-white/80">
-                <Link
-                  to={contactFixed.deepLinks.saleHref}
-                  className="border-b border-white/35 pb-1 transition-colors hover:border-primary hover:text-white"
-                >
-                  {contactFixed.deepLinks.saleLabel}
-                </Link>
-                <span className="hidden text-white/25 sm:inline" aria-hidden>
-                  |
-                </span>
-                <Link
-                  to={contactFixed.deepLinks.rentHref}
-                  className="border-b border-white/35 pb-1 transition-colors hover:border-primary hover:text-white"
-                >
-                  {contactFixed.deepLinks.rentLabel}
-                </Link>
-                <span className="hidden text-white/25 sm:inline" aria-hidden>
-                  |
-                </span>
-                <Link
-                  to={contactFixed.deepLinks.servicesHref}
-                  className="border-b border-white/35 pb-1 transition-colors hover:border-primary hover:text-white"
-                >
-                  {contactFixed.deepLinks.servicesLabel}
-                </Link>
-              </div>
-              <p className="mt-8 text-center text-[11px] font-light uppercase tracking-[0.18em] text-white/55">{contactFixed.advisorCta}</p>
+              <p className="text-center text-[11px] font-light uppercase tracking-[0.18em] text-white/55">{contactFixed.advisorCta}</p>
             </Reveal>
 
           </div>

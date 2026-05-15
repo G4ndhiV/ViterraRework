@@ -37,6 +37,8 @@ export interface Development {
   displayOnWeb?: boolean;
   /** Teléfono de contacto del desarrollo (`in_charge_phone` en Supabase). */
   inChargePhone?: string;
+  /** Nombre del responsable (`in_charge_name` en Supabase / Tokko `users_in_charge`). */
+  inChargeName?: string;
   /** Email de contacto (`in_charge_email` en Supabase). */
   inChargeEmail?: string;
   /** Código de referencia (`reference_code`). */

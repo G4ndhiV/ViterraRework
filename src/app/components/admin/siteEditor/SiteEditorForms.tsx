@@ -35,7 +35,6 @@ const CONTACT_ICON_OPTIONS: { value: ContactInfoIcon; label: string }[] = [
 const CONTACT_SOCIAL_PLATFORM_OPTIONS: { value: ContactSocialPlatform; label: string }[] = [
   { value: "facebook", label: "Facebook" },
   { value: "instagram", label: "Instagram" },
-  { value: "linkedin", label: "LinkedIn" },
   { value: "youtube", label: "YouTube" },
   { value: "tiktok", label: "TikTok" },
   { value: "threads", label: "Threads" },

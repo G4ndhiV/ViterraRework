@@ -144,6 +144,43 @@ export async function insertLead(client: SupabaseClient, lead: Lead) {
   return client.from("leads").insert(leadToInsertRow(lead, ts));
 }
 
+/** Formulario público en ficha propiedad o desarrollo (`submit_catalog_lead` en Postgres; rol `anon`). */
+export async function submitCatalogLeadViaRpc(
+  client: SupabaseClient,
+  args: {
+    name: string;
+    email: string;
+    phone: string;
+    message?: string;
+    propertyId?: string | null;
+    developmentId?: string | null;
+  }
+) {
+  const msg = typeof args.message === "string" ? args.message.trim() : "";
+  return client.rpc("submit_catalog_lead", {
+    p_name: args.name.trim(),
+    p_email: args.email.trim(),
+    p_phone: args.phone.trim(),
+    p_message: msg.length > 0 ? msg : null,
+    p_property_id: args.propertyId ?? null,
+    p_development_id: args.developmentId ?? null,
+  });
+}
+
+/** Mensaje legible para errores de la RPC `submit_catalog_lead`. */
+export function messageForCatalogLeadRpcError(raw: string): string {
+  const k = raw.toLowerCase();
+  if (k.includes("invalid_name")) return "Indica un nombre válido (2–200 caracteres).";
+  if (k.includes("invalid_email")) return "Revisa que el correo electrónico sea válido.";
+  if (k.includes("invalid_phone")) return "Indica un teléfono válido (8–40 caracteres).";
+  if (k.includes("invalid_message")) return "El mensaje es demasiado largo.";
+  if (k.includes("exactly_one_catalog_target")) return "Error interno al vincular la consulta. Recarga la página.";
+  if (k.includes("property_not_found") || k.includes("development_not_found")) {
+    return "Esta publicación ya no está disponible. Vuelve al listado e inténtalo de nuevo.";
+  }
+  return "No se pudo enviar la consulta. Intenta de nuevo en unos minutos o escríbenos por WhatsApp.";
+}
+
 export async function updateLead(client: SupabaseClient, lead: Lead) {
   const ts = nowIso();
   const row = {

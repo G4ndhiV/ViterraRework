@@ -39,6 +39,7 @@ type DevelopmentRow = Record<string, unknown> & {
   updated_at: string;
   deleted_at: string | null;
   display_on_web: boolean;
+  in_charge_name?: string | null;
   in_charge_phone?: string | null;
   in_charge_email?: string | null;
   reference_code?: string | null;
@@ -208,6 +209,7 @@ export function rowToDevelopment(
     },
     featured: row.featured,
     displayOnWeb: row.display_on_web ?? true,
+    inChargeName: row.in_charge_name?.trim() || undefined,
     inChargePhone: row.in_charge_phone?.trim() ?? "",
     inChargeEmail: row.in_charge_email?.trim() ?? "",
     referenceCode: row.reference_code?.trim() || undefined,
@@ -373,7 +375,7 @@ export async function upsertDevelopment(client: SupabaseClient, d: Development) 
     display_on_web: d.displayOnWeb !== false,
     construction_status: null,
     financing_details: null,
-    in_charge_name: null,
+    in_charge_name: d.inChargeName?.trim() || null,
     in_charge_email: d.inChargeEmail?.trim() || null,
     in_charge_phone: d.inChargePhone?.trim() || null,
     development_type_tokko_id: null,

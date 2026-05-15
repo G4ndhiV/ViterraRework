@@ -1,11 +1,10 @@
-import { Facebook, Instagram, Linkedin, Youtube } from "lucide-react";
+import { Facebook, Instagram, Youtube } from "lucide-react";
 import { SOCIAL_LINKS, type SocialNetworkId } from "../config/socialLinks";
 import { cn } from "./ui/utils";
 
 const iconById: Record<SocialNetworkId, typeof Facebook> = {
   facebook: Facebook,
   instagram: Instagram,
-  linkedin: Linkedin,
   youtube: Youtube,
 };
 

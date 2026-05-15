@@ -5,15 +5,22 @@ export const PIPELINE_STAGE_ROW_TYPE = "VITERRA_PIPELINE_STAGE_ROW";
 
 type DragItem = { index: number };
 
+/** Ref callback que react-dnd usa como asa de arrastre (evita interferencia de botones/inputs en la fila). */
+export type PipelineStageDragHandleRef = (elementOrNode: HTMLDivElement | null) => void;
+
 type Props = {
   index: number;
   moveRow: (fromIndex: number, toIndex: number) => void;
   canDrag: boolean;
-  children: ReactNode;
+  children: (connectDragHandle: PipelineStageDragHandleRef) => ReactNode;
 };
 
+/**
+ * Reordenación vertical del pipeline: el drop es la fila completa; el drag debe iniciarse solo desde el asa
+ * para que HTML5 DnD no sea absorbido por `<button>`, `<input type="color">`, etc.
+ */
 export function PipelineStageReorderRow({ index, moveRow, canDrag, children }: Props) {
-  const ref = useRef<HTMLDivElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
 
   const [{ isDragging }, drag] = useDrag(
     () => ({
@@ -32,19 +39,23 @@ export function PipelineStageReorderRow({ index, moveRow, canDrag, children }: P
       accept: PIPELINE_STAGE_ROW_TYPE,
       canDrop: () => canDrag,
       hover(item: DragItem, monitor) {
-        if (!canDrag || !ref.current) return;
+        if (!canDrag || !dropRef.current) return;
         const dragIndex = item.index;
         const hoverIndex = index;
         if (dragIndex === hoverIndex) return;
 
-        const rect = ref.current.getBoundingClientRect();
-        const mid = (rect.bottom - rect.top) / 2;
+        const rect = dropRef.current.getBoundingClientRect();
         const client = monitor.getClientOffset();
         if (!client) return;
         const hoverY = client.y - rect.top;
 
-        if (dragIndex < hoverIndex && hoverY < mid) return;
-        if (dragIndex > hoverIndex && hoverY > mid) return;
+        // Más sensible que 50%: cruza antes el borde de la fila y el reorden se siente menos “pegado”.
+        const edgeFraction = 0.22;
+        const topZone = rect.height * edgeFraction;
+        const bottomZone = rect.height * (1 - edgeFraction);
+
+        if (dragIndex < hoverIndex && hoverY < topZone) return;
+        if (dragIndex > hoverIndex && hoverY > bottomZone) return;
 
         moveRow(dragIndex, hoverIndex);
         item.index = hoverIndex;
@@ -53,15 +64,15 @@ export function PipelineStageReorderRow({ index, moveRow, canDrag, children }: P
     [index, moveRow, canDrag]
   );
 
-  drag(drop(ref));
+  drop(dropRef);
 
   return (
     <div
-      ref={ref}
+      ref={dropRef}
       className={isDragging ? "opacity-60" : undefined}
-      style={{ touchAction: canDrag ? "none" : undefined }}
+      style={{ touchAction: canDrag ? "manipulation" : undefined }}
     >
-      {children}
+      {children(drag)}
     </div>
   );
 }

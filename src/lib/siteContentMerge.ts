@@ -142,7 +142,7 @@ function normalizeSocialLinksArray(raw: unknown[]): ContactSocialLinkItem[] {
   for (const row of raw) {
     if (!isPlainObject(row) || typeof row.url !== "string") continue;
     const rawPlat = row.platform;
-    if (rawPlat === "x" || rawPlat === "twitter") continue;
+    if (rawPlat === "x" || rawPlat === "twitter" || rawPlat === "linkedin") continue;
     out.push({
       platform: sanitizeContactSocialPlatform(rawPlat),
       url: row.url,
@@ -153,7 +153,7 @@ function normalizeSocialLinksArray(raw: unknown[]): ContactSocialLinkItem[] {
 
 function legacySocialHasUrls(s: unknown): boolean {
   if (!isPlainObject(s)) return false;
-  return (["facebook", "instagram", "twitter", "linkedin", "youtube"] as const).some(
+  return (["facebook", "instagram", "twitter", "youtube"] as const).some(
     (k) => typeof s[k] === "string" && (s[k] as string).trim().length > 0
   );
 }
@@ -167,7 +167,6 @@ function socialLinksFromLegacy(raw: Record<string, unknown>, def: SiteContent["c
   };
   add("facebook", s.facebook);
   add("instagram", s.instagram);
-  add("linkedin", s.linkedin);
   add("youtube", s.youtube);
   return items.length > 0 ? items : def.socialLinks;
 }
@@ -571,11 +570,16 @@ export function mergeSiteSection<K extends keyof SiteContent>(key: K, section: u
         )
       : def.faq;
     const faqSafe = faq.length > 0 ? faq : def.faq;
-    const deepLinks =
-      co.deepLinks && typeof co.deepLinks === "object"
-        ? { ...def.deepLinks, ...co.deepLinks }
-        : def.deepLinks;
-    const mergedContact = { ...def, ...co, infoItems, socialLinks, faq: faqSafe, deepLinks } as SiteContent["contact"];
+    const { deepLinks: _legacyDeepLinks, ...coWithoutDeepLinks } = co as SiteContent["contact"] & {
+      deepLinks?: unknown;
+    };
+    const mergedContact = {
+      ...def,
+      ...coWithoutDeepLinks,
+      infoItems,
+      socialLinks,
+      faq: faqSafe,
+    } as SiteContent["contact"];
     const heroSectionDensity = sanitizeContactHeroSectionDensity(mergedContact.heroSectionDensity);
     if (heroSectionDensity === undefined) {
       const { heroSectionDensity: _drop, ...rest } = mergedContact;

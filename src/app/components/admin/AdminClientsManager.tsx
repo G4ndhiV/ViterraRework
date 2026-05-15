@@ -439,7 +439,10 @@ export function AdminClientsManager({
   useEffect(() => {
     if (!focusClient) return;
     const c = clients.find((x) => x.id === focusClient.id);
-    if (c && clientVisibleToCurrentUser(c)) {
+    // No consumir el foco hasta tener la fila: si se vacía antes de tiempo, el modal nunca abre.
+    if (!c) return;
+
+    if (clientVisibleToCurrentUser(c)) {
       setIsNew(false);
       setIsEditingClient(false);
       setSelected({ ...c });

@@ -124,20 +124,10 @@ export type ContactInfoItem = {
   icon: ContactInfoIcon;
 };
 
-export type ContactDeepLinks = {
-  saleLabel: string;
-  saleHref: string;
-  rentLabel: string;
-  rentHref: string;
-  servicesLabel: string;
-  servicesHref: string;
-};
-
 /** Plataformas disponibles para enlaces en el bloque «Redes» de contacto. */
 export const CONTACT_SOCIAL_PLATFORMS = [
   "facebook",
   "instagram",
-  "linkedin",
   "youtube",
   "tiktok",
   "threads",
@@ -156,7 +146,6 @@ export type ContactSocialLinkItem = {
 export const CONTACT_SOCIAL_LABELS: Record<ContactSocialPlatform, string> = {
   facebook: "Facebook",
   instagram: "Instagram",
-  linkedin: "LinkedIn",
   youtube: "YouTube",
   tiktok: "TikTok",
   threads: "Threads",
@@ -237,7 +226,6 @@ export interface SiteContent {
     socialTitle: string;
     socialIntro: string;
     socialLinks: ContactSocialLinkItem[];
-    deepLinks: ContactDeepLinks;
     advisorCta: string;
     closingKicker: string;
     closingTitle: string;
@@ -427,18 +415,9 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     socialLinks: [
       { platform: "facebook", url: "#" },
       { platform: "instagram", url: "#" },
-      { platform: "linkedin", url: "#" },
       { platform: "youtube", url: "#" },
     ],
-    deepLinks: {
-      saleLabel: "Catálogo de venta",
-      saleHref: "/venta",
-      rentLabel: "Renta",
-      rentHref: "/renta",
-      servicesLabel: "Servicios",
-      servicesHref: "/servicios",
-    },
-    advisorCta: "¿Eres asesor? Inicia sesión",
+    advisorCta: "¿Prefieres hablar con un asesor? Te respondemos por teléfono o WhatsApp con la misma rapidez.",
     closingKicker: "Siguiente paso",
     closingTitle: "¿Listo para hablar con un asesor?",
     closingSubtitle: "Cuéntanos qué buscas: venta, renta, desarrollo o asesoría. Respondemos con propuesta clara y sin compromiso.",

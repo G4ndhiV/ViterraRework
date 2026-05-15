@@ -27,6 +27,8 @@ import { cn } from "../components/ui/utils";
 import type { Property } from "../components/PropertyCard";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { FeatureSection } from "../components/FeatureSectionBlocks";
+import { getSupabaseClient } from "../lib/supabaseClient";
+import { messageForCatalogLeadRpcError, submitCatalogLeadViaRpc } from "../lib/supabaseLeads";
 
 const DEVELOPMENT_DETAIL_TABS = [
   { id: "descripcion" as const, label: "Descripción" },
@@ -85,6 +87,8 @@ export function DevelopmentDetailPage() {
     message: "",
   });
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
   const [mapViewMode, setMapViewMode] = useState<"map" | "satellite">("map");
   const mapRef = useRef<HTMLDivElement>(null);
@@ -307,13 +311,33 @@ export function DevelopmentDetailPage() {
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
-    setTimeout(() => {
+    setSubmitError(null);
+    const client = getSupabaseClient();
+    if (!client) {
+      setSubmitError("No hay conexión al servidor (revisa la configuración del sitio).");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const { error } = await submitCatalogLeadViaRpc(client, {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        message: formData.message,
+        developmentId: development.id,
+      });
+      if (error) {
+        setSubmitError(messageForCatalogLeadRpcError(error.message));
+        return;
+      }
+      setSubmitted(true);
       setFormData({ name: "", email: "", phone: "", message: "" });
-      setSubmitted(false);
-    }, 3000);
+      window.setTimeout(() => setSubmitted(false), 4000);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleChange = (
@@ -814,6 +838,14 @@ export function DevelopmentDetailPage() {
                 </div>
               </div>
 
+              {submitError && (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-center">
+                  <p className="text-sm font-semibold text-red-900" style={{ fontWeight: 600 }}>
+                    {submitError}
+                  </p>
+                </div>
+              )}
+
               {submitted && (
                 <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-center">
                   <p className="text-sm font-semibold text-green-900" style={{ fontWeight: 600 }}>
@@ -865,11 +897,12 @@ export function DevelopmentDetailPage() {
                 />
                 <button
                   type="submit"
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-brand-red-hover"
+                  disabled={submitting}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-brand-red-hover disabled:cursor-not-allowed disabled:opacity-60"
                   style={{ fontWeight: 600 }}
                 >
                   <Send className="h-4 w-4" strokeWidth={2} />
-                  Enviar consulta
+                  {submitting ? "Enviando…" : "Enviar consulta"}
                 </button>
               </form>
             </div>

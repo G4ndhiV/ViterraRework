@@ -206,7 +206,7 @@ export function LeadDetailDialog({
                     onClick={() => onRegisterClientFromLead(d)}
                     className="group inline-flex max-w-full items-center gap-2 truncate rounded-lg px-1 py-0.5 text-left text-primary transition-colors hover:text-primary/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                     style={{ fontWeight: 700, textShadow: "0 1px 0 rgba(255,255,255,0.5)" }}
-                    title="Abrir perfil del cliente en modulo Clientes"
+                    title="Abrir la ficha del cliente"
                   >
                     <span className="font-heading truncate text-3xl leading-tight tracking-tight sm:text-4xl">{d.name}</span>
                   </button>
@@ -217,11 +217,6 @@ export function LeadDetailDialog({
                   >
                     {d.name}
                   </DialogTitle>
-                )}
-                {canOpenClientProfile && (
-                  <p className="mt-1 pl-1 text-xs text-slate-500" style={{ fontWeight: 500 }}>
-                    Click en el nombre para abrir su perfil en Clientes.
-                  </p>
                 )}
               </div>
               <div className="justify-self-center">
@@ -318,7 +313,7 @@ export function LeadDetailDialog({
                       onClick={() => onRegisterClientFromLead(d)}
                       className="inline-flex items-center gap-1.5 rounded-md px-1 text-left text-primary underline decoration-primary/35 underline-offset-4 transition-colors hover:text-primary/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                       style={{ fontWeight: 700 }}
-                      title="Abrir perfil del cliente en modulo Clientes"
+                      title="Abrir la ficha del cliente"
                     >
                       {d.name}
                     </button>

@@ -1083,6 +1083,10 @@ export function AdminWorkspace() {
     return [...base, ...fromLeads];
   }, [pipelineStageOrder, customKanbanStages, leadsInActivePipeline]);
 
+  /** Índices del reorder coinciden con `leadColumnStatuses` (incl. etapas solo presentes en leads). */
+  const leadColumnStatusesRef = useRef<string[]>([]);
+  leadColumnStatusesRef.current = leadColumnStatuses;
+
   const statusSelectOptions = useMemo(
     () =>
       leadColumnStatuses.map((id) => ({
@@ -1361,35 +1365,33 @@ export function AdminWorkspace() {
     setDeletePipelineStage({ id: stageId, label });
   }, []);
 
-  const handleReorderPipelineRows = useCallback(
-    (dragIndex: number, hoverIndex: number) => {
-      setPipelineByGroup((map) => {
-        const cur = map[activePipelineGroupId] ?? createEmptyGroupPipelineSnapshot();
-        const prev = cur.stageOrder;
-        const base = prev.length > 0 ? prev : allStageIds;
-        if (
-          dragIndex === hoverIndex ||
-          dragIndex < 0 ||
-          hoverIndex < 0 ||
-          dragIndex >= base.length ||
-          hoverIndex >= base.length
-        ) {
-          return map;
-        }
-        const nextOrder = [...base];
-        const [removed] = nextOrder.splice(dragIndex, 1);
-        nextOrder.splice(hoverIndex, 0, removed);
-        if (nextOrder.length === prev.length && nextOrder.every((id, i) => id === prev[i])) {
-          return map;
-        }
-        return {
-          ...map,
-          [activePipelineGroupId]: { ...cur, stageOrder: nextOrder },
-        };
-      });
-    },
-    [activePipelineGroupId, allStageIds]
-  );
+  const handleReorderPipelineRows = useCallback((dragIndex: number, hoverIndex: number) => {
+    const cols = leadColumnStatusesRef.current;
+    if (
+      dragIndex === hoverIndex ||
+      dragIndex < 0 ||
+      hoverIndex < 0 ||
+      dragIndex >= cols.length ||
+      hoverIndex >= cols.length
+    ) {
+      return;
+    }
+    const nextOrder = [...cols];
+    const [removed] = nextOrder.splice(dragIndex, 1);
+    nextOrder.splice(hoverIndex, 0, removed);
+
+    setPipelineByGroup((map) => {
+      const cur = map[activePipelineGroupId] ?? createEmptyGroupPipelineSnapshot();
+      const prev = cur.stageOrder;
+      if (nextOrder.length === prev.length && nextOrder.every((id, i) => id === prev[i])) {
+        return map;
+      }
+      return {
+        ...map,
+        [activePipelineGroupId]: { ...cur, stageOrder: nextOrder },
+      };
+    });
+  }, [activePipelineGroupId]);
 
   const upsertClientFromLead = useCallback(
     (prev: CrmClient[], lead: Lead): CrmClient[] => {
@@ -1808,24 +1810,29 @@ export function AdminWorkspace() {
 
   const handleRegisterClientFromLead = useCallback(
     (lead: Lead) => {
+      const existing =
+        clients.find((c) => c.linkedLeadIds.includes(lead.id)) ??
+        findClientForLeadContact(clients, lead.email, lead.phone);
+
+      if (existing) {
+        setLeadDialog(null);
+        goTab("clients");
+        setFocusClient({ id: existing.id, nonce: Date.now() });
+        return;
+      }
+
       if (user?.role === "asesor") {
-        const existing = findClientForLeadContact(clients, lead.email, lead.phone);
-        if (existing) {
-          setLeadDialog(null);
-          goTab("clients");
-          setFocusClient({ id: existing.id, nonce: Date.now() });
-          return;
-        }
         toast.info(
           "Aún no hay ficha de cliente para este contacto. Un administrador o líder de grupo puede crearla desde Clientes."
         );
         return;
       }
+
       setLeadDialog(null);
       goTab("clients");
       setSeedClientFromLead({ lead, nonce: Date.now() });
     },
-    [user?.role, clients]
+    [user?.role, clients, goTab]
   );
 
   const handleFocusClientConsumed = useCallback(() => setFocusClient(null), []);
@@ -4633,7 +4640,7 @@ export function AdminWorkspace() {
                     <div>
                       <h4 className="text-base text-brand-navy" style={{ fontWeight: 600 }}>Orden de columnas del pipeline</h4>
                       <p className="mt-1 text-sm text-slate-500">
-                        Arrastra cada fila para ordenar las columnas del Kanban. Usa el selector de color para el acento de cada columna en el tablero y la vista lista.
+                        Arrastra desde el ícono ⋮⋮ de cada fila para ordenar las columnas del Kanban (los botones y el selector de color no inician el arrastre). Usa el selector de color para el acento de cada columna en el tablero y la vista lista.
                       </p>
                     </div>
 
@@ -4654,16 +4661,15 @@ export function AdminWorkspace() {
                             moveRow={handleReorderPipelineRows}
                             canDrag={canConfigureActivePipeline}
                           >
-                          <div
-                            className={`rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 ${
-                              canConfigureActivePipeline ? "cursor-grab active:cursor-grabbing" : ""
-                            }`}
-                          >
+                            {(connectDragHandle) => (
+                          <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4">
                             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                               {canConfigureActivePipeline && (
                                 <div
-                                  className="flex shrink-0 items-center justify-center text-slate-400 lg:pt-0.5"
-                                  aria-hidden
+                                  ref={connectDragHandle}
+                                  className="flex shrink-0 cursor-grab touch-none items-center justify-center rounded-lg py-1 text-slate-400 hover:bg-slate-200/60 hover:text-slate-600 active:cursor-grabbing lg:pt-0.5"
+                                  title="Arrastrar para reordenar columnas"
+                                  aria-label={`Arrastrar para reordenar: ${stageLabel}`}
                                 >
                                   <GripVertical className="h-5 w-5" strokeWidth={1.75} />
                                 </div>
@@ -4788,6 +4794,7 @@ export function AdminWorkspace() {
                               </div>
                             </div>
                           </div>
+                            )}
                           </PipelineStageReorderRow>
                         );
                       })}
