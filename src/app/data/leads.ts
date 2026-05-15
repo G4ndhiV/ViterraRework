@@ -86,8 +86,15 @@ export interface Lead {
   /** Historial de movimientos/acciones del lead para pestaña de actividad. */
   activity?: LeadActivityEntry[];
   createdAt: string;
+  /**
+   * Marca completa de creación (ISO con hora). Se preserva además de `createdAt` (que sigue siendo
+   * `YYYY-MM-DD` por compatibilidad con el resto del CRM). Útil para mostrar hora en Consultas.
+   */
+  createdAtIso?: string;
   lastContact: string;
   updatedAt?: string;
+  /** Fecha ISO en que se realizó el soft-delete (`deleted_at` en Supabase). */
+  deletedAt?: string | null;
 }
 
 /**
@@ -284,7 +291,15 @@ export function normalizeStoredLead(raw: Partial<Lead> & Record<string, unknown>
         : undefined,
     activity: migrateLeadActivity(raw),
     createdAt: String(raw.createdAt ?? today),
+    createdAtIso:
+      typeof raw.createdAtIso === "string" && raw.createdAtIso ? raw.createdAtIso : undefined,
     lastContact: String(raw.lastContact ?? today),
     updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : undefined,
+    deletedAt:
+      typeof raw.deletedAt === "string" && raw.deletedAt
+        ? raw.deletedAt
+        : raw.deletedAt === null
+          ? null
+          : undefined,
   };
 }

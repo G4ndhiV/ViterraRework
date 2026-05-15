@@ -7,6 +7,7 @@ export type AdminTab =
   | "dashboard"
   | "kpis"
   | "leads"
+  | "consultas"
   | "clients"
   | "agenda"
   | "properties"
@@ -24,6 +25,7 @@ const TAB_SEGMENT: Record<AdminTab, string> = {
   dashboard: "dashboard",
   kpis: "kpis",
   leads: "leads",
+  consultas: "consultas",
   clients: "clients",
   agenda: "agenda",
   properties: "properties",
@@ -53,6 +55,7 @@ const SEGMENT_TO_TAB: Record<string, AdminTab> = {
   dashboard: "dashboard",
   kpis: "kpis",
   leads: "leads",
+  consultas: "consultas",
   clients: "clients",
   agenda: "agenda",
   properties: "properties",

@@ -173,6 +173,63 @@ export function AdminLeadsTabSkeleton() {
   );
 }
 
+/** Tab Consultas: cabecera + tabs + barra de filtros + tabla. */
+export function AdminConsultasSkeleton() {
+  return (
+    <div className="space-y-6" aria-busy aria-label="Cargando consultas">
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
+        <div className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy" aria-hidden />
+        <div className="relative px-5 py-6 md:px-8 md:py-7">
+          <div className="space-y-2">
+            <ShimmerBlock className="h-3 w-44" />
+            <ShimmerBlock className="h-9 w-64 max-w-full" />
+            <ShimmerBlock className="h-4 w-full max-w-2xl" />
+          </div>
+          <div className="mt-6 flex gap-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <ShimmerBlock key={i} className="h-10 w-32 rounded-xl" />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200/80 bg-white/95 p-4 shadow-sm sm:p-5">
+        <ShimmerBlock className="mb-3 h-3 w-20" />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className={cn("space-y-1.5", i === 2 && "xl:col-span-2", i === 3 && "xl:col-span-2", i === 4 && "xl:col-span-6")}>
+              <ShimmerBlock className="h-3 w-20" />
+              <ShimmerBlock className="h-10 w-full rounded-lg" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-sm">
+        <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3">
+          <ShimmerBlock className="h-3 w-full max-w-3xl" />
+        </div>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="grid grid-cols-12 items-center gap-3 border-b border-slate-100 px-4 py-3 last:border-b-0">
+            <div className="col-span-3 space-y-1.5">
+              <ShimmerBlock className="h-4 w-3/4" />
+              <ShimmerBlock className="h-3 w-2/3" />
+            </div>
+            <ShimmerBlock className="col-span-2 h-4" />
+            <ShimmerBlock className="col-span-2 h-6 rounded-full" />
+            <ShimmerBlock className="col-span-1 h-4" />
+            <ShimmerBlock className="col-span-2 h-4" />
+            <div className="col-span-2 flex justify-end gap-2">
+              <ShimmerBlock className="h-8 w-20 rounded-lg" />
+              <ShimmerBlock className="h-8 w-24 rounded-lg" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Cabecera + rejilla de fichas (inventario propiedades o desarrollos). */
 function AdminInventoryCardsSkeleton({ ariaLabel }: { ariaLabel: string }) {
   return (

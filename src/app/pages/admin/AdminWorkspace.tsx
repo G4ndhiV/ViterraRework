@@ -42,6 +42,7 @@ import {
   Hash,
   History,
   BarChart3,
+  ClipboardList,
 } from "lucide-react";
 import { useAuth, type User } from "../../contexts/AuthContext";
 import {
@@ -57,6 +58,7 @@ import { getSupabaseClient, getSupabaseProjectHost, syncSupabaseAuthSession } fr
 import { logTableCountHints } from "../../lib/supabaseDiagnostics";
 import {
   fetchActiveLeads,
+  fetchAllLeadsForAdmin,
   insertLead,
   updateLead,
   softDeleteLead,
@@ -77,6 +79,7 @@ import { LeadsKanbanBoard } from "../../components/admin/LeadsKanbanBoard";
 import { LeadPriorityBadge } from "../../components/admin/LeadPriorityBadge";
 import { AddLeadDialog } from "../../components/admin/AddLeadDialog";
 import { LeadDetailDialog } from "../../components/admin/LeadDetailDialog";
+import { AdminConsultasModule } from "../../components/admin/AdminConsultasModule";
 import { AdminClientsManager } from "../../components/admin/AdminClientsManager";
 import { PropertyFormDialog } from "../../components/admin/PropertyFormDialog";
 import {
@@ -184,6 +187,7 @@ import {
   AdminChartsRowSkeleton,
   AdminClientsSkeleton,
   AdminCompanySkeleton,
+  AdminConsultasSkeleton,
   AdminDashboardSkeleton,
   AdminDevelopmentsSkeleton,
   AdminKpisSkeleton,
@@ -273,12 +277,14 @@ export function AdminWorkspace() {
       activeTab === "dashboard" ||
       activeTab === "kpis" ||
       activeTab === "leads" ||
+      activeTab === "consultas" ||
       activeTab === "clients" ||
       (activeTab === "company" && companySubtab !== "site");
 
     const needsDevelopments =
       activeTab === "developments" ||
       activeTab === "leads" ||
+      activeTab === "consultas" ||
       activeTab === "clients" ||
       (activeTab === "company" && (companySubtab === "users" || companySubtab === "settings"));
 
@@ -286,6 +292,7 @@ export function AdminWorkspace() {
       activeTab === "dashboard" ||
       activeTab === "kpis" ||
       activeTab === "leads" ||
+      activeTab === "consultas" ||
       activeTab === "clients" ||
       activeTab === "properties" ||
       activeTab === "developments" ||
@@ -526,8 +533,11 @@ export function AdminWorkspace() {
         return;
       }
 
+      // El admin carga `fetchAllLeadsForAdmin` para que el módulo Consultas pueda mostrar los soft-deleted
+      // en la pestaña «Descartados»; el resto de vistas filtra por `lead.deletedAt == null` en `leadsForUser`.
+      const leadsLoader = user?.role === "admin" ? fetchAllLeadsForAdmin : fetchActiveLeads;
       const leadsP = needsLeads
-        ? fetchActiveLeads(client)
+        ? leadsLoader(client)
             .then((leadsRes) => {
               if (cancelled) return;
               if (leadsRes.error) {
@@ -788,7 +798,11 @@ export function AdminWorkspace() {
   const pipelineStageOrder = activePipeline.stageOrder;
   const stageColumnColors = activePipeline.stageColors;
 
-  const leadsForUser = useMemo(() => filterLeadsForUser(leads, user), [leads, user]);
+  const leadsForUser = useMemo(
+    /** Excluye soft-deleted: solo el módulo Consultas (admin) los muestra en su tab «Descartados». */
+    () => filterLeadsForUser(leads, user).filter((l) => l.deletedAt == null),
+    [leads, user]
+  );
 
   const leadsInActivePipeline = useMemo(
     () => leadsForUser.filter((l) => l.pipelineGroupId === activePipelineGroupId),
@@ -920,18 +934,28 @@ export function AdminWorkspace() {
     setDeletePropertyId(null);
   }, [deletePropertyId, logCatalogActivity, properties, reloadProperties]);
 
-  const handleDeleteLead = useCallback(async (id: string) => {
-    const client = getSupabaseClient();
-    if (client) {
-      const { error: delLeadErr } = await softDeleteLead(client, id);
-      if (delLeadErr) {
-        toast.error(delLeadErr.message);
-        return;
+  const handleDeleteLead = useCallback(
+    async (id: string) => {
+      const client = getSupabaseClient();
+      if (client) {
+        const { error: delLeadErr } = await softDeleteLead(client, id);
+        if (delLeadErr) {
+          toast.error(delLeadErr.message);
+          return;
+        }
       }
-    }
-    setLeads((prev) => prev.filter((l) => l.id !== id));
-    setLeadDialog((d) => (d?.lead.id === id ? null : d));
-  }, []);
+      const ts = new Date().toISOString();
+      // El admin conserva los leads soft-deleted en estado para verlos en Consultas → Descartados.
+      // El resto de roles los quita del listado local (no acceden al módulo Consultas).
+      if (user?.role === "admin") {
+        setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, deletedAt: ts } : l)));
+      } else {
+        setLeads((prev) => prev.filter((l) => l.id !== id));
+      }
+      setLeadDialog((d) => (d?.lead.id === id ? null : d));
+    },
+    [user?.role]
+  );
 
   const handleDeleteDevelopment = useCallback(
     async (id: string) => {
@@ -1508,6 +1532,84 @@ export function AdminWorkspace() {
     );
   }, []);
 
+  /** Re-carga manual de leads (usado por el botón «Refrescar» en el módulo Consultas). */
+  const reloadLeads = useCallback(async () => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    setLeadsLoading(true);
+    setLeadsError(null);
+    const loader = user?.role === "admin" ? fetchAllLeadsForAdmin : fetchActiveLeads;
+    try {
+      const res = await loader(client);
+      if (res.error) {
+        setLeadsError(res.error.message);
+      } else {
+        setLeads(res.data);
+      }
+    } catch (e: unknown) {
+      setLeadsError(e instanceof Error ? e.message : "No se pudieron cargar los leads.");
+    } finally {
+      setLeadsLoading(false);
+    }
+  }, [user?.role]);
+
+  /**
+   * Reasigna un lead a otro asesor desde el módulo Consultas. Mantiene la misma lógica de
+   * `handleSaveLead` (registra entrada de actividad y persiste vía `updateLead`), pero con un
+   * mensaje específico de reasignación.
+   */
+  const handleReassignLead = useCallback(
+    async (lead: Lead, newAssigneeUserId: string, newAssigneeName: string): Promise<boolean> => {
+      const trimmedId = newAssigneeUserId.trim();
+      if (!trimmedId) {
+        toast.error("Selecciona un asesor.");
+        return false;
+      }
+      if (
+        trimmedId === lead.assignedToUserId.trim() &&
+        newAssigneeName.trim() === (lead.assignedTo ?? "").trim()
+      ) {
+        toast.info("El lead ya está asignado a ese asesor.");
+        return false;
+      }
+      const previousName =
+        lead.assignedTo && lead.assignedTo !== "Sin asignar" ? lead.assignedTo : "Sin asignar";
+      const ts = new Date().toISOString();
+      const merged: Lead = {
+        ...lead,
+        assignedToUserId: trimmedId,
+        assignedTo: newAssigneeName.trim() || "Sin asignar",
+        updatedAt: ts,
+        activity: [
+          {
+            id: newLeadActivityId(),
+            type: "updated",
+            createdAt: ts,
+            description: `Reasignado de ${previousName} a ${newAssigneeName.trim() || "Sin asignar"}${
+              user?.name ? ` por ${user.name}` : ""
+            }`,
+            status: lead.status,
+          },
+          ...(lead.activity ?? []),
+        ],
+      };
+
+      const client = getSupabaseClient();
+      if (client) {
+        const { error } = await updateLead(client, merged);
+        if (error) {
+          toast.error(error.message);
+          return false;
+        }
+      }
+      setLeads((prev) => prev.map((l) => (l.id === merged.id ? merged : l)));
+      setLeadDialog((d) => (d && d.lead.id === merged.id ? { ...d, lead: merged } : d));
+      toast.success(`Lead reasignado a ${merged.assignedTo}.`);
+      return true;
+    },
+    [user?.name]
+  );
+
   const handleSaveProperty = useCallback(
     async (p: Property) => {
       const normalizedProperty: Property = {
@@ -2073,6 +2175,24 @@ export function AdminWorkspace() {
         keywords: ["lead", "clientes", "pipeline", "kanban", "prospectos"],
         action: () => goTab("leads"),
       },
+      ...(isAdmin
+        ? [
+            {
+              id: "consultas",
+              title: "Consultas",
+              description: "Bandeja de leads para administración: todos, asignados y descartados",
+              keywords: [
+                "consultas",
+                "bandeja",
+                "leads admin",
+                "asignados",
+                "descartados",
+                "reasignar",
+              ],
+              action: () => goTab("consultas"),
+            },
+          ]
+        : []),
       ...(canAccessClients
         ? [
             {
@@ -2209,7 +2329,7 @@ export function AdminWorkspace() {
         action: () => navigate("/contacto"),
       },
     ],
-    [navigate, goTab, canAccessClients, isGroupLeader, canAccessCompanyModule, canEditSite]
+    [navigate, goTab, canAccessClients, isGroupLeader, canAccessCompanyModule, canEditSite, isAdmin]
   );
 
   const headerSearchValue = adminHeaderQuery;
@@ -2353,6 +2473,20 @@ export function AdminWorkspace() {
                   <Users className="h-4 w-4" strokeWidth={activeTab === "leads" ? 2 : 1.75} />
                   Leads
                 </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => goTab("consultas")}
+                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                      activeTab === "consultas"
+                        ? "bg-white text-brand-navy"
+                        : "text-white/80 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    <ClipboardList className="h-4 w-4" strokeWidth={activeTab === "consultas" ? 2 : 1.75} />
+                    Consultas
+                  </button>
+                )}
                 {canAccessClients && (
                   <button
                     type="button"
@@ -2658,6 +2792,7 @@ export function AdminWorkspace() {
               { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
               { id: "kpis", label: "KPI's", icon: BarChart3 },
               { id: "leads", label: "Leads", icon: Users },
+              ...(isAdmin ? [{ id: "consultas", label: "Consultas", icon: ClipboardList }] : []),
               ...(canAccessClients ? [{ id: "clients", label: "Clientes", icon: UserCircle2 }] : []),
               { id: "agenda", label: "Agenda", icon: Calendar },
               { id: "properties", label: "Propiedades", icon: Home },
@@ -3317,6 +3452,40 @@ export function AdminWorkspace() {
             )}
           </div>
           ))}
+
+        {activeTab === "consultas" && (
+          isAdmin ? (
+            leadsModuleLoading ? (
+              <AdminConsultasSkeleton />
+            ) : (
+              <AdminConsultasModule
+                leads={leads}
+                users={users}
+                groups={userGroups}
+                properties={properties}
+                developments={developments}
+                customStages={customKanbanStages}
+                loading={leadsLoading}
+                errorMessage={leadsError}
+                currentUserName={user?.name ?? ""}
+                onReassign={handleReassignLead}
+                onOpenDetail={(lead) => setLeadDialog({ lead, mode: "view" })}
+                onRefresh={() => {
+                  void reloadLeads();
+                }}
+              />
+            )
+          ) : (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-8 text-sm text-amber-800 shadow-sm">
+              <p className="font-heading mb-2 text-lg text-amber-900" style={{ fontWeight: 600 }}>
+                Sección solo para administradores
+              </p>
+              <p style={{ fontWeight: 500 }}>
+                El módulo Consultas está disponible únicamente para usuarios con rol Administrador.
+              </p>
+            </div>
+          )
+        )}
 
         {activeTab === "clients" &&
           canAccessClients &&
@@ -4665,7 +4834,7 @@ export function AdminWorkspace() {
         )}
 
         <LeadDetailDialog
-          open={!!leadDialog && activeTab === "leads"}
+          open={!!leadDialog && (activeTab === "leads" || activeTab === "consultas")}
           onOpenChange={(o) => {
             if (!o) setLeadDialog(null);
           }}

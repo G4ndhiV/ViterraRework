@@ -50,8 +50,15 @@ export function rowToLead(row: Record<string, unknown>): Lead {
       typeof payload.relatedDevelopmentId === "string" ? payload.relatedDevelopmentId : undefined,
     activity: payload.activity,
     createdAt: row.created_at ? String(row.created_at).split("T")[0] : undefined,
+    createdAtIso: typeof row.created_at === "string" ? row.created_at : undefined,
     lastContact: row.last_contact ? String(row.last_contact).split("T")[0] : undefined,
     updatedAt: typeof row.updated_at === "string" ? row.updated_at : undefined,
+    deletedAt:
+      typeof row.deleted_at === "string"
+        ? row.deleted_at
+        : row.deleted_at === null
+          ? null
+          : undefined,
   } as Partial<Lead> & Record<string, unknown>);
 }
 
@@ -105,6 +112,18 @@ function leadToInsertRow(lead: Lead, ts: string) {
 export async function fetchActiveLeads(client: SupabaseClient) {
   /** Ver comentario en `fetchCatalogProperties`: filtro `deleted_at` omitido por datos Tokko. */
   const res = await client.from("leads").select("*").order("updated_at", { ascending: false });
+  if (res.error) return { data: [] as Lead[], error: res.error };
+  const rows = (res.data ?? []) as Record<string, unknown>[];
+  return { data: rows.map(rowToLead), error: null };
+}
+
+/**
+ * Devuelve todos los leads (incluye soft-deleted) ordenados por fecha de creación descendente.
+ * Pensado para el módulo `Consultas` del admin, donde los leads descartados/eliminados se muestran
+ * en su propio tab. El resto del CRM debe filtrar `lead.deletedAt == null` al consumir esta lista.
+ */
+export async function fetchAllLeadsForAdmin(client: SupabaseClient) {
+  const res = await client.from("leads").select("*").order("created_at", { ascending: false });
   if (res.error) return { data: [] as Lead[], error: res.error };
   const rows = (res.data ?? []) as Record<string, unknown>[];
   return { data: rows.map(rowToLead), error: null };
