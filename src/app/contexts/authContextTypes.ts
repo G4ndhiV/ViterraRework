@@ -1,4 +1,5 @@
 export type UserRole = "admin" | "lider_grupo" | "asesor";
+
 export type UserPermission =
   | "manage_leads"
   | "manage_properties"
@@ -6,6 +7,20 @@ export type UserPermission =
   | "manage_users"
   | "manage_clients"
   | "edit_site";
+
+/** Permisos por defecto al crear o simular un rol (sin asignación explícita en BD). */
+export const DEFAULT_PERMISSIONS_BY_ROLE: Record<UserRole, UserPermission[]> = {
+  admin: [
+    "manage_leads",
+    "manage_properties",
+    "manage_developments",
+    "manage_users",
+    "manage_clients",
+    "edit_site",
+  ],
+  lider_grupo: ["manage_leads", "manage_properties", "manage_developments", "manage_clients"],
+  asesor: ["manage_leads", "manage_clients"],
+};
 
 export interface UserHistoryEntry {
   id: string;

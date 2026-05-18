@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentType } from "react";
-import { Calendar, Clock, LayoutGrid, PieChart as PieChartIcon, Sparkles, Target, Users } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import type { Lead } from "../../data/leads";
 import { labelForLeadStatus, type CustomKanbanStage } from "../../data/leads";
 import type { Property } from "../PropertyCard";
@@ -121,22 +120,14 @@ function StatCard({
   label,
   value,
   hint,
-  icon: Icon,
 }: {
   label: string;
   value: string;
   hint?: string;
-  icon: ComponentType<{ className?: string; strokeWidth?: number }>;
 }) {
-  const ring = "bg-slate-100 text-slate-600";
   return (
     <div className="flex flex-col rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm transition hover:border-slate-300/80 hover:shadow-md sm:p-5">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
-        <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", ring)}>
-          <Icon className="h-4 w-4" strokeWidth={1.75} />
-        </span>
-      </div>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
       <p className="font-heading mt-3 text-2xl tracking-tight text-brand-navy sm:text-[1.65rem]" style={{ fontWeight: 700 }}>
         {value}
       </p>
@@ -267,7 +258,6 @@ export function AdvisorDashboard({ leads, properties, customStages }: Props) {
           label="Días prom. en inventario"
           value={avgDays == null ? "—" : `${disp.avg.toFixed(0)} días`}
           hint="Media desde última sync en catálogo."
-          icon={Clock}
         />
         <StatCard
           label="Ventas del mes"
@@ -277,33 +267,25 @@ export function AdvisorDashboard({ leads, properties, customStages }: Props) {
               ? `Presupuesto acum. $${salesThisMonth.volume.toLocaleString("es-MX")}`
               : "Cierres con fecha en el mes actual."
           }
-          icon={Calendar}
         />
         <StatCard
           label="Nuevos leads (mes)"
           value={Math.round(disp.newM).toString()}
           hint="Altas registradas este mes."
-          icon={Sparkles}
         />
         <StatCard
           label="Activos en pipeline"
           value={Math.round(disp.active).toString()}
           hint={`${totalLeads} leads en tu alcance · sin cerrar ni perdidos`}
-          icon={Target}
         />
       </div>
 
       {/* Embudo + Origen — mitad / mitad en lg */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:items-stretch">
         <section className="flex flex-col rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm sm:p-6">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
-            </span>
-            <div>
-              <h3 className="text-sm font-semibold text-brand-navy">Embudo de ventas</h3>
-              <p className="text-xs text-slate-500">Prospectos por etapa</p>
-            </div>
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-brand-navy">Embudo de ventas</h3>
+            <p className="mt-0.5 text-xs text-slate-500">Prospectos por etapa</p>
           </div>
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
             {funnelData.map((row, i) => (
@@ -327,14 +309,9 @@ export function AdvisorDashboard({ leads, properties, customStages }: Props) {
         </section>
 
         <section className="flex flex-col rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm sm:p-6">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <PieChartIcon className="h-4 w-4" strokeWidth={1.75} />
-            </span>
-            <div>
-              <h3 className="text-sm font-semibold text-brand-navy">Origen de leads</h3>
-              <p className="text-xs text-slate-500">Distribución por canal</p>
-            </div>
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-brand-navy">Origen de leads</h3>
+            <p className="mt-0.5 text-xs text-slate-500">Distribución por canal</p>
           </div>
           {sourceDonutData.length === 0 ? (
             <p className="flex flex-1 items-center justify-center py-12 text-sm text-slate-400">Sin datos de origen</p>
@@ -390,16 +367,11 @@ export function AdvisorDashboard({ leads, properties, customStages }: Props) {
 
       {/* Inventario — barra única + chips */}
       <section className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm sm:p-6">
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-            <Users className="h-4 w-4" strokeWidth={1.75} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold text-brand-navy">Estado del inventario</h3>
-            <p className="text-xs text-slate-500">
-              {inventoryParts.total} propiedades en catálogo · vista rápida por estado
-            </p>
-          </div>
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-brand-navy">Estado del inventario</h3>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {inventoryParts.total} propiedades en catálogo · vista rápida por estado
+          </p>
         </div>
 
         {inventoryParts.total === 0 ? (

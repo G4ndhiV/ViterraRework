@@ -97,6 +97,20 @@ const permissionCards: Array<{
   },
 ];
 
+function permissionLabel(value: UserPermission) {
+  return permissionCards.find((card) => card.value === value)?.label ?? value;
+}
+
+function userInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
 function historyEventMeta(type: UserHistoryEntry["type"]) {
   const map: Record<
     UserHistoryEntry["type"],
@@ -216,6 +230,9 @@ interface Props {
   onFocusUserConsumed?: () => void;
   /** Tras cerrar el detalle de usuario (X, overlay o guardar), p. ej. volver al tab donde se abrió desde un lead. */
   onUserDetailClosed?: () => void;
+  /** Ficha a pantalla completa en `/admin/profile/:userId` (sin listado de Mi empresa). */
+  embeddedUserId?: string | null;
+  onEmbeddedClose?: () => void;
 }
 
 type RoleOption = UserRole;
@@ -245,6 +262,8 @@ export function AdminUsersManager({
   focusUser,
   onFocusUserConsumed,
   onUserDetailClosed,
+  embeddedUserId,
+  onEmbeddedClose,
 }: Props) {
   const [managementTab, setManagementTab] = useState<"users" | "groups">("users");
   const [showArchived, setShowArchived] = useState(false);
@@ -343,8 +362,22 @@ export function AdminUsersManager({
   const closeUserDetail = () => {
     setUserDetailEditMode(false);
     setSelectedUser(null);
+    if (embeddedUserId) {
+      onEmbeddedClose?.();
+      return;
+    }
     onUserDetailClosed?.();
   };
+
+  useEffect(() => {
+    if (!embeddedUserId) return;
+    const targetId = embeddedUserId.trim().toLowerCase();
+    const u = users.find((x) => x.id.trim().toLowerCase() === targetId);
+    if (u) {
+      setUserDetailEditMode(false);
+      setSelectedUser(u);
+    }
+  }, [embeddedUserId, users]);
 
   useEffect(() => {
     if (!focusUser) return;
@@ -514,8 +547,16 @@ export function AdminUsersManager({
   };
 
   const isEditingUserDetail = canManageUsers && userDetailEditMode;
+  const isEmbeddedProfile = Boolean(embeddedUserId?.trim());
 
   return (
+    <>
+      {isEmbeddedProfile && !selectedUser ? (
+        <div className="flex min-h-[50vh] items-center justify-center rounded-2xl border border-slate-200/80 bg-white">
+          <p className="text-sm text-slate-500">Cargando perfil del usuario…</p>
+        </div>
+      ) : null}
+      {!isEmbeddedProfile ? (
     <div className="space-y-6">
       <div className="rounded-lg border border-slate-200 bg-white p-6">
         <div
@@ -743,12 +784,21 @@ export function AdminUsersManager({
                         setUserDetailEditMode(false);
                         setSelectedUser(user);
                       }}
-                      className="text-left"
+                      className="flex items-center gap-3 text-left"
                     >
-                      <p className="text-sm font-semibold text-slate-900">{user.name}</p>
-                      <p className="text-xs text-slate-500">
-                        {user.isActive ? "Activo" : `Archivado ${new Date(user.archivedAt || "").toLocaleDateString()}`}
-                      </p>
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-brand-navy text-xs font-semibold text-white shadow-sm ring-1 ring-slate-200">
+                        {user.profile.picture ? (
+                          <img src={user.profile.picture} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          userInitials(user.name)
+                        )}
+                      </span>
+                      <span className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900">{user.name}</p>
+                        <p className="text-xs text-slate-500">
+                          {user.isActive ? "Activo" : `Archivado ${new Date(user.archivedAt || "").toLocaleDateString()}`}
+                        </p>
+                      </span>
                     </button>
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-700">
@@ -756,7 +806,23 @@ export function AdminUsersManager({
                     <p className="text-xs text-slate-500">{user.profile.phone || "Sin teléfono"}</p>
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-700">{roleOptions.find((r) => r.value === user.role)?.label}</td>
-                  <td className="px-4 py-3 text-xs text-slate-700">{user.permissions.join(", ")}</td>
+                  <td className="px-4 py-3">
+                    {user.permissions.length === 0 ? (
+                      <span className="text-xs text-slate-400">Sin permisos</span>
+                    ) : (
+                      <div className="flex max-w-md flex-wrap gap-1.5">
+                        {user.permissions.map((permission) => (
+                          <span
+                            key={permission}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] leading-none text-slate-700"
+                            style={{ fontWeight: 600 }}
+                          >
+                            {permissionLabel(permission)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
                       <button
@@ -896,6 +962,8 @@ export function AdminUsersManager({
           )}
         </DialogContent>
       </Dialog>
+    </div>
+      ) : null}
 
       <Dialog
         open={!!selectedUser}
@@ -918,9 +986,11 @@ export function AdminUsersManager({
               <div className="shrink-0 border-b border-stone-200/80 bg-stone-50/90 px-4 py-4 sm:px-5">
                 <DialogHeader className="gap-0 p-0 text-left">
                   <p className="text-[11px] text-slate-500" style={{ fontWeight: 500 }}>
-                    <span className="text-primary/90">Mi empresa</span>
+                    <span className="text-primary/90">
+                      {isEmbeddedProfile ? "Perfil del equipo" : "Mi empresa"}
+                    </span>
                     <span className="text-slate-400"> · </span>
-                    Detalle de usuario
+                    {isEmbeddedProfile ? "Ficha personal" : "Detalle de usuario"}
                   </p>
                   <div className="mt-3 flex flex-col gap-4 min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-between min-[1100px]:gap-6">
                     <div className="flex min-w-0 flex-1 items-start gap-4">
@@ -1465,6 +1535,6 @@ export function AdminUsersManager({
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

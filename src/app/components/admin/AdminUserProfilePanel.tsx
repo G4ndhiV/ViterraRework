@@ -1,26 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { LucideIcon } from "lucide-react";
-import {
-  Building2,
-  Briefcase,
-  Copy,
-  FileJson2,
-  Globe2,
-  Hash,
-  Home,
-  Image as ImageIcon,
-  Loader2,
-  Mail,
-  MapPin,
-  Phone,
-  Shield,
-  Smartphone,
-  UserCircle2,
-  Users,
-} from "lucide-react";
+import { LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { AdminProfileSkeleton } from "../../pages/admin/AdminSectionSkeletons";
-import { useAuth, type UserPermission } from "../../contexts/AuthContext";
+import { useAuth, type User, type UserPermission } from "../../contexts/AuthContext";
 import { getSupabaseClient } from "../../lib/supabaseClient";
 import {
   fetchTokkoUserRow,
@@ -29,8 +11,31 @@ import {
   type TokkoUserProfilePatch,
 } from "../../lib/supabaseTokkoUsers";
 import { Button } from "../ui/button";
-import { Label } from "../ui/label";
-import { cn } from "../ui/utils";
+import { ProfileAccessTab } from "./profile/ProfileAccessTab";
+import { ProfileIdentityColumn } from "./profile/ProfileIdentityColumn";
+import { ProfilePictureCropDialog } from "./profile/ProfilePictureCropDialog";
+import { ProfilePersonalTab } from "./profile/ProfilePersonalTab";
+import { ProfilePerformanceTab } from "./profile/ProfilePerformanceTab";
+import type { Lead, CustomKanbanStage } from "../../data/leads";
+import type { AgendaAppointment } from "../../data/agenda";
+import type { UserGroup } from "../../lib/userGroups";
+import { ProfileStickyActions } from "./profile/ProfileStickyActions";
+import { ProfileTabs } from "./profile/ProfileTabs";
+import {
+  emptyProfileDraft,
+  roleLabelByValue,
+  type ProfileDraft,
+  type ProfileTabId,
+} from "./profile/profileTypes";
+import {
+  profileCard,
+  profileCardAccent,
+  profileCardBody,
+  profileMainColumn,
+  profilePageHeader,
+  profilePageShell,
+  profileTabPanel,
+} from "./profile/profileUi";
 
 function strVal(v: unknown): string {
   if (v == null) return "";
@@ -39,51 +44,18 @@ function strVal(v: unknown): string {
   return "";
 }
 
-function formatTs(v: unknown): string {
-  const s = strVal(v);
-  if (!s) return "-";
-  const d = Date.parse(s);
-  if (Number.isNaN(d)) return s;
-  return new Date(d).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" });
-}
-
-function hasPerm(permissions: UserPermission[] | undefined, p: UserPermission) {
-  return permissions?.includes(p) ?? false;
-}
-
-const inputClass =
-  "h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-navy ring-2 ring-transparent transition-[color,box-shadow] placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15";
-
-const readClass = "w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700";
-
-type Draft = {
-  name: string;
-  email: string;
-  phone: string;
-  cellphone: string;
-  position: string;
-  picture: string;
-  branch_tokko_id: string;
-  payloadJson: string;
-};
-
-const emptyDraft: Draft = {
-  name: "",
-  email: "",
-  phone: "",
-  cellphone: "",
-  position: "",
-  picture: "",
-  branch_tokko_id: "",
-  payloadJson: "{}",
-};
-
 type ProfileCacheEntry = {
   row: Record<string, unknown>;
-  draft: Draft;
+  draft: ProfileDraft;
 };
 
-function displayRowFromAuthUser(u: { id: string; role: string; permissions: UserPermission[]; tokkoUserId?: string; updatedAt: string }): Record<string, unknown> {
+function displayRowFromAuthUser(u: {
+  id: string;
+  role: string;
+  permissions: UserPermission[];
+  tokkoUserId?: string;
+  updatedAt: string;
+}): Record<string, unknown> {
   return {
     id: u.id,
     role: u.role,
@@ -97,86 +69,47 @@ function displayRowFromAuthUser(u: { id: string; role: string; permissions: User
 
 const profileCache = new Map<string, ProfileCacheEntry>();
 
-const profilePermissionCards: Array<{
-  value: UserPermission;
-  label: string;
-  description: string;
-  Icon: LucideIcon;
-}> = [
-  {
-    value: "manage_leads",
-    label: "Leads",
-    description: "CRM, pipeline y seguimiento de clientes",
-    Icon: Users,
-  },
-  {
-    value: "manage_properties",
-    label: "Propiedades",
-    description: "Catálogo y fichas de inmuebles",
-    Icon: Home,
-  },
-  {
-    value: "manage_developments",
-    label: "Desarrollos",
-    description: "Proyectos y desarrollos en el sitio",
-    Icon: Building2,
-  },
-  {
-    value: "manage_users",
-    label: "Usuarios",
-    description: "Alta, permisos y equipo",
-    Icon: Shield,
-  },
-  {
-    value: "manage_clients",
-    label: "Clientes",
-    description: "Fichas de clientes y relación con inventario",
-    Icon: UserCircle2,
-  },
-  {
-    value: "edit_site",
-    label: "Sitio web",
-    description: "Contenido y bloques del sitio público",
-    Icon: Globe2,
-  },
-];
-
-const roleLabelByValue: Record<string, string> = {
-  admin: "Administrador",
-  lider_grupo: "Líder de grupo",
-  asesor: "Asesor",
+type ProfileWorkspaceContext = {
+  leads: Lead[];
+  users: User[];
+  userGroups: UserGroup[];
+  appointments: AgendaAppointment[];
+  customKanbanStages: CustomKanbanStage[];
+  stageOrder: string[];
+  leadsLoading?: boolean;
+  onOpenKpis?: () => void;
 };
 
-export function AdminUserProfilePanel() {
-  const { user, isAdmin, refreshUser, logout } = useAuth();
-  const canEditSensitive = isAdmin || hasPerm(user?.permissions, "manage_users");
+export function AdminUserProfilePanel({
+  leads = [],
+  users = [],
+  userGroups = [],
+  appointments = [],
+  customKanbanStages = [],
+  stageOrder = [],
+  leadsLoading = false,
+  onOpenKpis,
+}: Partial<ProfileWorkspaceContext> = {}) {
+  const { user, refreshUser, logout } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [row, setRow] = useState<Record<string, unknown> | null>(null);
-  const [draft, setDraft] = useState<Draft>(emptyDraft);
-  const [initial, setInitial] = useState<Draft>(emptyDraft);
+  const [draft, setDraft] = useState<ProfileDraft>(emptyProfileDraft);
+  const [initial, setInitial] = useState<ProfileDraft>(emptyProfileDraft);
+  const [profileTab, setProfileTab] = useState<ProfileTabId>("personal");
 
+  const isRealAdmin = user?.role === "admin";
+  const canEditEmail = isRealAdmin;
+  const canEditPosition = user?.role === "admin" || user?.role === "lider_grupo";
   const hasTokkoDirectoryRow = row !== null;
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const displayRow = useMemo(() => {
     if (row) return row;
     if (!user) return null;
     return displayRowFromAuthUser(user);
   }, [row, user]);
-
-  const copyField = async (label: string, value: string) => {
-    const text = value.trim();
-    if (!text) {
-      toast.error(`No hay ${label} para copiar.`);
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success(`${label} copiado.`);
-    } catch {
-      toast.error(`No se pudo copiar ${label}.`);
-    }
-  };
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -198,15 +131,13 @@ export function AdminUserProfilePanel() {
       setRow(null);
       const { data: authData } = await client.auth.getUser();
       const meta = (authData.user?.user_metadata ?? {}) as Record<string, unknown>;
-      const d: Draft = {
+      const d: ProfileDraft = {
         name: strVal(meta.name || meta.full_name) || user.name,
         email: user.email,
         phone: strVal(meta.phone) || user.profile.phone,
         cellphone: strVal(meta.cellphone),
         position: strVal(meta.position),
         picture: strVal(meta.picture) || user.profile.picture,
-        branch_tokko_id: "",
-        payloadJson: "{}",
       };
       setDraft(d);
       setInitial(d);
@@ -216,23 +147,13 @@ export function AdminUserProfilePanel() {
 
     const r = data as Record<string, unknown>;
     setRow(r);
-    const p = r.payload;
-    let payloadJson = "{}";
-    try {
-      payloadJson = JSON.stringify(p && typeof p === "object" ? p : {}, null, 2);
-    } catch {
-      payloadJson = "{}";
-    }
-
-    const d: Draft = {
+    const d: ProfileDraft = {
       name: strVal(r.name) || user.name,
       email: strVal(r.email) || user.email,
       phone: strVal(r.phone),
       cellphone: strVal(r.cellphone),
       position: strVal(r.position),
       picture: strVal(r.picture),
-      branch_tokko_id: strVal(r.branch_tokko_id),
-      payloadJson,
     };
     setDraft(d);
     setInitial(d);
@@ -255,7 +176,7 @@ export function AdminUserProfilePanel() {
 
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(initial), [draft, initial]);
 
-  const onPictureFileChange = async (file: File | null) => {
+  const onPictureFileChange = (file: File | null) => {
     if (!file) return;
     const allowed = ["image/png", "image/jpeg"];
     if (!allowed.includes(file.type)) {
@@ -273,10 +194,17 @@ export function AdminUserProfilePanel() {
         toast.error("No se pudo leer el archivo.");
         return;
       }
-      setDraft((d) => ({ ...d, picture: result }));
+      setCropImageSrc(result);
+      setCropOpen(true);
     };
     reader.onerror = () => toast.error("No se pudo leer el archivo.");
     reader.readAsDataURL(file);
+  };
+
+  const onCropConfirm = (dataUrl: string) => {
+    setDraft((d) => ({ ...d, picture: dataUrl }));
+    setCropImageSrc(null);
+    toast.success("Foto lista. Pulsa «Guardar cambios» para aplicarla.");
   };
 
   const buildPatch = (): TokkoUserProfilePatch | null => {
@@ -291,14 +219,13 @@ export function AdminUserProfilePanel() {
       patch.name = draft.name.trim();
     }
 
-    if (row && canEditSensitive && draft.email.trim() !== initial.email.trim()) {
+    if (canEditEmail && row && draft.email.trim() !== initial.email.trim()) {
       patch.email = draft.email.trim() || null;
     }
 
-    const baseFields: Array<keyof Pick<Draft, "phone" | "cellphone" | "position" | "picture">> = [
+    const baseFields: Array<keyof Pick<ProfileDraft, "phone" | "cellphone" | "picture">> = [
       "phone",
       "cellphone",
-      "position",
       "picture",
     ];
     for (const k of baseFields) {
@@ -307,18 +234,11 @@ export function AdminUserProfilePanel() {
       }
     }
 
-    if (row && canEditSensitive) {
-      if (draft.branch_tokko_id.trim() !== initial.branch_tokko_id.trim()) {
-        patch.branch_tokko_id = draft.branch_tokko_id.trim() || null;
-      }
-      if (draft.payloadJson.trim() !== initial.payloadJson.trim()) {
-        try {
-          patch.payload = JSON.parse(draft.payloadJson || "{}") as Record<string, unknown>;
-        } catch {
-          toast.error("El JSON de payload no es válido.");
-          return null;
-        }
-      }
+    if (
+      canEditPosition &&
+      draft.position.trim() !== initial.position.trim()
+    ) {
+      patch.position = draft.position.trim() || null;
     }
 
     return Object.keys(patch).length > 0 ? patch : null;
@@ -345,7 +265,7 @@ export function AdminUserProfilePanel() {
         name: patch.name,
         phone: patch.phone,
         cellphone: patch.cellphone,
-        position: patch.position,
+        position: canEditPosition ? patch.position : undefined,
         picture: patch.picture,
       });
       setSaving(false);
@@ -373,7 +293,9 @@ export function AdminUserProfilePanel() {
 
   const clearField = async (key: keyof TokkoUserProfilePatch) => {
     if (!user) return;
-    if (key === "name" || (key === "email" && !canEditSensitive)) return;
+    if (key === "name" || (key === "email" && !canEditEmail) || (key === "position" && !canEditPosition)) {
+      return;
+    }
     const client = getSupabaseClient();
     if (!client) {
       toast.error("Supabase no está configurado.");
@@ -384,7 +306,7 @@ export function AdminUserProfilePanel() {
     if (!row) {
       if (key === "email") {
         setSaving(false);
-        toast.info("El correo solo se gestiona con una fila en directorio CRM o desde Auth.");
+        toast.info("El correo se actualiza cuando tu usuario tiene fila en el directorio CRM (tokko_users).");
         return;
       }
       const metaPatch: Parameters<typeof updateAuthUserProfileMetadata>[1] = {};
@@ -432,263 +354,93 @@ export function AdminUserProfilePanel() {
   const roPerms = Array.isArray(displayRow.permissions) ? (displayRow.permissions as string[]).filter(Boolean) : [];
 
   return (
-    <div className="space-y-3">
-      {!hasTokkoDirectoryRow ? (
-        <div
-          className="rounded-2xl border border-slate-200 bg-slate-50/95 p-4 text-sm text-slate-700 shadow-sm"
-          style={{ fontWeight: 500 }}
+    <div className={profilePageShell}>
+      <header className={profilePageHeader}>
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-primary">Cuenta</p>
+          <h1 className="font-heading mt-1 text-2xl font-semibold tracking-tight text-brand-navy sm:text-[1.65rem]">
+            Mi perfil
+          </h1>
+          <p className="mt-1 max-w-lg text-sm text-slate-600">
+            Datos de contacto, equipo, metas KPI y estadísticas de tu rendimiento comercial.
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={saving}
+          className="shrink-0 border-slate-200/90 text-slate-700"
+          onClick={() => void logout()}
         >
-          No hay fila en <span className="font-mono">tokko_users</span> para este usuario (p. ej. CRM sin Tokko). Puedes ver y editar
-          nombre, contacto y foto desde tu cuenta de Supabase Auth; rol y permisos siguen viniendo de la sesión. Si más adelante
-          sincronizas Tokko, el directorio CRM puede enlazarse por el mismo <span className="font-mono">id</span> que Auth.
-        </div>
-      ) : null}
-      <section className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
-        <div
-          className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute -right-20 top-8 h-56 w-56 rounded-full bg-gradient-to-br from-primary/[0.07] to-transparent blur-3xl"
-          aria-hidden
-        />
-        <div className="relative px-5 pb-6 pt-6 md:px-8 md:pb-7 md:pt-7">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0">
-              <h2 className="text-xl font-semibold text-slate-900">Mi perfil</h2>
-              <p className="mt-1 truncate text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                {draft.name || "Sin nombre"} · {draft.email || "Sin correo"}
-              </p>
+          <LogOut className="mr-2 h-4 w-4" strokeWidth={1.75} />
+          Cerrar sesión
+        </Button>
+      </header>
+
+      <section className={profileCard}>
+        <div className={profileCardAccent} aria-hidden />
+        <div className={profileCardBody}>
+          <ProfileIdentityColumn
+            draft={draft}
+            setDraft={setDraft}
+            roleLabel={roRole}
+            saving={saving}
+            canEditEmail={canEditEmail}
+            hasTokkoDirectoryRow={hasTokkoDirectoryRow}
+            onPictureFileChange={(file) => void onPictureFileChange(file)}
+            onClearField={(key) => void clearField(key)}
+          />
+
+          <div className={profileMainColumn}>
+            <div className="border-b border-slate-200/80 px-5 py-4 sm:px-7 md:px-8">
+              <ProfileTabs activeTab={profileTab} onTabChange={setProfileTab} />
             </div>
-            <div className="flex items-center gap-2">
-            <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => void logout()}>
-              Cerrar sesión
-            </Button>
-              <Button type="button" size="sm" className="bg-primary" disabled={saving} onClick={() => void save()}>
-                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Guardar cambios
-              </Button>
+
+            <div className={profileTabPanel}>
+              {profileTab === "personal" ? (
+                <ProfilePersonalTab
+                  draft={draft}
+                  setDraft={setDraft}
+                  saving={saving}
+                  canEditPosition={canEditPosition}
+                  onClearField={(key) => void clearField(key)}
+                />
+              ) : null}
+              {profileTab === "performance" && user ? (
+                <ProfilePerformanceTab
+                  user={user}
+                  users={users}
+                  userGroups={userGroups}
+                  leads={leads}
+                  appointments={appointments}
+                  customStages={customKanbanStages}
+                  stageOrder={stageOrder}
+                  leadsLoading={leadsLoading}
+                  onOpenKpis={onOpenKpis}
+                />
+              ) : null}
+              {profileTab === "access" ? (
+                <ProfileAccessTab roleLabel={roRole} enabledPermissions={roPerms} />
+              ) : null}
             </div>
+
+            {profileTab !== "performance" ? (
+              <ProfileStickyActions saving={saving} dirty={dirty} onSave={() => void save()} />
+            ) : null}
           </div>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Información personal</h3>
-        <div className="grid gap-3 lg:grid-cols-4">
-          <div className="lg:col-span-1">
-            <label className="group relative flex min-h-[18.4rem] h-full cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-              {draft.picture ? (
-                <img src={draft.picture} alt="Vista previa" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex flex-col items-center gap-2 text-slate-400">
-                  <ImageIcon className="h-10 w-10" strokeWidth={1.5} />
-                  <span className="text-xs">Subir foto de perfil</span>
-                </div>
-              )}
-              <div className="pointer-events-none absolute inset-0 bg-brand-navy/0 transition group-hover:bg-brand-navy/12 group-active:bg-brand-navy/20" />
-              <div className="pointer-events-none absolute bottom-2 left-2 right-2 rounded-md bg-white/90 px-2 py-1 text-center text-[11px] text-slate-700 opacity-85 backdrop-blur">
-                Haz clic para cargar PNG o JPG
-              </div>
-              <input
-                type="file"
-                accept="image/png,image/jpeg"
-                className="sr-only"
-                onChange={(e) => void onPictureFileChange(e.target.files?.[0] ?? null)}
-              />
-            </label>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:col-span-3">
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label className="text-xs text-slate-600">Nombre completo</Label>
-              <input className={inputClass} value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
-            </div>
-
-            <div className="space-y-1.5 sm:col-span-2">
-              <div className="flex min-h-7 items-center justify-between gap-2">
-                <Label className="min-w-0 text-xs text-slate-600">
-                  <Mail className="mb-0.5 mr-1 inline h-3.5 w-3.5" strokeWidth={1.5} />
-                  Correo
-                </Label>
-                <div className="flex h-7 w-16 shrink-0 items-center justify-end sm:w-20" aria-hidden={!(canEditSensitive && hasTokkoDirectoryRow && draft.email.trim())}>
-                  {canEditSensitive && hasTokkoDirectoryRow && draft.email.trim() ? (
-                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" disabled={saving} onClick={() => void clearField("email")}>
-                      Quitar
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-              <input
-                className={cn(inputClass, (!canEditSensitive || !hasTokkoDirectoryRow) && "bg-slate-50 text-slate-600")}
-                readOnly={!canEditSensitive || !hasTokkoDirectoryRow}
-                title={!hasTokkoDirectoryRow ? "El correo se gestiona en Auth; para cambiarlo usa el flujo de Supabase o crea la fila en directorio CRM." : undefined}
-                value={draft.email}
-                onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex min-h-7 items-center justify-between gap-2">
-                <Label className="min-w-0 text-xs text-slate-600">
-                  <Phone className="mb-0.5 mr-1 inline h-3.5 w-3.5" strokeWidth={1.5} />
-                  Teléfono
-                </Label>
-                <div className="flex h-7 w-16 shrink-0 items-center justify-end sm:w-20" aria-hidden={!draft.phone}>
-                  {draft.phone ? (
-                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" disabled={saving} onClick={() => void clearField("phone")}>
-                      Quitar
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-              <input className={inputClass} value={draft.phone} onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))} />
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex min-h-7 items-center justify-between gap-2">
-                <Label className="min-w-0 text-xs text-slate-600">
-                  <Smartphone className="mb-0.5 mr-1 inline h-3.5 w-3.5" strokeWidth={1.5} />
-                  Celular
-                </Label>
-                <div className="flex h-7 w-16 shrink-0 items-center justify-end sm:w-20" aria-hidden={!draft.cellphone}>
-                  {draft.cellphone ? (
-                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" disabled={saving} onClick={() => void clearField("cellphone")}>
-                      Quitar
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-              <input className={inputClass} value={draft.cellphone} onChange={(e) => setDraft((d) => ({ ...d, cellphone: e.target.value }))} />
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex min-h-7 items-center justify-between gap-2">
-                <Label className="min-w-0 text-xs text-slate-600">
-                  <Briefcase className="mb-0.5 mr-1 inline h-3.5 w-3.5" strokeWidth={1.5} />
-                  Puesto
-                </Label>
-                <div className="flex h-7 w-16 shrink-0 items-center justify-end sm:w-20" aria-hidden={!draft.position.trim()}>
-                  {draft.position.trim() ? (
-                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" disabled={saving} onClick={() => void clearField("position")}>
-                      Quitar
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-              <input className={inputClass} value={draft.position} onChange={(e) => setDraft((d) => ({ ...d, position: e.target.value }))} />
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex min-h-7 items-center justify-between gap-2">
-                <Label className="min-w-0 text-xs text-slate-600">
-                  <Shield className="mb-0.5 mr-1 inline h-3.5 w-3.5" strokeWidth={1.5} />
-                  Rol
-                </Label>
-                <div className="h-7 w-16 shrink-0 sm:w-20" aria-hidden />
-              </div>
-              <p className={cn(readClass, "min-h-9")}>{roRole}</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <div className="grid gap-3 lg:grid-cols-3">
-        <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Permisos</h3>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-slate-600">Módulos</Label>
-            {(() => {
-              const enabledCards = profilePermissionCards.filter(({ value }) => roPerms.includes(value));
-              if (enabledCards.length === 0) {
-                return (
-                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                    Sin módulos asignados
-                  </div>
-                );
-              }
-              return (
-                <div className="grid grid-cols-2 gap-2">
-                  {enabledCards.map(({ value, label, Icon }) => (
-                    <div key={value} className="relative rounded-xl border border-primary/35 bg-primary/[0.04] p-3">
-                      <div className="flex items-center gap-3">
-                        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-primary">
-                          <Icon className="h-4.5 w-4.5" strokeWidth={1.7} />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-sm text-slate-900" style={{ fontWeight: 700 }}>
-                            {label}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-          </div>
-        </section>
-
-        <section className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Identificación</h3>
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <Label className="text-xs text-slate-600">
-                <Hash className="mb-0.5 mr-1 inline h-3.5 w-3.5" strokeWidth={1.5} />
-                ID (UUID)
-              </Label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs text-slate-500"
-                onClick={() => void copyField("ID", strVal(displayRow.id))}
-              >
-                <Copy className="mr-1 h-3.5 w-3.5" strokeWidth={1.7} />
-                Copiar
-              </Button>
-            </div>
-            <p className={readClass}>{strVal(displayRow.id) || "-"}</p>
-          </div>
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <Label className="text-xs text-slate-600">tokko_user_id</Label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs text-slate-500"
-                onClick={() => void copyField("tokko_user_id", strVal(displayRow.tokko_user_id))}
-              >
-                <Copy className="mr-1 h-3.5 w-3.5" strokeWidth={1.7} />
-                Copiar
-              </Button>
-            </div>
-            <div className={cn(readClass, "overflow-x-auto whitespace-nowrap font-mono text-xs")}>
-              {strVal(displayRow.tokko_user_id) || "-"}
-            </div>
-          </div>
-        </section>
-
-        <section className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Auditoría</h3>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-slate-600">synced_at</Label>
-            <p className={readClass}>{formatTs(displayRow.synced_at)}</p>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-slate-600">updated_at</Label>
-            <p className={readClass}>{formatTs(displayRow.updated_at)}</p>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-slate-600">deleted_at</Label>
-            <p className={readClass}>
-              {displayRow.deleted_at == null || strVal(displayRow.deleted_at) === "" ? "-" : formatTs(displayRow.deleted_at)}
-            </p>
-          </div>
-        </section>
-      </div>
-
+      <ProfilePictureCropDialog
+        open={cropOpen}
+        imageSrc={cropImageSrc}
+        onOpenChange={(open) => {
+          setCropOpen(open);
+          if (!open) setCropImageSrc(null);
+        }}
+        onConfirm={onCropConfirm}
+      />
     </div>
   );
 }

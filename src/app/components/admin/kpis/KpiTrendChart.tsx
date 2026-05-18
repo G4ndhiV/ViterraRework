@@ -9,7 +9,6 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { TrendingUp } from "lucide-react";
 import type { TrendPoint } from "../../../lib/kpiCompute";
 import { formatMoney } from "../../../lib/kpiCompute";
 import type { KpiSnapshot } from "../../../lib/supabaseKpis";
@@ -52,16 +51,11 @@ export function KpiTrendChart({ trend, snapshots, scope, scopeId }: Props) {
 
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
-      <div className="mb-4 flex items-center gap-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-          <TrendingUp className="h-4 w-4" strokeWidth={1.75} />
-        </span>
-        <div>
-          <h3 className="text-sm font-semibold text-brand-navy">Evolución mensual</h3>
-          <p className="text-xs text-slate-500">
-            Nuevos leads vs. cierres mensuales (líneas punteadas: snapshots Supabase si están disponibles).
-          </p>
-        </div>
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-brand-navy">Evolución mensual</h3>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Nuevos leads vs. cierres mensuales (líneas punteadas: snapshots Supabase si están disponibles).
+        </p>
       </div>
       <div className="h-[300px]">
         <ResponsiveContainer width="100%" height="100%">

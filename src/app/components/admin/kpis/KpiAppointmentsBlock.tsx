@@ -1,4 +1,3 @@
-import { CalendarCheck } from "lucide-react";
 import type { AppointmentStats } from "../../../lib/kpiCompute";
 import { pctDelta, formatDelta } from "../../../lib/kpiCompute";
 import { cn } from "../../ui/utils";
@@ -33,16 +32,11 @@ function row(label: string, cur: number, prev: number) {
 export function KpiAppointmentsBlock({ current, previous }: Props) {
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
-      <div className="mb-4 flex items-center gap-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-          <CalendarCheck className="h-4 w-4" strokeWidth={1.75} />
-        </span>
-        <div>
-          <h3 className="text-sm font-semibold text-brand-navy">Citas</h3>
-          <p className="text-xs text-slate-500">
-            Conteo en el rango. La agenda se calcula con datos del navegador hasta migrarla a Supabase.
-          </p>
-        </div>
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-brand-navy">Citas</h3>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Conteo en el rango. La agenda se calcula con datos del navegador hasta migrarla a Supabase.
+        </p>
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {row("Total", current.total, previous.total)}

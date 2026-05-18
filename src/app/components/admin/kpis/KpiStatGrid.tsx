@@ -1,5 +1,5 @@
 import { Pencil, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
-import type { ComponentType, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { cn } from "../../ui/utils";
 import { formatDelta, formatHours, formatMoney, pctDelta, type CoreKpis } from "../../../lib/kpiCompute";
 import type { AppointmentStats } from "../../../lib/kpiCompute";
@@ -19,13 +19,12 @@ interface CardProps {
   value: string;
   hint?: string;
   delta?: number | null;
-  icon: ComponentType<{ className?: string; strokeWidth?: number }>;
   targetBadge?: ReactNode;
   onClick?: () => void;
   onEdit?: () => void;
 }
 
-function StatCard({ label, value, hint, delta, icon: Icon, targetBadge, onClick, onEdit }: CardProps) {
+function StatCard({ label, value, hint, delta, targetBadge, onClick, onEdit }: CardProps) {
   const fmtDelta = formatDelta(delta ?? null);
   return (
     <div
@@ -37,12 +36,7 @@ function StatCard({ label, value, hint, delta, icon: Icon, targetBadge, onClick,
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
     >
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
-          <Icon className="h-4 w-4" strokeWidth={1.75} />
-        </span>
-      </div>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
 
       <p className="font-heading mt-3 text-2xl tracking-tight text-brand-navy sm:text-[1.65rem]" style={{ fontWeight: 700 }}>
         {value}
@@ -122,8 +116,6 @@ interface Props {
   canEditTargets: boolean;
   onEditTarget?: (metric: KpiTargetMetric) => void;
   onDrilldown?: (ctx: StatCardClickContext) => void;
-  /** Iconos por métrica (lucide-react). El módulo los pasa para evitar dependencias circulares. */
-  icons: Record<string, ComponentType<{ className?: string; strokeWidth?: number }>>;
 }
 
 export function KpiStatGrid({
@@ -140,7 +132,6 @@ export function KpiStatGrid({
   canEditTargets,
   onEditTarget,
   onDrilldown,
-  icons,
 }: Props) {
   const cmp = compareYearOverYear ? yearAgo : previous;
   const apptsCmp = appointmentsPrev; // siempre vs período anterior (snap diario por estado)
@@ -158,7 +149,6 @@ export function KpiStatGrid({
         label="Leads totales"
         value={current.totalLeads.toString()}
         delta={pctDelta(current.totalLeads, cmp.totalLeads)}
-        icon={icons.totalLeads}
         onClick={() =>
           onDrilldown?.({ metric: "new_leads", scope: targetScope, scopeId: targetScopeId, label: "Leads totales", value: current.totalLeads })
         }
@@ -168,7 +158,6 @@ export function KpiStatGrid({
         value={current.newLeads.toString()}
         delta={pctDelta(current.newLeads, cmp.newLeads)}
         targetBadge={targetBadge(newLeadsTarget, current.newLeads)}
-        icon={icons.newLeads}
         onClick={() =>
           onDrilldown?.({ metric: "new_leads", scope: targetScope, scopeId: targetScopeId, label: "Nuevos leads", value: current.newLeads })
         }
@@ -179,7 +168,6 @@ export function KpiStatGrid({
         value={`${(current.conversionRate * 100).toFixed(1)}%`}
         delta={pctDelta(current.conversionRate, cmp.conversionRate)}
         targetBadge={targetBadge(conversionTarget, current.conversionRate * 100)}
-        icon={icons.conversion}
         onClick={() =>
           onDrilldown?.({ metric: "conversion_rate", scope: targetScope, scopeId: targetScopeId, label: "Conversión", value: current.conversionRate })
         }
@@ -190,7 +178,6 @@ export function KpiStatGrid({
         value={current.salesCount.toString()}
         delta={pctDelta(current.salesCount, cmp.salesCount)}
         targetBadge={targetBadge(salesTarget, current.salesCount)}
-        icon={icons.salesCount}
         onClick={() =>
           onDrilldown?.({ metric: "sales_count", scope: targetScope, scopeId: targetScopeId, label: "Cierres", value: current.salesCount })
         }
@@ -202,7 +189,6 @@ export function KpiStatGrid({
         value={`$${formatMoney(current.salesVolume)}`}
         delta={pctDelta(current.salesVolume, cmp.salesVolume)}
         targetBadge={targetBadge(volumeTarget, current.salesVolume)}
-        icon={icons.salesVolume}
         onClick={() =>
           onDrilldown?.({ metric: "sales_volume", scope: targetScope, scopeId: targetScopeId, label: "Monto vendido", value: current.salesVolume })
         }
@@ -212,7 +198,6 @@ export function KpiStatGrid({
         label="Ticket promedio"
         value={`$${formatMoney(current.ticketAverage)}`}
         delta={pctDelta(current.ticketAverage, cmp.ticketAverage)}
-        icon={icons.ticket}
       />
       <StatCard
         label="Tiempo en pipeline"
@@ -222,7 +207,6 @@ export function KpiStatGrid({
             ? null
             : pctDelta(current.avgPipelineDays, cmp.avgPipelineDays)
         }
-        icon={icons.pipelineDays}
       />
       <StatCard
         label="1° contacto"
@@ -233,7 +217,6 @@ export function KpiStatGrid({
             : pctDelta(current.avgFirstContactHours, cmp.avgFirstContactHours)
         }
         targetBadge={targetBadge(responseTarget, current.avgFirstContactHours ?? 0)}
-        icon={icons.response}
         onEdit={canEditTargets ? () => onEditTarget?.("response_time_hours") : undefined}
       />
 
@@ -241,14 +224,12 @@ export function KpiStatGrid({
         label="Pipeline ponderado"
         value={`$${formatMoney(current.weightedPipelineValue)}`}
         delta={pctDelta(current.weightedPipelineValue, cmp.weightedPipelineValue)}
-        icon={icons.weighted}
         hint="Budget × probabilidad por etapa"
       />
       <StatCard
         label="Sin contacto > 7d"
         value={current.staleLeads.toString()}
         delta={pctDelta(current.staleLeads, cmp.staleLeads)}
-        icon={icons.stale}
         hint="Leads abiertos sin último contacto reciente"
         onClick={() =>
           onDrilldown?.({ metric: "stale_leads", scope: targetScope, scopeId: targetScopeId, label: "Stale leads", value: current.staleLeads })
@@ -259,7 +240,6 @@ export function KpiStatGrid({
         value={appointments.completed.toString()}
         delta={pctDelta(appointments.completed, apptsCmp.completed)}
         targetBadge={targetBadge(apptsTarget, appointments.completed)}
-        icon={icons.appointmentsCompleted}
         hint={`Agendadas: ${appointments.scheduled} · Canceladas: ${appointments.cancelled}`}
         onEdit={canEditTargets ? () => onEditTarget?.("appointments_completed") : undefined}
       />
@@ -267,7 +247,6 @@ export function KpiStatGrid({
         label="Leads perdidos"
         value={current.lostLeads.toString()}
         delta={pctDelta(current.lostLeads, cmp.lostLeads)}
-        icon={icons.lost}
       />
     </div>
   );

@@ -1,6 +1,7 @@
 import { useMemo, useCallback, useState } from "react";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
+import { HorizontalScrollArea } from "./HorizontalScrollArea";
 import { ChevronLeft, ChevronRight, MapPin } from "lucide-react";
 import type { Lead } from "../../data/leads";
 import { LeadPriorityBadge } from "./LeadPriorityBadge";
@@ -45,6 +46,7 @@ function DraggableLeadCard({
       ref={(el) => {
         dragRef(el);
       }}
+      data-hscroll-no-pan
       className={`group relative cursor-pointer overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm transition-all duration-200 active:cursor-grabbing ${
         isDragging ? "scale-[0.98] opacity-60 shadow-lg" : "hover:border-slate-300/90 hover:shadow-md"
       }`}
@@ -275,14 +277,19 @@ export function LeadsKanbanBoard({
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-[0_16px_48px_-12px_rgba(20,28,46,0.18)] ring-1 ring-black/[0.03]">
-        <div className="crm-kanban-scroll bg-gradient-to-b from-brand-canvas/55 via-slate-50/90 to-slate-100/80 px-4 py-5 pb-6 md:px-6">
+        <div className="bg-gradient-to-b from-brand-canvas/55 via-slate-50/90 to-slate-100/80 px-4 py-5 pb-5 md:px-6">
           <p className="mb-4 text-center text-xs uppercase tracking-[0.28em] text-slate-500" style={{ fontWeight: 600 }}>
             Arrastra las tarjetas entre columnas para actualizar el estado
           </p>
-          <div className="flex gap-4 overflow-x-auto pb-1 md:gap-5">
-            {columnStatuses.map((status) => (
-              <KanbanColumn
-                key={status}
+          <HorizontalScrollArea
+            ariaLabel="Pipeline de leads por columna"
+            contentClassName="pb-2 pt-0.5"
+            hintPlacement="top"
+          >
+            <div className="flex w-max min-w-full gap-4 md:gap-5">
+              {columnStatuses.map((status) => (
+                <KanbanColumn
+                  key={status}
                 status={status}
                 leadsInColumn={byStatus[status] ?? []}
                 onDropLead={handleDrop}
@@ -293,7 +300,8 @@ export function LeadsKanbanBoard({
                 accentHex={columnHexByStatus?.[status] ?? DEFAULT_CUSTOM_STAGE_HEX}
               />
             ))}
-          </div>
+            </div>
+          </HorizontalScrollArea>
         </div>
       </div>
     </DndProvider>

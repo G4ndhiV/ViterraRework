@@ -93,6 +93,21 @@ import {
   AlertDialogTitle,
 } from "../../components/ui/alert-dialog";
 import { canViewAllLeads, filterLeadsForUser, roleLabelEs } from "../../lib/leadsAccess";
+import { getKpiScope } from "../../lib/kpiAccess";
+import {
+  canOpenTeamMemberProfile,
+  type AdminSearchRoute,
+} from "../../lib/adminWorkspaceSearch";
+import { AdminWorkspaceSearch } from "../../components/admin/AdminWorkspaceSearch";
+import { AdminViewAsRoleSwitcher } from "../../components/admin/AdminViewAsRoleSwitcher";
+import {
+  contextUserForViewAs,
+  effectiveRoleFromView,
+  getVisiblePipelineGroupIdsForView,
+  loadAdminViewAsRole,
+  saveAdminViewAsRole,
+  type AdminViewAsRole,
+} from "../../lib/adminViewAsRole";
 import { copyPublicPageUrl } from "../../lib/copyPublicLink";
 import { Property } from "../../components/PropertyCard";
 import { useCatalogProperties } from "../../hooks/useCatalogProperties";
@@ -140,18 +155,7 @@ import { GroupLeaderDashboard } from "../../components/admin/GroupLeaderDashboar
 import { PipelineStageReorderRow } from "../../components/admin/PipelineStageReorderRow";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-const KPIsModule = lazy(() =>
-  import("../../components/admin/kpis/KPIsModule").then((m) => ({ default: m.KPIsModule }))
-);
-const AdminSiteEditor = lazy(() =>
-  import("../../components/admin/AdminSiteEditor").then((m) => ({ default: m.AdminSiteEditor }))
-);
-const PropertyMap = lazy(() =>
-  import("../../components/PropertyMap").then((m) => ({ default: m.PropertyMap }))
-);
-const AdminDashboardCharts = lazy(() =>
-  import("./AdminDashboardCharts").then((m) => ({ default: m.AdminDashboardCharts }))
-);
+import { AdminDashboard } from "../../components/admin/dashboard/AdminDashboard";
 import { cn } from "../../components/ui/utils";
 import {
   DEFAULT_BUILTIN_STAGE_HEX,
@@ -181,11 +185,17 @@ import {
   persistSalesPipelineConfigs,
 } from "../../lib/supabaseSalesPipeline";
 import { foldSearchText } from "../../lib/searchText";
-import { buildAdminHref, parseAdminPath, type AdminTab, type CompanySubtab } from "./adminNavigation";
+import {
+  buildAdminCanonicalHref,
+  buildAdminHref,
+  buildAdminProfileHref,
+  parseAdminPath,
+  type AdminTab,
+  type CompanySubtab,
+} from "./adminNavigation";
 import { PdfDownloadDropdown } from "../../components/pdf/PdfDownloadDropdown";
 import {
   AdminActivitiesSkeleton,
-  AdminChartsRowSkeleton,
   AdminClientsSkeleton,
   AdminCompanySkeleton,
   AdminConsultasSkeleton,
@@ -197,6 +207,16 @@ import {
   AdminPropertiesSkeleton,
   AdminWorkspaceAuthLoadingShell,
 } from "./AdminSectionSkeletons";
+
+const KPIsModule = lazy(() =>
+  import("../../components/admin/kpis/KPIsModule").then((m) => ({ default: m.KPIsModule }))
+);
+const AdminSiteEditor = lazy(() =>
+  import("../../components/admin/AdminSiteEditor").then((m) => ({ default: m.AdminSiteEditor }))
+);
+const PropertyMap = lazy(() =>
+  import("../../components/PropertyMap").then((m) => ({ default: m.PropertyMap }))
+);
 
 type TabType = AdminTab;
 
@@ -261,7 +281,7 @@ function readStoredAdminSidebarExpanded(): boolean {
 export function AdminWorkspace() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { tab: activeTab, companySubtab } = useMemo(
+  const { tab: activeTab, companySubtab, profileUserId } = useMemo(
     () => parseAdminPath(location.pathname),
     [location.pathname]
   );
@@ -280,6 +300,7 @@ export function AdminWorkspace() {
       activeTab === "leads" ||
       activeTab === "consultas" ||
       activeTab === "clients" ||
+      activeTab === "profile" ||
       (activeTab === "company" && companySubtab !== "site");
 
     const needsDevelopments =
@@ -305,7 +326,7 @@ export function AdminWorkspace() {
   useEffect(() => {
     if (!location.pathname.startsWith("/admin")) return;
     const parsed = parseAdminPath(location.pathname);
-    const canonical = buildAdminHref(parsed.tab, parsed.companySubtab);
+    const canonical = buildAdminCanonicalHref(parsed);
     const cur = location.pathname.replace(/\/+$/, "") || "/admin";
     const target = canonical.replace(/\/+$/, "");
     if (cur !== target) {
@@ -357,6 +378,7 @@ export function AdminWorkspace() {
   const [expandedLeaderGroupId, setExpandedLeaderGroupId] = useState<string | null>(null);
   const [propertyInventoryView, setPropertyInventoryView] = useState<"cards" | "list" | "map">("cards");
   const [adminHeaderQuery, setAdminHeaderQuery] = useState("");
+  const [adminViewAs, setAdminViewAs] = useState<AdminViewAsRole>(loadAdminViewAsRole);
   const [adminSidebarExpanded, setAdminSidebarExpanded] = useState(readStoredAdminSidebarExpanded);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -397,7 +419,6 @@ export function AdminWorkspace() {
     leadsView: "kanban" | "table";
     leadDialog: { lead: Lead; mode: "view" | "edit" } | null;
   } | null>(null);
-  const [dashboardRouteSearchOpen, setDashboardRouteSearchOpen] = useState(false);
   const [propertyForm, setPropertyForm] = useState<{
     mode: "create" | "edit";
     property: Property | null;
@@ -408,16 +429,21 @@ export function AdminWorkspace() {
   const [deletePropertyId, setDeletePropertyId] = useState<string | null>(null);
   /** Agenda local (localStorage). Se hidrata para alimentar las métricas de citas en KPI's. */
   const [appointments, setAppointments] = useState<AgendaAppointment[]>([]);
-  const isGroupLeader = user?.role === "lider_grupo";
-  const isAdmin = user?.role === "admin";
-  const isAdvisor = user?.role === "asesor";
+  const isRealAdmin = user?.role === "admin";
+  const effectiveRole = effectiveRoleFromView(user, adminViewAs);
+  const effectiveUser = useMemo(
+    () => contextUserForViewAs(user, adminViewAs),
+    [user, adminViewAs],
+  );
+  const isAdmin = effectiveRole === "admin";
+  const isGroupLeader = effectiveRole === "lider_grupo";
+  const isAdvisor = effectiveRole === "asesor";
   const canAccessCompanyModule = !isAdvisor;
   const canEditSite = useMemo(
-    () => !isAdvisor && (isAdmin || (user?.permissions?.includes("edit_site") ?? false)),
-    [isAdvisor, isAdmin, user],
+    () => !isAdvisor && (isAdmin || (effectiveUser?.permissions?.includes("edit_site") ?? false)),
+    [isAdvisor, isAdmin, effectiveUser],
   );
-  // Inventario (propiedades/desarrollos) solo editable por administradores.
-  const canManageInventory = user?.role === "admin";
+  const canManageInventory = isAdmin;
 
   const crmBootstrapReady = pipelineSourcesHydrated;
   /**
@@ -536,7 +562,10 @@ export function AdminWorkspace() {
 
       // El admin usa `fetchAllLeadsForAdmin` (orden por creación). «Descartados» en Consultas usa
       // `crmSoftDeletedAt` + `perdido`, no `deleted_at` de Tokko (ver `softDeleteLead`).
-      const leadsLoader = user?.role === "admin" ? fetchAllLeadsForAdmin : fetchActiveLeads;
+      const leadsLoader =
+        user && effectiveRoleFromView(user, adminViewAs) === "admin"
+          ? fetchAllLeadsForAdmin
+          : fetchActiveLeads;
       const leadsP = needsLeads
         ? leadsLoader(client)
             .then((leadsRes) => {
@@ -597,8 +626,8 @@ export function AdminWorkspace() {
             setUserGroups(groupsRes.data);
           }
 
-          const allowedGroupIds = user
-            ? getAllowedPipelineGroupIds(user, groupsData)
+          const allowedGroupIds = effectiveUser
+            ? getAllowedPipelineGroupIds(effectiveUser, groupsData)
             : [DEFAULT_PIPELINE_GROUP_ID];
           const localLegacy = loadPipelineByGroup();
           if (pipeRes.error) {
@@ -646,7 +675,6 @@ export function AdminWorkspace() {
     authReady,
     user?.mustChangePassword,
     user?.id,
-    user?.role,
     adminRemoteDataPlan,
   ]);
 
@@ -730,16 +758,19 @@ export function AdminWorkspace() {
   );
 
   const allowedPipelineGroupIds = useMemo(
-    () => (user ? getAllowedPipelineGroupIds(user, userGroups) : [DEFAULT_PIPELINE_GROUP_ID]),
-    [user, userGroups]
-  );
-  const visiblePipelineGroupIds = useMemo(
     () =>
-      isGroupLeader
-        ? allowedPipelineGroupIds.filter((groupId) => groupId !== DEFAULT_PIPELINE_GROUP_ID)
-        : allowedPipelineGroupIds,
-    [isGroupLeader, allowedPipelineGroupIds]
+      effectiveUser ? getAllowedPipelineGroupIds(effectiveUser, userGroups) : [DEFAULT_PIPELINE_GROUP_ID],
+    [effectiveUser, userGroups],
   );
+  const visiblePipelineGroupIds = useMemo(() => {
+    if (!user) return [DEFAULT_PIPELINE_GROUP_ID];
+    if (isRealAdmin && adminViewAs !== "admin") {
+      return getVisiblePipelineGroupIdsForView(user, adminViewAs, userGroups);
+    }
+    return isGroupLeader
+      ? allowedPipelineGroupIds.filter((groupId) => groupId !== DEFAULT_PIPELINE_GROUP_ID)
+      : allowedPipelineGroupIds;
+  }, [user, isRealAdmin, adminViewAs, userGroups, isGroupLeader, allowedPipelineGroupIds]);
 
   useEffect(() => {
     if (!user) return;
@@ -773,6 +804,20 @@ export function AdminWorkspace() {
   }, [user, canEditSite, activeTab, companySubtab, navigate]);
 
   useEffect(() => {
+    if (!isAdmin && activeTab === "consultas") {
+      navigate(buildAdminHref("dashboard"), { replace: true });
+    }
+  }, [isAdmin, activeTab, navigate]);
+
+  useEffect(() => {
+    if (!isGroupLeader) return;
+    if (activeTab !== "company") return;
+    if (companySubtab === "users" || companySubtab === "settings") {
+      navigate(buildAdminHref("company", "leadStages"), { replace: true });
+    }
+  }, [isGroupLeader, activeTab, companySubtab, navigate]);
+
+  useEffect(() => {
     if (!activePipelineGroupId) return;
     setPipelineByGroup((prev) => {
       if (prev[activePipelineGroupId]) return prev;
@@ -801,10 +846,12 @@ export function AdminWorkspace() {
 
   const leadsForUser = useMemo(
     () =>
-      filterLeadsForUser(leads, user).filter(
-        (l) => l.crmSoftDeletedAt == null || String(l.crmSoftDeletedAt).trim() === ""
-      ),
-    [leads, user]
+      effectiveUser
+        ? filterLeadsForUser(leads, effectiveUser).filter(
+            (l) => l.crmSoftDeletedAt == null || String(l.crmSoftDeletedAt).trim() === "",
+          )
+        : [],
+    [leads, effectiveUser],
   );
 
   const leadsInActivePipeline = useMemo(() => {
@@ -816,9 +863,20 @@ export function AdminWorkspace() {
     return leadsForUser.filter((l) => l.pipelineGroupId === activePipelineGroupId);
   }, [leadsForUser, activePipelineGroupId, allowedPipelineGroupIds]);
 
+  useEffect(() => {
+    if (!user || !isRealAdmin) return;
+    if (adminViewAs !== "lider_grupo") return;
+    const teamIds = visiblePipelineGroupIds;
+    setActivePipelineGroupId((prev) => {
+      if (teamIds.includes(prev)) return prev;
+      return teamIds[0] ?? prev;
+    });
+  }, [user, isRealAdmin, adminViewAs, visiblePipelineGroupIds]);
+
   const canConfigureActivePipeline = useMemo(
-    () => (user ? canConfigurePipelineForGroup(user, activePipelineGroupId, userGroups) : false),
-    [user, activePipelineGroupId, userGroups]
+    () =>
+      effectiveUser ? canConfigurePipelineForGroup(effectiveUser, activePipelineGroupId, userGroups) : false,
+    [effectiveUser, activePipelineGroupId, userGroups],
   );
 
   const allStageIds = useMemo(
@@ -858,9 +916,9 @@ export function AdminWorkspace() {
   }, [isGroupLeader, visiblePipelineGroupIds, userGroups]);
 
   const pipelineCopySourceOptions = useMemo(() => {
-    if (!user || user.role !== "admin") return [];
+    if (!isAdmin) return [];
     return allowedPipelineGroupIds;
-  }, [user, allowedPipelineGroupIds]);
+  }, [isAdmin, allowedPipelineGroupIds]);
 
   const pipelineCopyDestOptions = useMemo(() => {
     if (!user) return [];
@@ -959,14 +1017,14 @@ export function AdminWorkspace() {
 
       // El admin conserva el lead en estado para Consultas → Descartados (`crmSoftDeletedAt`).
       // El resto de roles lo quita del listado local.
-      if (user?.role === "admin") {
+      if (isAdmin) {
         setLeads((prev) => prev.map((l) => (l.id === id ? archived : l)));
       } else {
         setLeads((prev) => prev.filter((l) => l.id !== id));
       }
       setLeadDialog((d) => (d?.lead.id === id ? null : d));
     },
-    [user?.role, leads]
+    [isAdmin, leads]
   );
 
   const handleDeleteDevelopment = useCallback(
@@ -1552,7 +1610,10 @@ export function AdminWorkspace() {
     if (!client) return;
     setLeadsLoading(true);
     setLeadsError(null);
-    const loader = user?.role === "admin" ? fetchAllLeadsForAdmin : fetchActiveLeads;
+    const loader =
+      user && effectiveRoleFromView(user, adminViewAs) === "admin"
+        ? fetchAllLeadsForAdmin
+        : fetchActiveLeads;
     try {
       const res = await loader(client);
       if (res.error) {
@@ -1565,7 +1626,15 @@ export function AdminWorkspace() {
     } finally {
       setLeadsLoading(false);
     }
-  }, [user?.role]);
+  }, [user, adminViewAs]);
+
+  const adminViewAsRef = useRef(adminViewAs);
+  useEffect(() => {
+    if (!isRealAdmin || !user) return;
+    if (adminViewAsRef.current === adminViewAs) return;
+    adminViewAsRef.current = adminViewAs;
+    void reloadLeads();
+  }, [isRealAdmin, user, adminViewAs, reloadLeads]);
 
   /**
    * Reasigna un lead a otro asesor desde el módulo Consultas. Mantiene la misma lógica de
@@ -1749,6 +1818,11 @@ export function AdminWorkspace() {
     [leads]
   );
 
+  const adminSearchScope = useMemo(
+    () => getKpiScope(effectiveUser, users, userGroups),
+    [effectiveUser, users, userGroups],
+  );
+
   const handleViewTeamMember = useCallback((userId: string, fallbackName?: string) => {
     const normalizedId = userId.trim().toLowerCase();
     let targetUser =
@@ -1771,7 +1845,20 @@ export function AdminWorkspace() {
     }
 
     if (!targetUser) {
-      window.alert("No se encontró el detalle del asesor para este cliente.");
+      toast.error("No se encontró el usuario en el equipo.");
+      return;
+    }
+
+    if (!effectiveUser || !canOpenTeamMemberProfile(effectiveUser, targetUser, adminSearchScope)) {
+      toast.error("No tienes permiso para ver el perfil de este usuario.");
+      return;
+    }
+
+    const selfId = effectiveUser.id.trim().toLowerCase();
+    const targetId = targetUser.id.trim().toLowerCase();
+    if (selfId === targetId) {
+      navigate(buildAdminProfileHref());
+      setLeadDialog(null);
       return;
     }
 
@@ -1781,24 +1868,56 @@ export function AdminWorkspace() {
       leadsView,
       leadDialog: leadDialog ? { lead: leadDialog.lead, mode: leadDialog.mode } : null,
     };
-    setUsersPanelFocus({ id: targetUser.id, nonce: Date.now() });
-    goTab("company", "users");
+    setUsersPanelFocus(null);
     setLeadDialog(null);
-  }, [activeTab, companySubtab, leadsView, leadDialog, users, goTab]);
+    navigate(buildAdminProfileHref(targetUser.id));
+  }, [activeTab, companySubtab, leadsView, leadDialog, users, navigate, effectiveUser, adminSearchScope]);
 
   const handleUserDetailClosed = useCallback(() => {
     const ctx = pendingReturnFromUserDetailRef.current;
     pendingReturnFromUserDetailRef.current = null;
-    if (!ctx) return;
+    if (!ctx) {
+      navigate(buildAdminHref("dashboard"));
+      return;
+    }
     navigate(buildAdminHref(ctx.tab, ctx.companySubtab));
     setLeadsView(ctx.leadsView);
     if (ctx.leadDialog) {
-      const fresh = leads.find((l) => l.id === ctx.leadDialog.lead.id) ?? ctx.leadDialog.lead;
-      setLeadDialog({ lead: fresh, mode: ctx.leadDialog.mode });
+      const fresh = leads.find((l) => l.id === ctx.leadDialog!.lead.id) ?? ctx.leadDialog!.lead;
+      setLeadDialog({ lead: fresh, mode: ctx.leadDialog!.mode });
     } else {
       setLeadDialog(null);
     }
   }, [leads, navigate]);
+
+  const viewingTeamMemberProfile = useMemo(() => {
+    if (activeTab !== "profile" || !profileUserId?.trim()) return false;
+    if (!user?.id) return true;
+    return profileUserId.trim().toLowerCase() !== user.id.trim().toLowerCase();
+  }, [activeTab, profileUserId, user?.id]);
+
+  useEffect(() => {
+    if (!viewingTeamMemberProfile || !profileUserId?.trim()) return;
+    const normalizedId = profileUserId.trim().toLowerCase();
+    const targetUser = users.find((u) => u.id.trim().toLowerCase() === normalizedId);
+    if (!targetUser) {
+      if (users.length === 0) return;
+      toast.error("No se encontró el usuario.");
+      navigate(buildAdminHref("dashboard"), { replace: true });
+      return;
+    }
+    if (!effectiveUser || !canOpenTeamMemberProfile(effectiveUser, targetUser, adminSearchScope)) {
+      toast.error("No tienes permiso para ver el perfil de este usuario.");
+      navigate(buildAdminHref("dashboard"), { replace: true });
+    }
+  }, [
+    viewingTeamMemberProfile,
+    profileUserId,
+    users,
+    effectiveUser,
+    adminSearchScope,
+    navigate,
+  ]);
 
   const handleUsersPanelFocusConsumed = useCallback(() => {
     setUsersPanelFocus(null);
@@ -2125,66 +2244,35 @@ export function AdminWorkspace() {
     [properties]
   );
 
-  const leadsBySourceData = [
-    { name: "Website", value: leadsForUser.filter((l) => l.source === "Website").length },
-    { name: "Facebook", value: leadsForUser.filter((l) => l.source === "Facebook").length },
-    { name: "Instagram", value: leadsForUser.filter((l) => l.source === "Instagram").length },
-    { name: "Google", value: leadsForUser.filter((l) => l.source === "Google").length },
-    { name: "Referido", value: leadsForUser.filter((l) => l.source === "Referido").length },
-  ];
-
-  const conversionRate = totalLeads > 0 ? ((closedDeals / totalLeads) * 100).toFixed(1) : "0";
+  const conversionRateNum = totalLeads > 0 ? (closedDeals / totalLeads) * 100 : 0;
   const totalValue = properties.reduce((sum, p) => sum + p.price, 0);
-  const avgPropertyPrice = properties.length > 0 ? (totalValue / properties.length).toFixed(0) : "0";
-  const [animatedStats, setAnimatedStats] = useState({
-    totalLeads: 0,
-    conversionRate: 0,
-    totalProperties: 0,
-    avgPropertyPrice: 0,
-  });
+  const avgPropertyPriceNum = properties.length > 0 ? totalValue / properties.length : 0;
 
-  useEffect(() => {
-    if (activeTab !== "dashboard") return;
-    const target = {
-      totalLeads,
-      conversionRate: Number(conversionRate) || 0,
-      totalProperties,
-      avgPropertyPrice: parseInt(avgPropertyPrice, 10) || 0,
-    };
-    const durationMs = 900;
-    const start = performance.now();
-    let frameId = 0;
-
-    const tick = (now: number) => {
-      const progress = Math.min((now - start) / durationMs, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setAnimatedStats({
-        totalLeads: target.totalLeads * eased,
-        conversionRate: target.conversionRate * eased,
-        totalProperties: target.totalProperties * eased,
-        avgPropertyPrice: target.avgPropertyPrice * eased,
-      });
-      if (progress < 1) frameId = requestAnimationFrame(tick);
-    };
-
-    frameId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frameId);
-  }, [activeTab, totalLeads, conversionRate, totalProperties, avgPropertyPrice]);
-
-  const adminNavigationRoutes = useMemo(
-    () => [
+  const buildAdminNavigationRoutes = useCallback(
+    (
+      navIsAdmin: boolean,
+      navIsGroupLeader: boolean,
+      navCanAccessClients: boolean,
+      navCanAccessCompanyModule: boolean,
+      navCanEditSite: boolean,
+    ): AdminSearchRoute[] => {
+    const routes: AdminSearchRoute[] = [
       {
         id: "dashboard",
         title: "Dashboard",
-        description: "Resumen general del CRM",
-        keywords: ["inicio", "resumen", "dashboard", "panel"],
+        description: "Inicio operativo: prioridades, citas y accesos rápidos",
+        keywords: ["inicio", "resumen", "dashboard", "panel", "hoy", "prioridades"],
+        category: "crm",
+        icon: LayoutDashboard,
         action: () => goTab("dashboard"),
       },
       {
         id: "kpis",
         title: "KPI's",
-        description: "Métricas detalladas, metas y comparativos por rol",
+        description: "Reportes: métricas, metas y comparativos por período",
         keywords: ["kpi", "kpis", "reportes", "metricas", "métricas", "indicadores", "meta", "metas", "tendencia"],
+        category: "crm",
+        icon: BarChart3,
         action: () => goTab("kpis"),
       },
       {
@@ -2192,9 +2280,11 @@ export function AdminWorkspace() {
         title: "Leads",
         description: "Pipeline y seguimiento comercial",
         keywords: ["lead", "clientes", "pipeline", "kanban", "prospectos"],
+        category: "crm",
+        icon: Users,
         action: () => goTab("leads"),
       },
-      ...(isAdmin
+      ...(navIsAdmin
         ? [
             {
               id: "consultas",
@@ -2208,17 +2298,21 @@ export function AdminWorkspace() {
                 "descartados",
                 "reasignar",
               ],
+              category: "crm",
+              icon: ClipboardList,
               action: () => goTab("consultas"),
             },
           ]
         : []),
-      ...(canAccessClients
+      ...(navCanAccessClients
         ? [
             {
               id: "clients",
               title: "Clientes",
               description: "Fichas de clientes e historial",
               keywords: ["clientes", "crm", "compradores", "contactos"],
+              category: "crm",
+              icon: UserCircle2,
               action: () => goTab("clients"),
             },
           ]
@@ -2228,6 +2322,8 @@ export function AdminWorkspace() {
         title: "Agenda",
         description: "Calendario semanal de citas",
         keywords: ["agenda", "calendario", "citas", "semana", "horario"],
+        category: "crm",
+        icon: Calendar,
         action: () => goTab("agenda"),
       },
       {
@@ -2235,6 +2331,8 @@ export function AdminWorkspace() {
         title: "Propiedades",
         description: "Catálogo y administración de propiedades",
         keywords: ["propiedades", "inmuebles", "venta", "renta"],
+        category: "catalog",
+        icon: Home,
         action: () => goTab("properties"),
       },
       {
@@ -2242,6 +2340,8 @@ export function AdminWorkspace() {
         title: "Desarrollos",
         description: "Gestión de desarrollos propios",
         keywords: ["desarrollos", "proyectos", "desarrollo"],
+        category: "catalog",
+        icon: Building2,
         action: () => goTab("developments"),
       },
       {
@@ -2249,27 +2349,33 @@ export function AdminWorkspace() {
         title: "Actividades",
         description: "Timeline del catálogo: propiedades y desarrollos",
         keywords: ["actividades", "timeline", "historial", "cambios", "precio", "inventario"],
+        category: "catalog",
+        icon: History,
         action: () => goTab("activities"),
       },
-      ...(canEditSite
+      ...(navCanEditSite
         ? [
             {
               id: "sitio-editor",
               title: "Sitio web · Editor",
               description: "Editor visual del contenido público",
               keywords: ["editar sitio", "sitio", "web", "editor", "contenido"],
+              category: "site",
+              icon: Globe2,
               action: () => goTab("sitio"),
             },
           ]
         : []),
-      ...(canAccessCompanyModule
-        ? (isGroupLeader
+      ...(navCanAccessCompanyModule
+        ? (navIsGroupLeader
         ? [
             {
               id: "company-pipeline",
               title: "Pipeline de ventas",
               description: "Grupos asignados y configuración de columnas",
               keywords: ["pipeline", "ventas", "grupos", "columnas", "kanban"],
+              category: "company",
+              icon: Briefcase,
               action: () => {
                 goTab("company", "leadStages");
               },
@@ -2281,6 +2387,8 @@ export function AdminWorkspace() {
               title: "Mi empresa · Usuarios",
               description: "Administración de usuarios y permisos",
               keywords: ["usuarios", "mi empresa", "permisos", "roles", "equipo"],
+              category: "company",
+              icon: Users,
               action: () => {
                 goTab("company", "users");
               },
@@ -2290,6 +2398,8 @@ export function AdminWorkspace() {
               title: "Mi empresa · Pipeline de leads",
               description: "Configura estados y orden del pipeline",
               keywords: ["estados", "columnas", "pipeline de leads", "kanban", "orden"],
+              category: "company",
+              icon: LayoutGrid,
               action: () => {
                 goTab("company", "leadStages");
               },
@@ -2299,6 +2409,8 @@ export function AdminWorkspace() {
               title: "Mi empresa · Configuración",
               description: "Espacio de trabajo, copias de seguridad y datos locales",
               keywords: ["configuración", "ajustes", "respaldo", "localStorage", "mi empresa"],
+              category: "company",
+              icon: Settings,
               action: () => {
                 goTab("company", "settings");
               },
@@ -2310,6 +2422,8 @@ export function AdminWorkspace() {
         title: "Mensajes",
         description: "Accesos al centro de mensajes",
         keywords: ["mensajes", "contacto", "correo"],
+        category: "account",
+        icon: MessageSquare,
         action: () => goTab("messages"),
       },
       {
@@ -2317,6 +2431,8 @@ export function AdminWorkspace() {
         title: "Mi perfil",
         description: "Datos en tokko_users, contacto y payload",
         keywords: ["perfil", "cuenta", "datos", "tokko", "correo", "teléfono", "foto"],
+        category: "account",
+        icon: UserIcon,
         action: () => goTab("profile"),
       },
       {
@@ -2324,6 +2440,8 @@ export function AdminWorkspace() {
         title: "Sitio público · Inicio",
         description: "Ir a la página principal del sitio",
         keywords: ["sitio", "home", "inicio público", "web"],
+        category: "site",
+        icon: Globe2,
         action: () => navigate("/"),
       },
       {
@@ -2331,6 +2449,8 @@ export function AdminWorkspace() {
         title: "Sitio público · Propiedades",
         description: "Ir al catálogo público de propiedades",
         keywords: ["sitio propiedades", "catálogo", "propiedades públicas"],
+        category: "site",
+        icon: Home,
         action: () => navigate("/propiedades"),
       },
       {
@@ -2338,6 +2458,8 @@ export function AdminWorkspace() {
         title: "Sitio público · Desarrollos",
         description: "Ir a la página pública de desarrollos",
         keywords: ["sitio desarrollos", "desarrollos públicos"],
+        category: "site",
+        icon: Building2,
         action: () => navigate("/desarrollos"),
       },
       {
@@ -2345,58 +2467,66 @@ export function AdminWorkspace() {
         title: "Sitio público · Contacto",
         description: "Ir al formulario de contacto",
         keywords: ["contacto", "formulario", "mensaje", "sitio contacto"],
+        category: "site",
+        icon: MessageSquare,
         action: () => navigate("/contacto"),
       },
-    ],
-    [navigate, goTab, canAccessClients, isGroupLeader, canAccessCompanyModule, canEditSite, isAdmin]
+    ];
+    return routes;
+    },
+    [navigate, goTab, companySubtab],
   );
 
-  const headerSearchValue = adminHeaderQuery;
-  const headerSearchPlaceholder = "Buscar ruta, módulo, sección o usuario…";
+  const adminNavigationRoutes = useMemo(
+    () =>
+      buildAdminNavigationRoutes(
+        isAdmin,
+        isGroupLeader,
+        canAccessClients,
+        canAccessCompanyModule,
+        canEditSite,
+      ),
+    [
+      buildAdminNavigationRoutes,
+      isAdmin,
+      isGroupLeader,
+      canAccessClients,
+      canAccessCompanyModule,
+      canEditSite,
+    ],
+  );
 
-  const filteredAdminRoutes = useMemo(() => {
-    const query = adminHeaderQuery.trim().toLowerCase();
-    if (!query) return adminNavigationRoutes.slice(0, 6);
+  const handleAdminViewAsChange = useCallback(
+    (next: AdminViewAsRole) => {
+      setAdminViewAs(next);
+      saveAdminViewAsRole(next);
+      setAdminHeaderQuery("");
+      if (next !== "admin" && activeTab === "consultas") {
+        goTab("dashboard");
+      } else if (
+        next === "asesor" &&
+        (activeTab === "sitio" || (activeTab === "company" && companySubtab === "site"))
+      ) {
+        goTab("dashboard");
+      } else if (
+        next === "lider_grupo" &&
+        activeTab === "company" &&
+        (companySubtab === "users" || companySubtab === "settings")
+      ) {
+        goTab("company", "leadStages");
+      }
+    },
+    [activeTab, companySubtab, goTab],
+  );
 
-    return adminNavigationRoutes
-      .filter((route) => {
-        const haystack = [route.title, route.description, ...route.keywords].join(" ").toLowerCase();
-        return haystack.includes(query);
-      })
-      .slice(0, 8);
-  }, [adminHeaderQuery, adminNavigationRoutes]);
-
-  const filteredDashboardUsers = useMemo(() => {
-    const q = adminHeaderQuery.trim().toLowerCase();
-    const active = users.filter((u) => u.isActive);
-    const sorted = [...active].sort((a, b) => a.name.localeCompare(b.name, "es"));
-    if (!q) return sorted.slice(0, 8);
-    return sorted
-      .filter((u) => {
-        const roleLabel = roleLabelEs(u.role).toLowerCase();
-        const haystack = [u.name, u.email, roleLabel, u.id].join(" ").toLowerCase();
-        return haystack.includes(q);
-      })
-      .slice(0, 8);
-  }, [adminHeaderQuery, users]);
-
-  const hasDashboardSearchResults =
-    filteredAdminRoutes.length > 0 || filteredDashboardUsers.length > 0;
-
-  const handleHeaderSearchChange = (value: string) => {
-    setAdminHeaderQuery(value);
-  };
-
-  const handleDashboardRouteSelect = (route: (typeof adminNavigationRoutes)[number]) => {
+  const handleDashboardRouteSelect = (route: AdminSearchRoute) => {
     route.action();
     setAdminHeaderQuery("");
-    setDashboardRouteSearchOpen(false);
   };
 
   const handleDashboardUserSelect = (userId: string) => {
     handleViewTeamMember(userId);
     setAdminHeaderQuery("");
-    setDashboardRouteSearchOpen(false);
   };
 
   if (!user) {
@@ -2644,19 +2774,35 @@ export function AdminWorkspace() {
           activeTab === "sitio" && canEditSite && "pb-2 pt-2 sm:pb-2 sm:pt-2 lg:pb-2"
         )}
       >
+        {isRealAdmin && (
+          <div className="mb-2 max-w-3xl">
+            <AdminViewAsRoleSwitcher value={adminViewAs} onChange={handleAdminViewAsChange} />
+          </div>
+        )}
+
         {activeTab === "dashboard" && (
           <header
-            className="relative z-20 mb-6 overflow-visible rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white/95 via-white/95 to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.22)] ring-1 ring-slate-900/[0.04] backdrop-blur-md"
+            className={cn(
+              "relative z-20 mb-5 overflow-visible",
+              isAdvisor || isGroupLeader
+                ? "rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white/95 via-white/95 to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.22)] ring-1 ring-slate-900/[0.04] backdrop-blur-md"
+                : "",
+            )}
           >
-            <div
-              className="h-1.5 w-full shrink-0 bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
-              aria-hidden
-            />
-            <div
-              className="pointer-events-none absolute -right-16 top-14 h-40 w-40 rounded-full bg-gradient-to-br from-primary/[0.1] to-transparent blur-3xl"
-              aria-hidden
-            />
-            <div className="relative px-4 py-4 sm:px-5 sm:py-5">
+            {(isAdvisor || isGroupLeader) && (
+              <>
+                <div
+                  className="h-1.5 w-full shrink-0 bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
+                  aria-hidden
+                />
+                <div
+                  className="pointer-events-none absolute -right-16 top-14 h-40 w-40 rounded-full bg-gradient-to-br from-primary/[0.1] to-transparent blur-3xl"
+                  aria-hidden
+                />
+              </>
+            )}
+            <div className={cn("relative", isAdvisor || isGroupLeader ? "px-4 py-4 sm:px-5 sm:py-5" : "")}>
+              {(isAdvisor || isGroupLeader) && (
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
                 <div className="min-w-0 flex-1">
                   <p
@@ -2704,99 +2850,19 @@ export function AdminWorkspace() {
                   </button>
                 </div>
               </div>
+              )}
 
-              <div className="relative mt-4 min-w-0">
-                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
-                <input
-                  type="search"
-                  value={headerSearchValue}
-                  onChange={(e) => handleHeaderSearchChange(e.target.value)}
-                  onFocus={() => setDashboardRouteSearchOpen(true)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      if (filteredAdminRoutes[0]) {
-                        e.preventDefault();
-                        handleDashboardRouteSelect(filteredAdminRoutes[0]);
-                      } else if (filteredDashboardUsers[0]) {
-                        e.preventDefault();
-                        handleDashboardUserSelect(filteredDashboardUsers[0].id);
-                      }
-                    }
-                    if (e.key === "Escape") {
-                      setDashboardRouteSearchOpen(false);
-                    }
-                  }}
-                  onBlur={() => {
-                    window.setTimeout(() => setDashboardRouteSearchOpen(false), 120);
-                  }}
-                  placeholder={headerSearchPlaceholder}
-                  className="h-10 w-full rounded-xl border border-slate-200/90 bg-white py-2.5 pl-10 pr-3 text-sm text-brand-navy shadow-sm placeholder:text-slate-400 focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                  aria-label="Buscar rutas, módulos o usuarios del equipo"
+              <div className={cn("relative min-w-0 max-w-xl", (isAdvisor || isGroupLeader) && "mt-4")}>
+                <AdminWorkspaceSearch
+                  routes={adminNavigationRoutes}
+                  allUsers={users}
+                  scope={adminSearchScope}
+                  viewer={effectiveUser}
+                  query={adminHeaderQuery}
+                  onQueryChange={setAdminHeaderQuery}
+                  onRouteSelect={handleDashboardRouteSelect}
+                  onUserSelect={handleDashboardUserSelect}
                 />
-                {dashboardRouteSearchOpen && hasDashboardSearchResults && (
-                  <div className="absolute left-0 right-0 top-[calc(100%+0.6rem)] z-[60] overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_24px_60px_-18px_rgba(20,28,46,0.2)]">
-                    <div className="max-h-[min(24rem,70vh)] overflow-y-auto">
-                      {filteredAdminRoutes.length > 0 && (
-                        <>
-                          <div className="sticky top-0 z-[1] border-b border-slate-100 bg-white px-4 py-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                            Rutas sugeridas
-                          </div>
-                          <div className="py-1.5">
-                            {filteredAdminRoutes.map((route) => (
-                              <button
-                                key={route.id}
-                                type="button"
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => handleDashboardRouteSelect(route)}
-                                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
-                              >
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm text-brand-navy" style={{ fontWeight: 600 }}>
-                                    {route.title}
-                                  </p>
-                                  <p className="truncate text-xs text-slate-500">{route.description}</p>
-                                </div>
-                                <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" strokeWidth={1.8} />
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                      {filteredDashboardUsers.length > 0 && (
-                        <>
-                          <div className="sticky top-0 z-[1] border-b border-slate-100 bg-white px-4 py-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                            Usuarios del equipo
-                          </div>
-                          <div className="py-1.5">
-                            {filteredDashboardUsers.map((u) => (
-                              <button
-                                key={u.id}
-                                type="button"
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => handleDashboardUserSelect(u.id)}
-                                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
-                              >
-                                <div className="flex min-w-0 flex-1 items-center gap-3">
-                                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                                    <UserIcon className="h-4 w-4" strokeWidth={2} aria-hidden />
-                                  </span>
-                                  <div className="min-w-0">
-                                    <p className="truncate text-sm text-brand-navy" style={{ fontWeight: 600 }}>
-                                      {u.name}
-                                    </p>
-                                    <p className="truncate text-xs text-slate-500">{u.email}</p>
-                                    <p className="truncate text-[11px] text-slate-400">{roleLabelEs(u.role)}</p>
-                                  </div>
-                                </div>
-                                <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" strokeWidth={1.8} />
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </header>
@@ -2868,62 +2934,25 @@ export function AdminWorkspace() {
                 users={users}
               />
             ) : (
-              <>
-            {/* Stats Cards - Elegantes y minimalistas */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
-              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
-                <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-primary to-brand-burgundy opacity-90" aria-hidden />
-                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
-                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Total Leads</p>
-                  <TrendingUp className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
-                </div>
-                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
-                  {Math.round(animatedStats.totalLeads)}
-                </p>
-                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>+{newLeads} este mes</p>
-              </div>
-
-              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
-                <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-burgundy to-brand-gold opacity-90" aria-hidden />
-                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
-                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Conversión</p>
-                  <Activity className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
-                </div>
-                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
-                  {animatedStats.conversionRate.toFixed(1)}%
-                </p>
-                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>{closedDeals} cerrados</p>
-              </div>
-
-              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
-                <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-navy to-slate-600 opacity-90" aria-hidden />
-                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
-                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Propiedades</p>
-                  <Briefcase className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
-                </div>
-                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
-                  {Math.round(animatedStats.totalProperties)}
-                </p>
-                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>{propertiesForSale} venta · {propertiesForRent} alquiler</p>
-              </div>
-
-              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
-                <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-gold to-primary opacity-90" aria-hidden />
-                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
-                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>Valor Promedio</p>
-                  <TrendingUp className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
-                </div>
-                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
-                  ${Math.round(animatedStats.avgPropertyPrice).toLocaleString()}
-                </p>
-                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>por propiedad</p>
-              </div>
-            </div>
-
-            <Suspense fallback={<AdminChartsRowSkeleton />}>
-              <AdminDashboardCharts trendData={dashboardLeadTrendData} sourceData={leadsBySourceData} />
-            </Suspense>
-              </>
+              <AdminDashboard
+                userName={user?.name}
+                userEmail={user?.email}
+                leads={leadsForUser}
+                properties={properties}
+                appointments={appointments}
+                users={users}
+                customStages={customKanbanStages}
+                onLogout={handleLogout}
+                onNavigate={(tab) => {
+                  if (tab === "company") goTab("company", "users");
+                  else goTab(tab);
+                }}
+                onNewLead={() => {
+                  goTab("leads");
+                  setAddLeadOpen(true);
+                }}
+                onOpenUsers={() => goTab("company", "users")}
+              />
             )}
           </div>
         )}
@@ -2935,7 +2964,7 @@ export function AdminWorkspace() {
           ) : (
             <Suspense fallback={<AdminKpisSkeleton />}>
               <KPIsModule
-                user={user}
+                user={effectiveUser ?? user}
                 users={users}
                 groups={userGroups}
                 leads={leads}
@@ -3214,8 +3243,8 @@ export function AdminWorkspace() {
               )}
 
             {!leadsLoading &&
-              user &&
-              !canViewAllLeads(user.role) &&
+              effectiveUser &&
+              !canViewAllLeads(effectiveUser.role) &&
               leads.length > 0 &&
               leadsForUser.length === 0 && (
                 <div
@@ -3224,7 +3253,7 @@ export function AdminWorkspace() {
                   role="status"
                 >
                   Hay {leads.length} lead{leads.length === 1 ? "" : "s"} en el sistema, pero ninguno coincide con tu
-                  usuario ({roleLabelEs(user.role)}). En datos Tokko,{" "}
+                  usuario ({roleLabelEs(effectiveUser.role)}). En datos Tokko,{" "}
                   <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">assigned_to_user_id</code> suele ser el{" "}
                   <strong>id Tokko del asesor</strong> (no el UUID de Auth): debe coincidir con{" "}
                   <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">tokko_users.tokko_user_id</code> o con{" "}
@@ -3793,7 +3822,7 @@ export function AdminWorkspace() {
                   <TrendingUp className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
                 </div>
                 <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
-                  ${parseInt(avgPropertyPrice, 10).toLocaleString()}
+                  ${Math.round(avgPropertyPriceNum).toLocaleString("es-MX")}
                 </p>
                 <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
                   Por propiedad (precio listado)
@@ -4836,15 +4865,50 @@ export function AdminWorkspace() {
           </div>
         )}
 
-        {activeTab === "profile" && (
-          <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-b from-white via-white to-slate-50/90 p-6 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.12)] sm:p-8">
-            <div
-              className="pointer-events-none absolute -right-16 top-0 h-40 w-40 rounded-full bg-gradient-to-br from-primary/[0.08] to-transparent blur-2xl"
-              aria-hidden
+        {activeTab === "profile" &&
+          (viewingTeamMemberProfile && user && profileUserId ? (
+            <AdminUsersManager
+              embeddedUserId={profileUserId}
+              onEmbeddedClose={handleUserDetailClosed}
+              currentUser={user}
+              users={users}
+              leads={leads}
+              properties={properties}
+              developments={developments}
+              customKanbanStages={customKanbanStages}
+              userGroups={userGroups}
+              onUserGroupsChange={handleUserGroupsChange}
+              onViewLead={(lead) => {
+                pendingReturnFromUserDetailRef.current = {
+                  tab: "profile",
+                  companySubtab: "users",
+                  leadsView,
+                  leadDialog: null,
+                };
+                navigate(buildAdminHref("leads"));
+                openLeadDetail(lead, "view");
+              }}
+              onCreateUser={(input) => createUser(input, user.name)}
+              onUpdateUser={(id, input) => updateUser(id, input, user.name)}
+              onUpdatePassword={(id, password) => updateUserPassword(id, password, user.name)}
+              onUpdatePermissions={(id, role, permissions) =>
+                updateUserPermissions(id, role, permissions, user.name)
+              }
+              onArchive={(id) => archiveUser(id, user.name)}
+              onReactivate={(id) => reactivateUser(id, user.name)}
             />
-            <AdminUserProfilePanel />
-          </div>
-        )}
+          ) : (
+            <AdminUserProfilePanel
+              leads={leads}
+              users={users}
+              userGroups={userGroups}
+              appointments={appointments}
+              customKanbanStages={customKanbanStages}
+              stageOrder={leadColumnStatuses}
+              leadsLoading={leadsLoading}
+              onOpenKpis={() => goTab("kpis")}
+            />
+          ))}
 
         <LeadDetailDialog
           open={!!leadDialog && (activeTab === "leads" || activeTab === "consultas")}

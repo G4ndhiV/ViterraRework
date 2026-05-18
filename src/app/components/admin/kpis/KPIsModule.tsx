@@ -1,18 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Users,
-  Sparkles,
-  Activity,
-  Target,
-  DollarSign,
-  Clock,
-  Hourglass,
-  TrendingUp,
-  AlertTriangle,
-  CalendarCheck,
-  XCircle,
-  Loader2,
-} from "lucide-react";
+import { Loader2 } from "lucide-react";
 import type { Lead, CustomKanbanStage } from "../../../data/leads";
 import type { Property } from "../../PropertyCard";
 import type { AgendaAppointment } from "../../../data/agenda";
@@ -253,7 +240,7 @@ export function KPIsModule({
 
   const headerDescription =
     scope.kind === "admin"
-      ? "Indicadores profundos, comparativos y metas de toda la empresa. Exporta resultados y recalcula el histórico en Supabase cuando lo necesites."
+      ? "Indicadores profundos, comparativos y metas de toda la empresa. Para tu día a día, usa Dashboard. Exporta resultados y recalcula el histórico en Supabase cuando lo necesites."
       : scope.kind === "leader"
         ? "Métricas agregadas de los equipos que lideras: embudo, ranking y metas por grupo o asesor según tus permisos."
         : "Tus números personales en el rango seleccionado: embudo, tendencias y origen de leads.";
@@ -335,20 +322,6 @@ export function KPIsModule({
         canEditTargets={canEditTargets}
         onEditTarget={(metric) => setEditingMetric(metric)}
         onDrilldown={handleCardClick}
-        icons={{
-          totalLeads: Users,
-          newLeads: Sparkles,
-          conversion: Activity,
-          salesCount: Target,
-          salesVolume: DollarSign,
-          ticket: DollarSign,
-          pipelineDays: Clock,
-          response: Hourglass,
-          weighted: TrendingUp,
-          stale: AlertTriangle,
-          appointmentsCompleted: CalendarCheck,
-          lost: XCircle,
-        }}
       />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -371,7 +344,7 @@ export function KPIsModule({
       </div>
 
       {showRanking ? (
-        <KpiAdvisorRanking rows={data.advisorRanking} onSelect={handleAdvisorRowSelect} />
+        <KpiAdvisorRanking rows={data.advisorRanking} users={users} onSelect={handleAdvisorRowSelect} />
       ) : null}
 
       <KpiInventoryBlock

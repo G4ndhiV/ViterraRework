@@ -10,15 +10,16 @@ import {
   upsertTokkoUserAccess,
 } from "../lib/supabaseTokkoUsers";
 import { AuthContext } from "./authContextInstance";
-import type {
-  AuthContextType,
-  CreateUserInput,
-  UpdateUserInput,
-  User,
-  UserHistoryEntry,
-  UserPermission,
-  UserProfile,
-  UserRole,
+import {
+  DEFAULT_PERMISSIONS_BY_ROLE,
+  type AuthContextType,
+  type CreateUserInput,
+  type UpdateUserInput,
+  type User,
+  type UserHistoryEntry,
+  type UserPermission,
+  type UserProfile,
+  type UserRole,
 } from "./authContextTypes";
 
 export type {
@@ -91,18 +92,7 @@ function writeUsersStorage(users: User[]) {
   }
 }
 
-const defaultPermissionsByRole: Record<UserRole, UserPermission[]> = {
-  admin: [
-    "manage_leads",
-    "manage_properties",
-    "manage_developments",
-    "manage_users",
-    "manage_clients",
-    "edit_site",
-  ],
-  lider_grupo: ["manage_leads", "manage_properties", "manage_developments", "manage_clients"],
-  asesor: ["manage_leads", "manage_clients"],
-};
+const defaultPermissionsByRole = DEFAULT_PERMISSIONS_BY_ROLE;
 
 const newHistoryEntry = (
   type: UserHistoryEntry["type"],

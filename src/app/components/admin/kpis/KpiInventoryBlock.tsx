@@ -1,4 +1,4 @@
-import { Building, Home as HomeIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import type { Property } from "../../PropertyCard";
 import type { SourceBucket } from "../../../lib/kpiCompute";
 import { formatMoney } from "../../../lib/kpiCompute";
@@ -32,51 +32,50 @@ function bar(rows: SourceBucket[], color: string) {
   );
 }
 
+function SectionHeader({
+  title,
+  description,
+  trailing,
+}: {
+  title: string;
+  description: string;
+  trailing?: ReactNode;
+}) {
+  return (
+    <div className="mb-3 flex items-start justify-between gap-3">
+      <div>
+        <h3 className="text-sm font-semibold text-brand-navy">{title}</h3>
+        <p className="mt-0.5 text-xs text-slate-500">{description}</p>
+      </div>
+      {trailing}
+    </div>
+  );
+}
+
 export function KpiInventoryBlock({ propertyTypes, operations, staleProperties, showStale }: Props) {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
-        <div className="mb-3 flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-            <HomeIcon className="h-4 w-4" strokeWidth={1.75} />
-          </span>
-          <div>
-            <h3 className="text-sm font-semibold text-brand-navy">Distribución por tipo</h3>
-            <p className="text-xs text-slate-500">Inventario actual del catálogo.</p>
-          </div>
-        </div>
+        <SectionHeader title="Distribución por tipo" description="Inventario actual del catálogo." />
         {bar(propertyTypes.slice(0, 8), "#475569")}
       </section>
 
       <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
-        <div className="mb-3 flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-            <Building className="h-4 w-4" strokeWidth={1.75} />
-          </span>
-          <div>
-            <h3 className="text-sm font-semibold text-brand-navy">Operación</h3>
-            <p className="text-xs text-slate-500">Venta vs alquiler.</p>
-          </div>
-        </div>
+        <SectionHeader title="Operación" description="Venta vs alquiler." />
         {bar(operations, "#1e293b")}
       </section>
 
       {showStale ? (
         <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6 lg:col-span-2">
-          <div className="mb-3 flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <HomeIcon className="h-4 w-4" strokeWidth={1.75} />
-            </span>
-            <div>
-              <h3 className="text-sm font-semibold text-brand-navy">Propiedades sin movimiento (60d+)</h3>
-              <p className="text-xs text-slate-500">
-                Listadas hace más de 60 días que siguen disponibles. Considera refrescar precio o foto.
-              </p>
-            </div>
-            <span className="ml-auto rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-              {staleProperties.length}
-            </span>
-          </div>
+          <SectionHeader
+            title="Propiedades sin movimiento (60d+)"
+            description="Listadas hace más de 60 días que siguen disponibles. Considera refrescar precio o foto."
+            trailing={
+              <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                {staleProperties.length}
+              </span>
+            }
+          />
           {staleProperties.length === 0 ? (
             <p className="py-4 text-sm text-slate-400">No hay propiedades estancadas.</p>
           ) : (

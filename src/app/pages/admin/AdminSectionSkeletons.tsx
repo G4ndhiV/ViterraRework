@@ -26,23 +26,40 @@ export function AdminChartsRowSkeleton() {
   );
 }
 
-/** Tarjetas de métricas + zona de gráficas (dashboard admin). */
+/** Dashboard admin operativo: hero + pulso + prioridades + columna lateral. */
 export function AdminDashboardSkeleton() {
   return (
-    <div className="space-y-8" aria-busy aria-label="Cargando panel">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+    <div className="space-y-6" aria-busy aria-label="Cargando panel">
+      <ShimmerBlock className="h-[10.5rem] w-full rounded-2xl" />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div
-            key={i}
-            className="relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-sm ring-1 ring-black/[0.02]"
-          >
+          <div key={i} className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm">
             <ShimmerBlock className="mb-3 h-3 w-24" />
-            <ShimmerBlock className="h-8 w-20" />
-            <ShimmerBlock className="mt-3 h-3 w-32" />
+            <ShimmerBlock className="h-8 w-12" />
+            <ShimmerBlock className="mt-3 h-3 w-28" />
           </div>
         ))}
       </div>
-      <AdminChartsRowSkeleton />
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <div className="flex flex-col gap-5 lg:col-span-2">
+          <div className="rounded-2xl border border-slate-200/70 bg-white p-6 shadow-sm">
+            <ShimmerBlock className="mb-4 h-4 w-40" />
+            <ShimmerBlock className="h-48 w-full rounded-xl" />
+          </div>
+          <div className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm">
+            <ShimmerBlock className="mb-4 h-4 w-32" />
+            <ShimmerBlock className="h-36 w-full rounded-xl" />
+          </div>
+        </div>
+        <div className="flex flex-col gap-5">
+          <div className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm">
+            <ShimmerBlock className="mb-4 h-4 w-28" />
+            <ShimmerBlock className="h-28 w-full rounded-xl" />
+          </div>
+          <ShimmerBlock className="h-32 w-full rounded-2xl" />
+          <ShimmerBlock className="h-36 w-full rounded-2xl" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -502,24 +519,38 @@ export function AdminActivitiesSkeleton() {
   );
 }
 
-/** Perfil de usuario (tarjetas y filas). */
+/** Perfil de usuario (tarjeta identidad + formulario). */
 export function AdminProfileSkeleton() {
   return (
-    <div className="space-y-6 rounded-2xl border border-slate-200/80 bg-gradient-to-b from-white via-white to-slate-50/90 p-6 shadow-md" aria-busy aria-label="Cargando perfil">
-      <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-        <ShimmerBlock className="mx-auto h-28 w-28 shrink-0 rounded-full sm:mx-0" />
-        <div className="min-w-0 flex-1 space-y-3">
-          <ShimmerBlock className="h-8 w-48 max-w-full" />
-          <ShimmerBlock className="h-4 w-full max-w-md" />
-          <ShimmerBlock className="h-4 w-[66%] max-w-sm" />
+    <div className="mx-auto flex max-w-6xl flex-col space-y-5 pb-8" aria-busy aria-label="Cargando perfil">
+      <div className="space-y-2">
+        <ShimmerBlock className="h-3 w-16" />
+        <ShimmerBlock className="h-8 w-40" />
+        <ShimmerBlock className="h-4 w-72 max-w-full" />
+      </div>
+      <div className="overflow-hidden rounded-2xl border border-slate-200/75 bg-white shadow-sm ring-1 ring-slate-900/[0.04]">
+        <ShimmerBlock className="h-1 w-full rounded-none" />
+        <div className="flex flex-col lg:flex-row">
+          <div className="flex flex-col items-center border-b border-slate-200/80 bg-slate-50/50 px-6 py-8 lg:w-[17.5rem] lg:border-b-0 lg:border-r">
+            <ShimmerBlock className="h-28 w-28 rounded-2xl sm:h-32 sm:w-32" />
+            <ShimmerBlock className="mt-4 h-9 w-36 rounded-xl" />
+            <ShimmerBlock className="mt-6 h-6 w-28 rounded-full" />
+            <ShimmerBlock className="mt-4 h-11 w-full max-w-[12rem] rounded-xl" />
+          </div>
+          <div className="min-w-0 flex-1 p-6 sm:p-8">
+            <ShimmerBlock className="mb-6 h-10 w-full max-w-md rounded-2xl" />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ShimmerBlock className="h-11 w-full rounded-xl sm:col-span-2" />
+              <ShimmerBlock className="h-11 w-full rounded-xl" />
+              <ShimmerBlock className="h-11 w-full rounded-xl" />
+              <ShimmerBlock className="h-11 w-full rounded-xl sm:col-span-2" />
+            </div>
+          </div>
+        </div>
+        <div className="border-t border-slate-200/90 bg-slate-50/80 px-6 py-4 sm:px-8">
+          <ShimmerBlock className="ml-auto h-9 w-36 rounded-lg" />
         </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <ShimmerBlock key={i} className="h-24 w-full rounded-xl" />
-        ))}
-      </div>
-      <ShimmerBlock className="h-40 w-full rounded-xl" />
     </div>
   );
 }

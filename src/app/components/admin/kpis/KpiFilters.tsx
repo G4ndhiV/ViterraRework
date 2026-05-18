@@ -1,8 +1,10 @@
-import { Calendar as CalendarIcon, Users as UsersIcon, User as UserIcon, RefreshCw } from "lucide-react";
+import { useMemo } from "react";
+import { Calendar as CalendarIcon, Users as UsersIcon, RefreshCw } from "lucide-react";
 import type { User } from "../../../contexts/AuthContext";
 import type { UserGroup } from "../../../lib/userGroups";
 import type { KpiFiltersState } from "../../../hooks/useKpiData";
 import type { KpiScope } from "../../../lib/kpiAccess";
+import { KpiAdvisorSearchPicker } from "./KpiAdvisorSearchPicker";
 import { cn } from "../../ui/utils";
 
 interface Props {
@@ -36,10 +38,34 @@ export function KpiFilters({
   showRecompute,
 }: Props) {
   const visibleGroups = groups.filter((g) => scope.allowedGroupIds.has(g.id));
-  const advisorPool =
-    scope.kind === "admin"
-      ? users
-      : users.filter((u) => scope.allowedUserIds.has(u.id) && u.id !== scope.selfUserId);
+
+  const advisorPool = useMemo(() => {
+    let pool =
+      scope.kind === "admin"
+        ? users.filter((u) => u.isActive !== false)
+        : users.filter((u) => scope.allowedUserIds.has(u.id) && u.id !== scope.selfUserId);
+
+    if (filters.selectedGroupId) {
+      const group = groups.find((g) => g.id === filters.selectedGroupId);
+      if (group) {
+        const memberIds = new Set(group.memberIds);
+        pool = pool.filter((u) => memberIds.has(u.id));
+      }
+    }
+
+    return pool.sort((a, b) => (a.name || "").localeCompare(b.name || "", "es"));
+  }, [scope, users, groups, filters.selectedGroupId]);
+
+  const handleGroupChange = (groupId: string | null) => {
+    const next: KpiFiltersState = { ...filters, selectedGroupId: groupId };
+    if (filters.selectedAdvisorId && groupId) {
+      const group = groups.find((g) => g.id === groupId);
+      if (group && !group.memberIds.includes(filters.selectedAdvisorId)) {
+        next.selectedAdvisorId = null;
+      }
+    }
+    onChange(next);
+  };
 
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
@@ -102,9 +128,7 @@ export function KpiFilters({
               <UsersIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
               <select
                 value={filters.selectedGroupId ?? ""}
-                onChange={(e) =>
-                  onChange({ ...filters, selectedGroupId: e.target.value || null })
-                }
+                onChange={(e) => handleGroupChange(e.target.value || null)}
                 className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-9 pr-8 text-sm text-brand-navy shadow-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15"
               >
                 <option value="">Todos los grupos visibles</option>
@@ -119,27 +143,12 @@ export function KpiFilters({
         ) : null}
 
         {scope.kind !== "advisor" && advisorPool.length > 0 ? (
-          <div className="min-w-[200px] flex-1">
-            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Asesor
-            </label>
-            <div className="relative">
-              <UserIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
-              <select
-                value={filters.selectedAdvisorId ?? ""}
-                onChange={(e) =>
-                  onChange({ ...filters, selectedAdvisorId: e.target.value || null })
-                }
-                className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-9 pr-8 text-sm text-brand-navy shadow-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15"
-              >
-                <option value="">Todos los asesores</option>
-                {advisorPool.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name || u.email}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="min-w-[240px] flex-[1.2]">
+            <KpiAdvisorSearchPicker
+              advisors={advisorPool}
+              value={filters.selectedAdvisorId}
+              onChange={(selectedAdvisorId) => onChange({ ...filters, selectedAdvisorId })}
+            />
           </div>
         ) : null}
 
@@ -150,7 +159,7 @@ export function KpiFilters({
             "h-10 rounded-xl border px-4 text-sm font-semibold shadow-sm transition",
             filters.compareYearOverYear
               ? "border-brand-navy bg-brand-navy text-white"
-              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
           )}
           title="Cambia el comparativo entre período anterior y mismo período del año pasado"
         >

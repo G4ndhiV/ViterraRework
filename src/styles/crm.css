@@ -32,22 +32,77 @@ body.admin-crm-montserrat .viterra-preview-canvas [data-viterra-editor-field] {
   font-family: var(--font-tertiary), "Palatino Linotype", Georgia, serif;
 }
 
-/* Scroll horizontal del Kanban más refinado */
-.viterra-crm .crm-kanban-scroll {
+/* Scroll horizontal visible (Kanban, tablas KPI, etc.) — pensado para mouse sin trackpad */
+.viterra-crm .crm-kanban-scroll,
+.viterra-crm .crm-horizontal-scroll {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, #9a7b4f 45%, transparent) transparent;
+  scrollbar-gutter: stable both-edges;
+  scrollbar-color: color-mix(in srgb, #9a7b4f 70%, #c8102e) color-mix(in srgb, #141c2e 8%, #f1f5f9);
 }
 
-.viterra-crm .crm-kanban-scroll::-webkit-scrollbar {
-  height: 8px;
+.viterra-crm .crm-kanban-scroll::-webkit-scrollbar,
+.viterra-crm .crm-horizontal-scroll::-webkit-scrollbar {
+  height: 11px;
 }
 
-.viterra-crm .crm-kanban-scroll::-webkit-scrollbar-track {
-  background: color-mix(in srgb, #141c2e 6%, transparent);
+.viterra-crm .crm-kanban-scroll::-webkit-scrollbar-track,
+.viterra-crm .crm-horizontal-scroll::-webkit-scrollbar-track {
+  margin: 0 4px;
+  background: color-mix(in srgb, #141c2e 7%, #e2e8f0);
   border-radius: 9999px;
 }
 
-.viterra-crm .crm-kanban-scroll::-webkit-scrollbar-thumb {
+.viterra-crm .crm-kanban-scroll::-webkit-scrollbar-thumb,
+.viterra-crm .crm-horizontal-scroll::-webkit-scrollbar-thumb {
   background: linear-gradient(90deg, #9a7b4f 0%, #c8102e 100%);
+  border: 2px solid color-mix(in srgb, #e2e8f0 90%, transparent);
   border-radius: 9999px;
+}
+
+.viterra-crm .crm-horizontal-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(90deg, #8a6b42 0%, #a80e28 100%);
+}
+
+/* Barra horizontal personalizada (siempre visible; no depende del overlay de macOS) */
+.viterra-crm .crm-hscroll-custom {
+  position: relative;
+  height: 12px;
+  min-height: 12px;
+  width: 100%;
+  border-radius: 9999px;
+  background: color-mix(in srgb, #141c2e 7%, #e2e8f0);
+  cursor: pointer;
+  user-select: none;
+}
+
+.viterra-crm .crm-hscroll-custom__thumb {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  min-width: 48px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #9a7b4f 0%, #c8102e 100%);
+  border: 2px solid color-mix(in srgb, #e2e8f0 90%, transparent);
+  box-sizing: border-box;
+  cursor: grab;
+  transition: background 0.15s ease;
+}
+
+.viterra-crm .crm-hscroll-custom__thumb:hover {
+  background: linear-gradient(90deg, #8a6b42 0%, #a80e28 100%);
+}
+
+.viterra-crm .crm-hscroll-custom__thumb:active {
+  cursor: grabbing;
+}
+
+/* El viewport desplaza el contenido pero oculta la barra nativa (evita duplicar en macOS) */
+.viterra-crm .crm-horizontal-scroll--viewport {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.viterra-crm .crm-horizontal-scroll--viewport::-webkit-scrollbar {
+  display: none;
+  height: 0;
 }

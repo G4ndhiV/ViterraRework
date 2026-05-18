@@ -41,8 +41,14 @@ import { Checkbox } from "../ui/checkbox";
 import { ScrollArea } from "../ui/scroll-area";
 import { cn } from "../ui/utils";
 import { foldSearchText } from "../../lib/searchText";
+import { userInitials } from "../../lib/adminWorkspaceSearch";
+import {
+  buildPropertyToDevelopmentIdMap,
+  propertiesForDevelopmentFilter,
+} from "../../lib/propertyDevelopmentLink";
 import type { UserGroup } from "../../lib/userGroups";
 import { WhatsAppGlyph } from "../WhatsAppGlyph";
+import { SearchableFilterSelect } from "./SearchableFilterSelect";
 
 const userReadonlyFieldClass =
   "w-full rounded-lg border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-sm text-brand-navy";
@@ -208,6 +214,87 @@ export function AdminClientsManager({
     return [];
   }, [currentUser.role, users, groupScopedLeadAssigneeIds]);
 
+  const propertyToDevelopmentId = useMemo(
+    () => buildPropertyToDevelopmentIdMap(properties, developments),
+    [properties, developments],
+  );
+
+  const scopedPropertiesForFilter = useMemo(() => {
+    if (developmentFilter === "all") return properties;
+    const dev = developments.find((d) => d.id === developmentFilter);
+    return propertiesForDevelopmentFilter(properties, dev);
+  }, [developmentFilter, developments, properties]);
+
+  const developmentPropertyIdSet = useMemo(
+    () => new Set(scopedPropertiesForFilter.map((p) => p.id)),
+    [scopedPropertiesForFilter],
+  );
+
+  useEffect(() => {
+    if (propertyFilter === "all" || developmentFilter === "all") return;
+    if (!developmentPropertyIdSet.has(propertyFilter)) {
+      setPropertyFilter("all");
+    }
+  }, [developmentFilter, propertyFilter, developmentPropertyIdSet]);
+
+  const handlePropertyFilterChange = useCallback(
+    (next: string) => {
+      setPropertyFilter(next);
+      if (next === "all") return;
+      const linkedDevelopmentId = propertyToDevelopmentId.get(next);
+      if (linkedDevelopmentId) setDevelopmentFilter(linkedDevelopmentId);
+    },
+    [propertyToDevelopmentId],
+  );
+
+  const handleDevelopmentFilterChange = useCallback(
+    (next: string) => {
+      setDevelopmentFilter(next);
+      if (next === "all" || propertyFilter === "all") return;
+      if (propertyToDevelopmentId.get(propertyFilter) !== next) {
+        setPropertyFilter("all");
+      }
+    },
+    [propertyFilter, propertyToDevelopmentId],
+  );
+
+  const propertyFilterOptions = useMemo(
+    () =>
+      scopedPropertiesForFilter.map((p) => ({
+        value: p.id,
+        label: p.title,
+        hint: [p.location, p.type].filter(Boolean).join(" · "),
+        imageUrl: p.image || p.galleryImages?.[0] || p.images?.[0],
+      })),
+    [scopedPropertiesForFilter],
+  );
+
+  const developmentFilterOptions = useMemo(
+    () =>
+      developments.map((d) => ({
+        value: d.id,
+        label: d.name,
+        hint: [d.location, d.type].filter(Boolean).join(" · "),
+        imageUrl: d.image || d.images?.[0],
+      })),
+    [developments],
+  );
+
+  const advisorFilterOptions = useMemo(
+    () =>
+      advisorFilterUserOptions.map((u) => ({
+        value: u.id,
+        label: u.name,
+        hint: u.email,
+        imageUrl: u.profile?.picture?.trim() || undefined,
+        initials: userInitials(u.name),
+      })),
+    [advisorFilterUserOptions],
+  );
+
+  const ownerFilterAllLabel =
+    currentUser.role === "lider_grupo" ? "Todos los asesores (mi alcance)" : "Todos los asesores";
+
   const clientVisibleToCurrentUser = useCallback(
     (client: CrmClient) =>
       clientVisibleToUser(currentUser, client, leadsById, groupScopedLeadAssigneeIds),
@@ -239,7 +326,11 @@ export function AdminClientsManager({
       list = list.filter((c) => c.propertyIds.includes(propertyFilter));
     }
     if (developmentFilter !== "all") {
-      list = list.filter((c) => c.developmentIds.includes(developmentFilter));
+      list = list.filter(
+        (c) =>
+          c.developmentIds.includes(developmentFilter) ||
+          c.propertyIds.some((id) => developmentPropertyIdSet.has(id)),
+      );
     }
     if (
       ownerFilter !== "all" &&
@@ -295,6 +386,7 @@ export function AdminClientsManager({
     phoneListFilter,
     createdInRange,
     currentUser.role,
+    developmentPropertyIdSet,
   ]);
 
   const suggestedLeads = useMemo(() => {
@@ -663,51 +755,34 @@ export function AdminClientsManager({
               />
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <select
+              <SearchableFilterSelect
                 value={propertyFilter}
-                onChange={(e) => setPropertyFilter(e.target.value)}
-                className="h-full min-h-[2.75rem] w-full rounded-2xl border border-slate-200/90 bg-white px-4 py-3 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                style={{ fontWeight: 500 }}
-              >
-                <option value="all">Todas las propiedades</option>
-                {properties.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.title}
-                  </option>
-                ))}
-              </select>
-              <select
+                onChange={handlePropertyFilterChange}
+                options={propertyFilterOptions}
+                allLabel="Todas las propiedades"
+                placeholder="Buscar propiedad…"
+                previewVariant="square"
+                allIcon="home"
+              />
+              <SearchableFilterSelect
                 value={developmentFilter}
-                onChange={(e) => setDevelopmentFilter(e.target.value)}
-                className="h-full min-h-[2.75rem] w-full rounded-2xl border border-slate-200/90 bg-white px-4 py-3 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                style={{ fontWeight: 500 }}
-              >
-                <option value="all">Todos los desarrollos</option>
-                {developments.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
+                onChange={handleDevelopmentFilterChange}
+                options={developmentFilterOptions}
+                allLabel="Todos los desarrollos"
+                placeholder="Buscar desarrollo…"
+                previewVariant="square"
+                allIcon="building"
+              />
               {(canManageAllClients(currentUser) || currentUser.role === "lider_grupo") && (
-                <select
+                <SearchableFilterSelect
                   value={ownerFilter}
-                  onChange={(e) => setOwnerFilter(e.target.value)}
-                  className="h-full min-h-[2.75rem] w-full rounded-2xl border border-slate-200/90 bg-white px-4 py-3 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                  style={{ fontWeight: 500 }}
-                  aria-label="Filtrar por asesor titular"
-                >
-                  <option value="all">
-                    {currentUser.role === "lider_grupo"
-                      ? "Todos los asesores (mi alcance)"
-                      : "Todos los asesores"}
-                  </option>
-                  {advisorFilterUserOptions.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setOwnerFilter}
+                  options={advisorFilterOptions}
+                  allLabel={ownerFilterAllLabel}
+                  placeholder="Buscar asesor…"
+                  previewVariant="avatar"
+                  allIcon="users"
+                />
               )}
             </div>
 

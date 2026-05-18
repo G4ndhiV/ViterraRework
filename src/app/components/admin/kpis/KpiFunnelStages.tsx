@@ -1,4 +1,3 @@
-import { Workflow } from "lucide-react";
 import type { FunnelStageStat } from "../../../lib/kpiCompute";
 
 interface Props {
@@ -19,14 +18,9 @@ export function KpiFunnelStages({ funnel }: Props) {
 
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
-      <div className="mb-4 flex items-center gap-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-          <Workflow className="h-4 w-4" strokeWidth={1.75} />
-        </span>
-        <div>
-          <h3 className="text-sm font-semibold text-brand-navy">Embudo de ventas (paso a paso)</h3>
-          <p className="text-xs text-slate-500">Conteo por etapa y % que avanza a la siguiente.</p>
-        </div>
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-brand-navy">Embudo de ventas (paso a paso)</h3>
+        <p className="mt-0.5 text-xs text-slate-500">Conteo por etapa y % que avanza a la siguiente.</p>
       </div>
 
       <ul className="space-y-2.5">

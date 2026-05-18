@@ -74,25 +74,51 @@ export function buildAdminHref(tab: AdminTab, companySubtab: CompanySubtab = "us
   return `/admin/${TAB_SEGMENT[tab]}`;
 }
 
-export function parseAdminPath(pathname: string): { tab: AdminTab; companySubtab: CompanySubtab } {
+/** Perfil propio (`/admin/profile`) o ficha de un miembro del equipo (`/admin/profile/:userId`). */
+export function buildAdminProfileHref(userId?: string | null): string {
+  const id = userId?.trim();
+  if (!id) return "/admin/profile";
+  return `/admin/profile/${encodeURIComponent(id)}`;
+}
+
+export type ParsedAdminPath = {
+  tab: AdminTab;
+  companySubtab: CompanySubtab;
+  profileUserId: string | null;
+};
+
+export function buildAdminCanonicalHref(parsed: ParsedAdminPath): string {
+  if (parsed.tab === "profile" && parsed.profileUserId) {
+    return buildAdminProfileHref(parsed.profileUserId);
+  }
+  return buildAdminHref(parsed.tab, parsed.companySubtab);
+}
+
+export function parseAdminPath(pathname: string): ParsedAdminPath {
   const normalized = pathname.replace(/\/+$/, "");
   const base = "/admin";
   if (!normalized.startsWith(base)) {
-    return { tab: "dashboard", companySubtab: "users" };
+    return { tab: "dashboard", companySubtab: "users", profileUserId: null };
   }
   let rest = normalized.slice(base.length);
   if (rest.startsWith("/")) rest = rest.slice(1);
   if (!rest) {
-    return { tab: "dashboard", companySubtab: "users" };
+    return { tab: "dashboard", companySubtab: "users", profileUserId: null };
   }
 
   if (rest.startsWith("company/")) {
     const seg = rest.slice("company/".length).split("/")[0] ?? "";
     const companySubtab = SEGMENT_TO_COMPANY_SUB[seg] ?? "users";
-    return { tab: "company", companySubtab };
+    return { tab: "company", companySubtab, profileUserId: null };
   }
 
-  const seg = rest.split("/")[0] ?? "";
+  const parts = rest.split("/").filter(Boolean);
+  const seg = parts[0] ?? "";
+  if (seg === "profile") {
+    const profileUserId = parts[1] ? decodeURIComponent(parts[1]) : null;
+    return { tab: "profile", companySubtab: "users", profileUserId };
+  }
+
   const tab = SEGMENT_TO_TAB[seg] ?? "dashboard";
-  return { tab, companySubtab: "users" };
+  return { tab, companySubtab: "users", profileUserId: null };
 }

@@ -1,5 +1,4 @@
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
-import { PieChart as PieIcon } from "lucide-react";
 import type { SourceBucket } from "../../../lib/kpiCompute";
 
 const FILLS = ["#cbd5e1", "#94a3b8", "#64748b", "#475569", "#334155", "#1e293b"];
@@ -31,14 +30,9 @@ export function KpiSourceBreakdown({ data, title, description }: Props) {
 
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
-      <div className="mb-4 flex items-center gap-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-          <PieIcon className="h-4 w-4" strokeWidth={1.75} />
-        </span>
-        <div>
-          <h3 className="text-sm font-semibold text-brand-navy">{title}</h3>
-          <p className="text-xs text-slate-500">{description}</p>
-        </div>
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-brand-navy">{title}</h3>
+        <p className="mt-0.5 text-xs text-slate-500">{description}</p>
       </div>
       <div className="grid grid-cols-1 items-center gap-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <div className="mx-auto aspect-square w-full max-w-[220px]">
