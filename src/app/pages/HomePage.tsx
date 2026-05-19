@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
@@ -6,7 +6,7 @@ import { PropertyCard } from "../components/PropertyCard";
 import { SearchBar, SearchFilters } from "../components/SearchBar";
 import { useFeaturedHomeProperties } from "../hooks/useFeaturedHomeProperties";
 import { useCatalogPriceSlices } from "../hooks/useCatalogPriceSlices";
-import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Bed, Bath, Square } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
@@ -45,18 +45,13 @@ export function HomePage() {
     reload: reloadFeatured,
   } = useFeaturedHomeProperties();
   const catalogPriceSlices = useCatalogPriceSlices();
-  const [activeFeaturedId, setActiveFeaturedId] = useState<string | null>(null);
-  const activeFeaturedProperty = useMemo(
-    () =>
-      featuredProperties.find((p) => p.id === activeFeaturedId) ??
-      featuredProperties[0] ??
-      null,
-    [featuredProperties, activeFeaturedId]
-  );
-  const activeFeaturedIndex = useMemo(
-    () => featuredProperties.findIndex((p) => p.id === activeFeaturedProperty?.id),
-    [featuredProperties, activeFeaturedProperty?.id]
-  );
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const scrollCarousel = (direction: 'left' | 'right') => {
+    if (carouselRef.current) {
+      const scrollAmount = window.innerWidth > 768 ? 400 : 300;
+      carouselRef.current.scrollBy({ left: direction === 'left' ? -scrollAmount : scrollAmount, behavior: 'smooth' });
+    }
+  };
   const featuredLabel = (title?: string, fallback?: string) => {
     const a = title?.trim();
     const b = fallback?.trim();
@@ -64,26 +59,6 @@ export function HomePage() {
     const MAX_CHARS = 44;
     return base.length > MAX_CHARS ? `${base.slice(0, MAX_CHARS - 3).trimEnd()}...` : base;
   };
-  const goFeaturedPrev = () => {
-    if (featuredProperties.length <= 1 || activeFeaturedIndex < 0) return;
-    const next = (activeFeaturedIndex - 1 + featuredProperties.length) % featuredProperties.length;
-    setActiveFeaturedId(featuredProperties[next].id);
-  };
-  const goFeaturedNext = () => {
-    if (featuredProperties.length <= 1 || activeFeaturedIndex < 0) return;
-    const next = (activeFeaturedIndex + 1) % featuredProperties.length;
-    setActiveFeaturedId(featuredProperties[next].id);
-  };
-
-  useEffect(() => {
-    if (featuredProperties.length === 0) {
-      setActiveFeaturedId(null);
-      return;
-    }
-    if (!activeFeaturedId || !featuredProperties.some((p) => p.id === activeFeaturedId)) {
-      setActiveFeaturedId(featuredProperties[0].id);
-    }
-  }, [featuredProperties, activeFeaturedId]);
 
   const handleSearch = (filters: SearchFilters) => {
     const params = new URLSearchParams();
@@ -385,88 +360,74 @@ export function HomePage() {
                 ) : null}
               </div>
             ) : (
-              <div className="space-y-5 md:space-y-6">
-                {activeFeaturedProperty && (
-                  <div className="mx-auto flex w-full max-w-5xl items-center justify-center gap-0.5 sm:gap-1 md:gap-2">
-                    {featuredProperties.length > 1 ? (
-                      <button
-                        type="button"
-                        onClick={goFeaturedPrev}
-                        className="z-10 shrink-0 rounded-full p-1 text-brand-navy/55 transition-colors hover:bg-slate-100 hover:text-primary sm:p-1.5"
-                        aria-label="Propiedad destacada anterior"
-                      >
-                        <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2} />
-                      </button>
-                    ) : null}
-                    <div
-                      key={activeFeaturedProperty.id}
-                      className="relative min-h-[360px] w-full min-w-0 flex-1 sm:h-[390px] md:h-[420px]"
+              <div className="relative w-[100vw] left-1/2 -translate-x-1/2 mt-8 md:mt-12 group/carousel">
+                {featuredProperties.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => scrollCarousel('left')}
+                      className="absolute left-4 md:left-8 top-[40%] -translate-y-1/2 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white opacity-0 transition-all duration-300 hover:bg-white hover:text-brand-navy group-hover/carousel:opacity-100 hidden sm:flex"
+                      aria-label="Desplazar a la izquierda"
                     >
-                      <div className="h-full [&>article]:h-full">
-                        <PropertyCard property={activeFeaturedProperty} variant="editorial" />
-                      </div>
-                    </div>
-                    {featuredProperties.length > 1 ? (
-                      <button
-                        type="button"
-                        onClick={goFeaturedNext}
-                        className="z-10 shrink-0 rounded-full p-1 text-brand-navy/55 transition-colors hover:bg-slate-100 hover:text-primary sm:p-1.5"
-                        aria-label="Siguiente propiedad destacada"
-                      >
-                        <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2} />
-                      </button>
-                    ) : null}
-                  </div>
+                      <ChevronLeft className="h-6 w-6" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollCarousel('right')}
+                      className="absolute right-4 md:right-8 top-[40%] -translate-y-1/2 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white opacity-0 transition-all duration-300 hover:bg-white hover:text-brand-navy group-hover/carousel:opacity-100 hidden sm:flex"
+                      aria-label="Desplazar a la derecha"
+                    >
+                      <ChevronRight className="h-6 w-6" />
+                    </button>
+                  </>
                 )}
-
-                <div className="relative">
-                  <div className="overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    <div className="mx-auto flex w-max gap-2.5 md:gap-3">
-                      {featuredProperties.map((property) => {
-                        const selected = property.id === activeFeaturedProperty?.id;
-                        return (
-                          <motion.button
-                            key={property.id}
-                            type="button"
-                            onMouseEnter={() => setActiveFeaturedId(property.id)}
-                            onFocus={() => setActiveFeaturedId(property.id)}
-                            onClick={() => setActiveFeaturedId(property.id)}
-                            whileHover={reduceMotion ? undefined : { y: -2 }}
-                            whileTap={reduceMotion ? undefined : { scale: 0.99 }}
-                            className={cn(
-                              "group relative h-44 w-[130px] shrink-0 overflow-hidden border text-left transition-all duration-300 md:h-48 md:w-[146px]",
-                              selected
-                                ? "border-primary/60 bg-black text-white shadow-[0_12px_30px_-20px_rgba(8,12,22,0.85)]"
-                                : "border-white/15 bg-black text-white/90 hover:border-white/35"
-                            )}
-                            aria-label={`Show featured property ${property.title}`}
-                            aria-pressed={selected}
-                          >
-                            <img
-                              src={property.image}
-                              alt=""
-                              className={cn(
-                                "absolute inset-0 h-full w-full object-cover transition-all duration-500",
-                                selected
-                                  ? "scale-[1.03] opacity-86 blur-[0.35px] group-hover:scale-100 group-hover:opacity-100 group-hover:blur-0"
-                                  : "opacity-76 blur-[0.6px] group-hover:scale-100 group-hover:opacity-95 group-hover:blur-0"
+                <div ref={carouselRef} className="overflow-x-auto pb-12 pt-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden snap-x snap-mandatory px-4 sm:px-8 lg:px-12 scroll-pl-4 sm:scroll-pl-8 lg:scroll-pl-12 scroll-smooth">
+                  <div className="flex w-max gap-4 md:gap-6 mx-auto sm:mx-0">
+                    {featuredProperties.map((property) => (
+                      <Link
+                        to={`/propiedades/${property.id}`}
+                        state={{ property }}
+                        viewTransition
+                        key={property.id}
+                        className="group relative h-[420px] w-[280px] sm:h-[480px] sm:w-[320px] md:h-[560px] md:w-[380px] shrink-0 snap-center sm:snap-start overflow-hidden rounded-[2rem] bg-slate-900 shadow-xl transition-shadow duration-500 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.6)]"
+                      >
+                        <img
+                          src={property.image}
+                          alt={property.title}
+                          className="absolute inset-0 h-full w-full object-cover"
+                        />
+                        
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80 pointer-events-none" />
+                        
+                        <div className="absolute bottom-0 inset-x-0 p-5 sm:p-6 bg-black/20 backdrop-blur-xl border-t border-white/15 flex flex-col justify-end pointer-events-none">
+                          <div className="flex flex-col gap-1.5">
+                            <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-white/80">
+                              {property.status === 'venta' ? 'En Venta' : 'En Renta'}
+                              {property.location ? ` • ${property.location}` : ''}
+                            </p>
+                            <h3 className="text-xl sm:text-2xl font-light text-white leading-tight line-clamp-2">
+                              {featuredLabel(property.publicationTitle, property.title)}
+                            </h3>
+                            
+                            <div className="flex gap-4 text-[11px] sm:text-xs font-medium text-white/80 mt-1 mb-1">
+                              {property.bedrooms > 0 && (
+                                <span className="flex items-center gap-1.5"><Bed className="w-3.5 h-3.5 opacity-70"/> {property.bedrooms}</span>
                               )}
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/45 to-black/55 transition-opacity duration-300 group-hover:opacity-30" />
-
-                            <div className="relative z-[1] flex h-full flex-col justify-between p-3 transition-opacity duration-300 group-hover:opacity-95">
-                              <div>
-                                <p className="rounded-sm bg-black/28 px-1.5 py-1 text-[12px] font-medium leading-snug text-white/95 backdrop-blur-[1px]">
-                                  {featuredLabel(property.publicationTitle, property.title)}
-                                </p>
-                              </div>
-
-                              <div />
+                              {property.bathrooms > 0 && (
+                                <span className="flex items-center gap-1.5"><Bath className="w-3.5 h-3.5 opacity-70"/> {property.bathrooms}</span>
+                              )}
+                              {property.area > 0 && (
+                                <span className="flex items-center gap-1.5"><Square className="w-3.5 h-3.5 opacity-70"/> {property.area} m²</span>
+                              )}
                             </div>
-                          </motion.button>
-                        );
-                      })}
-                    </div>
+
+                            <p className="mt-1 text-base sm:text-lg font-medium text-white/95">
+                              ${property.price?.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
                   </div>
                 </div>
               </div>
