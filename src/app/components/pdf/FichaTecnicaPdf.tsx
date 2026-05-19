@@ -1,243 +1,420 @@
 import React from "react";
-import { Document, Page, Text, View, Image, StyleSheet, Font } from "@react-pdf/renderer";
+import { Document, Page, Text, View, Image, StyleSheet, Svg, Path, G, Rect, Circle } from "@react-pdf/renderer";
 import type { Property } from "../PropertyCard";
 import type { Development } from "../../data/developments";
 import type { User } from "../../contexts/AuthContext";
 
-// Registrar fuentes si se desea usar un estilo diferente, por ahora usaremos Helvetica (por defecto)
-// Font.register({ family: 'Roboto', src: 'https://... ' });
+export interface PdfManualFields {
+  frente?: string;
+  fondo?: string;
+  incluidoMantenimiento?: string;
+  publicidad?: string;
+  jardinM2?: string;
+  salaTv?: string;
+  estudio?: string;
+  unidadesPrivativas?: string;
+  enCoto?: string;
+  vigilancia?: string;
+  jardin?: string;
+  terraza?: string;
+  balcon?: string;
+  amueblado?: string;
+  estudiantes?: string;
+  mascota?: string;
+  cuartoServicio?: string;
+  banoServicio?: string;
+  condicionesVisita?: string;
+}
+
+interface FichaTecnicaPdfProps {
+  data: Property | Development;
+  type: "property" | "development";
+  includeLogo: boolean;
+  user: User | null;
+  manualFields?: PdfManualFields;
+}
+
+const BRAND_RED = "#7a171d";
+const BRAND_BLACK = "#101010";
+const BRAND_LIGHT_RED = "#c28185";
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 130,
-    paddingBottom: 70,
-    paddingHorizontal: 40,
-    fontFamily: "Helvetica",
     backgroundColor: "#ffffff",
+    fontFamily: "Helvetica",
   },
-  header: {
-    position: "absolute",
-    top: 30,
-    left: 40,
-    right: 40,
+  // TOP BANNER
+  topBanner: {
+    height: 100,
+    backgroundColor: BRAND_BLACK,
     flexDirection: "row",
+    paddingHorizontal: 30,
+    paddingVertical: 15,
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    paddingBottom: 15,
+    alignItems: "center",
   },
-  headerLeft: {
+  bannerLeft: {
     flexDirection: "row",
     alignItems: "center",
   },
-  headerLogoContainer: {
-    backgroundColor: "#000000",
-    padding: 0,
+  logo: {
+    height: 50,
     marginRight: 20,
+  },
+  bannerInfo: {
+    borderLeftWidth: 1,
+    borderLeftColor: "#ffffff",
+    paddingLeft: 15,
     justifyContent: "center",
-    alignItems: "center",
+    height: 45,
   },
-  headerLogo: {
-    height: 80,
+  bannerInfoTextRow: {
+    flexDirection: "row",
+    marginBottom: 3,
   },
-  headerCompanyInfo: {
-    fontSize: 9,
-    color: "#0f172a",
-    lineHeight: 1.3,
-  },
-  headerRight: {
-    alignItems: "flex-end",
-  },
-  agentName: {
-    fontSize: 10,
-    fontFamily: "Helvetica-Bold",
-    color: "#0f172a",
-    marginBottom: 2,
-  },
-  agentEmail: {
-    fontSize: 9,
-    color: "#475569",
-    marginBottom: 6,
-  },
-  agentBadge: {
-    backgroundColor: "#e11d48",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 2,
-  },
-  agentBadgeText: {
-    fontSize: 7,
+  bannerInfoLabel: {
     color: "#ffffff",
     fontFamily: "Helvetica-Bold",
-    textTransform: "uppercase",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#0f172a",
-    fontFamily: "Helvetica-Bold",
-  },
-  headerSubtitle: {
-    fontSize: 10,
-    color: "#64748b",
-    textTransform: "uppercase",
-    fontFamily: "Helvetica-Bold",
-    marginTop: 4,
-  },
-  headerRef: {
     fontSize: 9,
-    color: "#94a3b8",
-    marginTop: 2,
+    width: 60,
   },
-  footer: {
-    position: "absolute",
-    bottom: 30,
-    left: 40,
-    right: 40,
-    borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
-    paddingTop: 10,
-    flexDirection: "row",
+  bannerInfoValue: {
+    color: "#e2e8f0",
+    fontSize: 9,
+  },
+  bannerTitleContainer: {
+    flex: 1,
+    alignItems: "flex-end",
     justifyContent: "center",
+    paddingLeft: 10,
   },
-  footerText: {
-    fontSize: 10,
-    color: "#64748b",
+  bannerTitle: {
+    color: "#ffffff",
+    fontFamily: "Helvetica-Bold",
+    textAlign: "right",
+    textTransform: "uppercase",
   },
-  pageNumber: {
-    position: "absolute",
-    right: 40,
-    bottom: 30,
-    fontSize: 10,
-    color: "#94a3b8",
+  
+  // MAIN IMAGE AREA
+  imageAreaContainer: {
+    height: 220,
+    width: "100%",
+    overflow: "hidden",
+    position: "relative",
   },
   mainImage: {
     width: "100%",
-    height: 350,
+    height: "100%",
     objectFit: "cover",
-    borderRadius: 4,
-    marginBottom: 20,
   },
-  titleContainer: {
-    marginBottom: 20,
+  addressOverlay: {
+    position: "absolute",
+    top: 10,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    maxWidth: "55%",
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#0f172a",
-    fontFamily: "Helvetica-Bold",
-    marginBottom: 8,
+  addressText1: {
+    color: "#ffffff",
+    fontSize: 10,
+    textAlign: "right",
   },
-  location: {
-    fontSize: 14,
-    color: "#64748b",
-    marginBottom: 12,
+  addressText2: {
+    color: "#e2e8f0",
+    fontSize: 9,
+    textAlign: "right",
+    marginTop: 2,
   },
-  priceContainer: {
+  
+  // BADGE OVERLAY (inside image, bottom-left)
+  badgeOverlayContainer: {
+    position: "absolute",
+    left: 20,
+    bottom: 15,
     flexDirection: "row",
-    alignItems: "baseline",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.92)",
+    paddingRight: 16,
+    borderRadius: 36,
   },
-  price: {
-    fontSize: 24,
-    color: "#C8102E",
-    fontFamily: "Helvetica-Bold",
+  badgeCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: BRAND_RED,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
   },
-  priceSuffix: {
-    fontSize: 14,
-    color: "#64748b",
-    marginLeft: 6,
-  },
-  featuresContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginBottom: 25,
-  },
-  featureBadge: {
-    backgroundColor: "#f8fafc",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 4,
-    marginRight: 10,
-    marginBottom: 10,
-  },
-  featureText: {
-    fontSize: 12,
-    color: "#334155",
-    fontFamily: "Helvetica-Bold",
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontFamily: "Helvetica-Bold",
-    color: "#0f172a",
+  badgeIconLabel: {
+    color: "#ffffff",
+    fontSize: 8,
     textTransform: "uppercase",
-    marginBottom: 10,
-    marginTop: 10,
+    letterSpacing: 0.5,
+    marginBottom: 2,
   },
-  description: {
-    fontSize: 11,
-    lineHeight: 1.6,
-    color: "#475569",
-    textAlign: "left",
+  badgePriceContainer: {
+    justifyContent: "center",
   },
-  descriptionContainer: {
-    marginTop: 5,
-  },
-  descriptionHeader: {
-    fontSize: 12,
+  badgeOperation: {
+    color: BRAND_RED,
     fontFamily: "Helvetica-Bold",
-    color: "#0f172a",
-    marginTop: 10,
+    fontSize: 20,
+    textTransform: "uppercase",
+    marginBottom: -3,
+  },
+  badgePrice: {
+    color: "#1e293b",
+    fontFamily: "Helvetica-Bold",
+    fontSize: 20,
+  },
+
+  columnsContainer: {
+    flexDirection: "row",
+    flex: 1,
+  },
+  leftColumn: {
+    width: "60%",
+    padding: 20,
+    backgroundColor: "#ffffff",
+  },
+  rightColumn: {
+    width: "40%",
+    backgroundColor: BRAND_RED,
+    padding: 20,
+  },
+
+  // ICONS ROW
+  iconsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    marginBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: BRAND_LIGHT_RED,
+    paddingBottom: 10,
+  },
+  iconBox: {
+    alignItems: "center",
+    flex: 1,
+  },
+  iconLabel: {
+    color: BRAND_RED,
+    fontSize: 9,
+    fontFamily: "Helvetica-Bold",
+    marginTop: 6,
     marginBottom: 4,
   },
-  descriptionText: {
-    fontSize: 11,
-    lineHeight: 1.6,
+  iconValue: {
+    color: "#334155",
+    fontSize: 16,
+    fontFamily: "Helvetica",
+  },
+
+  // DATA TABLE
+  tableGroup: {
+    marginBottom: 12,
+  },
+  tableRow: {
+    flexDirection: "row",
+    marginBottom: 4,
+  },
+  tableCol: {
+    flex: 1,
+    paddingHorizontal: 2,
+  },
+  tableColBorderRight: {
+    borderRightWidth: 1,
+    borderRightColor: BRAND_LIGHT_RED,
+  },
+  tableHeaderContainer: {
+    borderBottomWidth: 1,
+    borderBottomColor: BRAND_RED,
+    paddingBottom: 2,
+    marginBottom: 4,
+    marginHorizontal: 4,
+  },
+  tableHeader: {
+    color: BRAND_RED,
+    fontSize: 7,
+    textTransform: "uppercase",
+    fontFamily: "Helvetica-Bold",
+    textAlign: "center",
+  },
+  tableValue: {
     color: "#475569",
+    fontSize: 9,
+    textAlign: "center",
+  },
+  tableFullWidthContainer: {
+    borderBottomWidth: 1,
+    borderBottomColor: BRAND_RED,
+    paddingBottom: 2,
+    marginBottom: 4,
+  },
+  tableFullWidthHeader: {
+    color: BRAND_RED,
+    fontSize: 7,
+    textTransform: "uppercase",
+    fontFamily: "Helvetica-Bold",
     textAlign: "left",
+  },
+  tableFullWidthValue: {
+    color: "#475569",
+    fontSize: 9,
+    textAlign: "left",
+  },
+
+  // DESCRIPTION COLUMN
+  descTitle: {
+    fontFamily: "Helvetica-Bold",
+    fontSize: 14,
+    marginBottom: 15,
+  },
+  descText: {
+    fontSize: 10,
+    lineHeight: 1.5,
+    marginBottom: 10,
+  },
+  descHeader: {
+    fontFamily: "Helvetica-Bold",
+    fontSize: 11,
+    marginTop: 8,
     marginBottom: 4,
   },
   bulletRow: {
     flexDirection: "row",
     marginBottom: 4,
-    paddingLeft: 10,
+    paddingLeft: 8,
   },
   bulletPoint: {
-    width: 15,
-    fontSize: 11,
-    color: "#475569",
-    lineHeight: 1.6,
-    fontFamily: "Helvetica-Bold",
+    width: 10,
+    fontSize: 10,
+    lineHeight: 1.5,
   },
   bulletText: {
     flex: 1,
-    fontSize: 11,
-    color: "#475569",
-    lineHeight: 1.6,
-    textAlign: "left",
+    fontSize: 10,
+    lineHeight: 1.5,
   },
-  galleryContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    marginTop: 15,
+
+  // PAGE 2: MAP & GALLERY
+  page2Container: {
+    padding: 30,
   },
-  galleryImageWrapper: {
-    width: "48%",
+  mapSection: {
+    marginBottom: 20,
     height: 180,
-    marginBottom: 15,
+    overflow: "hidden",
+    borderRadius: 4,
+    position: "relative",
   },
-  galleryImage: {
+  mapTitleBox: {
+    position: "absolute",
+    top: 15,
+    left: 0,
+    backgroundColor: BRAND_RED,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderTopRightRadius: 20,
+    borderBottomRightRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    zIndex: 10,
+  },
+  mapTitle: {
+    color: "#ffffff",
+    fontFamily: "Helvetica-Bold",
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  mapImagePlaceholder: {
     width: "100%",
     height: "100%",
     objectFit: "cover",
+  },
+  galleryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+  galleryImage: {
+    width: "48%",
+    height: 180,
+    marginBottom: 15,
+    objectFit: "cover",
     borderRadius: 4,
+  },
+
+  // FOOTER (absolute, always at bottom of page 2)
+  footer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: BRAND_RED,
+    padding: 18,
+    paddingHorizontal: 30,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  footerTitle: {
+    color: "#eab308", // goldish
+    fontFamily: "Helvetica-Bold",
+    fontSize: 18,
+    marginBottom: 8,
+  },
+  footerTextRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  footerText: {
+    color: "#ffffff",
+    fontSize: 10,
+    marginLeft: 6,
   },
 });
 
-const renderDescription = (text: string) => {
+// SVG Icons
+const IconHouse = () => (
+  <Svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="#ffffff" strokeWidth="1.5">
+    <Path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    <Path d="M9 22V12h6v10" />
+  </Svg>
+);
+const IconBed = () => (
+  <Svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke={BRAND_RED} strokeWidth="1.5">
+    <Path d="M3 7v10M21 7v10M3 12h18M5 12V9a2 2 0 012-2h10a2 2 0 012 2v3M5 12v3M19 12v3" />
+  </Svg>
+);
+const IconBath = () => (
+  <Svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke={BRAND_RED} strokeWidth="1.5">
+    <Path d="M7 6h10M7 6a2 2 0 00-2 2v2a2 2 0 002 2h10a2 2 0 002-2V8a2 2 0 00-2-2M7 6v14M17 6v14M4 14h16M12 20v2" />
+    <Circle cx="12" cy="16" r="1" fill={BRAND_RED} />
+  </Svg>
+);
+const IconCar = () => (
+  <Svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke={BRAND_RED} strokeWidth="1.5">
+    <Path d="M4 17h16a2 2 0 002-2v-4l-2.5-4H4.5L2 11v4a2 2 0 002 2zM4 17v2a1 1 0 001 1h2a1 1 0 001-1v-2M16 17v2a1 1 0 001 1h2a1 1 0 001-1v-2" />
+    <Circle cx="6.5" cy="13.5" r="1.5" />
+    <Circle cx="17.5" cy="13.5" r="1.5" />
+  </Svg>
+);
+const IconStairs = () => (
+  <Svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke={BRAND_RED} strokeWidth="1.5">
+    <Path d="M3 21h6v-6h6v-6h6V3" />
+  </Svg>
+);
+
+const renderDescription = (text: string, isDarkBg: boolean) => {
+  const textColor = isDarkBg ? "#f8fafc" : "#475569";
+  const headerColor = isDarkBg ? "#ffffff" : "#0f172a";
+  const bulletColor = isDarkBg ? "#ffffff" : "#475569";
+
   return text.split("\n").map((line, index) => {
     const trimmed = line.trim();
     if (!trimmed) return null;
@@ -245,22 +422,22 @@ const renderDescription = (text: string) => {
     if (trimmed.startsWith("*")) {
       return (
         <View key={index} style={styles.bulletRow}>
-          <Text style={styles.bulletPoint}>•</Text>
-          <Text style={styles.bulletText}>{trimmed.substring(1).trim()}</Text>
+          <Text style={[styles.bulletPoint, {color: bulletColor}]}>•</Text>
+          <Text style={[styles.bulletText, {color: textColor}]}>{trimmed.substring(1).trim()}</Text>
         </View>
       );
     }
-
+    
     if (trimmed.endsWith(":")) {
       return (
-        <Text key={index} style={styles.descriptionHeader}>
+        <Text key={index} style={[styles.descHeader, {color: headerColor}]}>
           {trimmed}
         </Text>
       );
     }
 
     return (
-      <Text key={index} style={styles.descriptionText}>
+      <Text key={index} style={[styles.descText, {color: textColor}]}>
         {trimmed}
       </Text>
     );
@@ -269,15 +446,18 @@ const renderDescription = (text: string) => {
 
 function stripHtml(html: string | undefined): string {
   if (!html) return "Sin descripción disponible.";
-  // Reemplazar <br> o <p> con saltos de línea, luego remover el resto de tags
   let text = html.replace(/<br\s*[\/]?>/gi, "\n");
   text = text.replace(/<\/p>/gi, "\n\n");
-  text = text.replace(/<[^>]+>/g, "");
-  // Remover múltiples espacios o saltos de línea vacíos
+  text = text.replace(/<li[^>]*>/gi, "\n* ");
+  text = text.replace(/<\/li>/gi, "");
+  text = text.replace(/<div[^>]*>/gi, "\n");
+  text = text.replace(/<\/div>/gi, "");
+  text = text.replace(/<[^>]+>/g, " "); // Replace remaining tags with space to avoid word join
   text = text.replace(/\n\s*\n/g, "\n\n");
   text = text.replace(/&nbsp;/g, " ");
-  // Formatear asteriscos como viñetas en nuevas líneas si no lo están
   text = text.replace(/([^\n])\s*\*/g, "$1\n*");
+  // Clean up multiple spaces
+  text = text.replace(/ {2,}/g, " ");
   return text.trim();
 }
 
@@ -286,138 +466,406 @@ interface FichaTecnicaPdfProps {
   type: "property" | "development";
   includeLogo: boolean;
   user?: User | null;
+  manualFields?: PdfManualFields;
 }
 
-export function FichaTecnicaPdf({ data, type, includeLogo, user }: FichaTecnicaPdfProps) {
+export function FichaTecnicaPdf({ data, type, includeLogo, user, manualFields }: FichaTecnicaPdfProps) {
   const isDev = type === "development";
   const p = data as any;
-
-  const title = isDev ? p.name : (p.publicationTitle || p.title);
+  
+  const operationType = p.status === "alquiler" ? "RENTA" : "VENTA";
+  const title = isDev ? p.name : (p.publicationTitle || p.title || "PROPIEDAD");
   const location = isDev ? (p.colony || p.location) : p.location;
+  const address = p.fullAddress || location || "";
   const price = isDev ? p.priceRange : `$${p.price?.toLocaleString()}`;
+  
   const descriptionRaw = isDev ? p.description : (p.richDescription || p.description);
   const descriptionText = stripHtml(descriptionRaw);
   const image = p.image;
-  const reference = p.referenceCode || (isDev ? p.tokkoId : undefined);
-
-  const features: string[] = [];
-  if (!isDev) {
-    if (p.bedrooms) features.push(`${p.bedrooms} Recámaras`);
-    if (p.bathrooms) features.push(`${p.bathrooms} Baños`);
-    if (p.area) features.push(`${p.area} m²`);
-  } else {
-    if (p.status) features.push(`Estado: ${p.status}`);
-    if (p.units) features.push(`${p.units} Unidades`);
-    if (p.deliveryDate) features.push(`Entrega: ${p.deliveryDate}`);
+  const reference = p.referenceCode || (isDev ? p.tokkoId : "N/A");
+  const agentName = user?.name || "Asesor Inmobiliario";
+  const agentEmail = user?.email || "contacto@viterra.com.mx";
+  const agentPhone = user?.profile?.phone || "33 3629-7122";
+  
+  // Extract values
+  const bedrooms = p.bedrooms ? String(p.bedrooms) : "-";
+  const bathrooms = p.bathrooms ? String(p.bathrooms) : "-";
+  const parking = p.parkingSpaces ? String(p.parkingSpaces) : "-";
+  const floors = p.floors ? String(p.floors) : "-";
+  
+  const propertyType = p.propertyType || "N/A";
+  const architecture = p.architecture || "N/A";
+  const landUse = p.landUse || "N/A";
+  
+  const landArea = p.area ? `${p.area} m²` : "-";
+  const buildArea = p.roofedArea ? `${p.roofedArea} m²` : (isDev && p.units ? `${p.units} unid.` : "-");
+  
+  const maint = p.maintenancePrice ? `$${p.maintenancePrice}` : "n/a";
+  const age = p.age || "N/A";
+  
+  // Extra fields from modal (with fallbacks)
+  const f = manualFields || {};
+  const frente = f.frente ? `${f.frente} m` : "- m";
+  const fondo = f.fondo ? `${f.fondo} m` : "- m";
+  const maintIncludes = f.incluidoMantenimiento || "--";
+  const publicidad = f.publicidad || "No";
+  
+  const jardinM2 = f.jardinM2 ? `${f.jardinM2} m²` : "n/a";
+  const salaTv = f.salaTv || "No";
+  const estudio = f.estudio || "No";
+  const unidades = f.unidadesPrivativas || "-";
+  
+  const enCoto = f.enCoto || "No";
+  const vigilancia = f.vigilancia || "No";
+  const jardin = f.jardin || "No";
+  const terraza = f.terraza || "No";
+  const balcon = f.balcon || "No";
+  
+  const amueblado = f.amueblado || "No";
+  const estudiantes = f.estudiantes || "No";
+  const mascota = f.mascota || "No";
+  const cuartoServ = f.cuartoServicio || "No";
+  const banoServ = f.banoServicio || "No";
+  
+  const rest = f.condicionesVisita || "-";
+  
+  let page1Desc = descriptionText;
+  let page2Desc = "";
+  if (descriptionText.length > 550) {
+    const splitIndex = descriptionText.lastIndexOf(' ', 550);
+    if (splitIndex > 0) {
+      page1Desc = descriptionText.substring(0, splitIndex) + "...";
+      page2Desc = descriptionText.substring(splitIndex).trim();
+    } else {
+      page1Desc = descriptionText.substring(0, 550) + "...";
+      page2Desc = descriptionText.substring(550).trim();
+    }
   }
+  // Only show page 2 desc if it has real content (more than 5 chars)
+  if (page2Desc.length < 5) page2Desc = "";
 
-  const gallery = isDev ? p.images : p.galleryImages;
-  const hasGallery = Array.isArray(gallery) && gallery.length > 0;
+  const rawGallery: string[] = Array.isArray(isDev ? p.images : p.galleryImages)
+    ? (isDev ? p.images : p.galleryImages)
+    : [];
 
-  // React-pdf can use origin
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-  const logoUrl = `${baseUrl}/images/branding/viterra-logo-icon-red-alpha.png`;
+  // Convert relative URLs to absolute so @react-pdf/renderer can load them
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const toAbsolute = (url: string) => {
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    return `${baseUrl}${url.startsWith("/") ? "" : "/"}${url}`;
+  };
+
+  // Build final gallery: make all URLs absolute and remove duplicates of main image
+  const absoluteGallery = rawGallery
+    .map(toAbsolute)
+    .filter(url => url && url !== toAbsolute(image));
+
+  const hasGallery = absoluteGallery.length > 0;
+  const logoUrl = `${baseUrl}/images/branding/viterra-logo-hero.png`;
 
   return (
     <Document>
+      {/* PÁGINA 1: PORTADA Y FICHA */}
       <Page size="A4" style={styles.page}>
-        {/* Header en todas las páginas */}
-        <View style={styles.header} fixed>
-          {includeLogo ? (
-            <>
-              <View style={styles.headerLeft}>
-                <View style={styles.headerLogoContainer}>
-                  <Image src={logoUrl} style={styles.headerLogo} />
-                </View>
-                <View>
-                  <Text style={styles.headerCompanyInfo}>Conmutador: 33 3629-7122</Text>
-                  <Text style={styles.headerCompanyInfo}>WhatsApp: 33 3199-1774</Text>
-                  <Text style={styles.headerCompanyInfo}>publicidadviterra@gmail.com</Text>
-                  <Text style={styles.headerCompanyInfo}>Av. Terranova No. 1455, Col. Providencia</Text>
-                  <Text style={styles.headerCompanyInfo}>Guadalajara, Jalisco</Text>
-                </View>
+        
+        {/* TOP BANNER */}
+        <View style={styles.topBanner}>
+          <View style={styles.bannerLeft}>
+            {includeLogo && (
+              <Image src={logoUrl} style={styles.logo} />
+            )}
+            <View style={styles.bannerInfo}>
+              <View style={styles.bannerInfoTextRow}>
+                <Text style={styles.bannerInfoLabel}>Opcionó:</Text>
+                <Text style={styles.bannerInfoValue}>{agentName}</Text>
               </View>
-              {user && (
-                <View style={styles.headerRight}>
-                  <Text style={styles.agentName}>{user.name}</Text>
-                  <Text style={styles.agentEmail}>{user.email}</Text>
-                  <View style={styles.agentBadge}>
-                    <Text style={styles.agentBadgeText}>AGENTE A CARGO</Text>
-                  </View>
-                </View>
-              )}
-            </>
-          ) : (
-            <>
-              <Text style={styles.headerTitle}>Ficha Técnica</Text>
-              <View style={styles.headerRight}>
-                <Text style={styles.headerSubtitle}>{isDev ? "Desarrollo" : "Propiedad"}</Text>
-                {reference && <Text style={styles.headerRef}>Ref: {reference}</Text>}
+              <View style={styles.bannerInfoTextRow}>
+                <Text style={styles.bannerInfoLabel}>Referencia:</Text>
+                <Text style={styles.bannerInfoValue}>{reference}</Text>
               </View>
-            </>
-          )}
-        </View>
-
-        {/* Portada e Información Principal */}
-        {image && <Image src={image} style={styles.mainImage} />}
-
-        <View style={styles.titleContainer}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.location}>{location}</Text>
-          <View style={styles.priceContainer}>
-            <Text style={styles.price}>{price}</Text>
-            {!isDev && p.status === "alquiler" && <Text style={styles.priceSuffix}>/ mes</Text>}
-          </View>
-        </View>
-
-        {features.length > 0 && (
-          <View style={styles.featuresContainer}>
-            {features.map((f, i) => (
-              <View key={i} style={styles.featureBadge}>
-                <Text style={styles.featureText}>{f}</Text>
+              <View style={styles.bannerInfoTextRow}>
+                <Text style={styles.bannerInfoLabel}>Contacto:</Text>
+                <Text style={styles.bannerInfoValue}>{agentPhone}</Text>
               </View>
-            ))}
-          </View>
-        )}
-
-        {/* Descripción (forzamos salto de página para que no quede huérfano) */}
-        <View break>
-          <Text style={styles.sectionTitle}>Descripción</Text>
-          <View style={styles.descriptionContainer}>
-            {renderDescription(descriptionText)}
-          </View>
-        </View>
-
-        {/* Galería de imágenes (salto automático) */}
-        {hasGallery && (
-          <View break={false} style={{ marginTop: 20 }}>
-            <Text style={styles.sectionTitle}>Galería de Imágenes</Text>
-            <View style={styles.galleryContainer}>
-              {gallery.map((img: string, i: number) => {
-                // Para no mostrar la principal otra vez si está duplicada
-                if (img === image) return null;
-                return (
-                  <View key={i} style={styles.galleryImageWrapper}>
-                    <Image src={img} style={styles.galleryImage} />
-                  </View>
-                );
-              })}
             </View>
           </View>
-        )}
-
-        {/* Footer y Número de página */}
-        <View style={styles.footer} fixed>
-          <Text style={styles.footerText}>
-            {includeLogo ? "Viterra Real Estate" : "Generado automáticamente"}
-          </Text>
+          <View style={styles.bannerTitleContainer}>
+            <Text style={[styles.bannerTitle, { fontSize: title.length > 35 ? 12 : (title.length > 25 ? 16 : 22) }]}>{title}</Text>
+          </View>
         </View>
-        <Text
-          style={styles.pageNumber}
-          render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}
-          fixed
-        />
+
+        {/* IMAGE AREA with badge overlay */}
+        <View style={styles.imageAreaContainer}>
+          {image ? (
+            <Image src={image} style={styles.mainImage} />
+          ) : (
+            <View style={[styles.mainImage, {backgroundColor: '#e2e8f0'}]} />
+          )}
+          <View style={styles.addressOverlay}>
+            <Text style={styles.addressText1}>{address}</Text>
+            {location && location !== address && (
+              <Text style={styles.addressText2}>{location}</Text>
+            )}
+          </View>
+          {/* Badge overlay (VENTA/RENTA + price) */}
+          <View style={styles.badgeOverlayContainer}>
+            <View style={styles.badgeCircle}>
+              <Text style={styles.badgeIconLabel}>{isDev ? "PROY" : "CASA"}</Text>
+              <IconHouse />
+            </View>
+            <View style={styles.badgePriceContainer}>
+              <Text style={styles.badgeOperation}>{operationType}</Text>
+              <Text style={styles.badgePrice}>{price}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* COLUMNS */}
+        <View style={styles.columnsContainer}>
+          {/* LEFT COLUMN: DATOS */}
+          <View style={styles.leftColumn}>
+            
+            <View style={styles.iconsRow}>
+              <View style={styles.iconBox}>
+                <IconBed />
+                <Text style={styles.iconLabel}>RECÁMARAS</Text>
+                <Text style={styles.iconValue}>{bedrooms}</Text>
+              </View>
+              <View style={styles.iconBox}>
+                <IconBath />
+                <Text style={styles.iconLabel}>BAÑOS</Text>
+                <Text style={styles.iconValue}>{bathrooms}</Text>
+              </View>
+              <View style={styles.iconBox}>
+                <IconCar />
+                <Text style={styles.iconLabel}>COCHERA</Text>
+                <Text style={styles.iconValue}>{parking}</Text>
+              </View>
+              <View style={styles.iconBox}>
+                <IconStairs />
+                <Text style={styles.iconLabel}>NIVELES</Text>
+                <Text style={styles.iconValue}>{floors}</Text>
+              </View>
+            </View>
+
+            {/* ROW 1 */}
+            <View style={styles.tableGroup}>
+              <View style={styles.tableRow}>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>TIPO DE INMUEBLE</Text></View>
+                  <Text style={styles.tableValue}>{propertyType}</Text>
+                </View>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>ARQUITECTURA</Text></View>
+                  <Text style={styles.tableValue}>{architecture}</Text>
+                </View>
+                <View style={styles.tableCol}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>USO DE SUELO</Text></View>
+                  <Text style={styles.tableValue}>{landUse}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* ROW 2 */}
+            <View style={styles.tableGroup}>
+              <View style={styles.tableRow}>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>TERRENO</Text></View>
+                  <Text style={styles.tableValue}>{landArea}</Text>
+                </View>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>CONSTRUCCIÓN</Text></View>
+                  <Text style={styles.tableValue}>{buildArea}</Text>
+                </View>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>FRENTE</Text></View>
+                  <Text style={styles.tableValue}>{frente}</Text>
+                </View>
+                <View style={styles.tableCol}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>FONDO</Text></View>
+                  <Text style={styles.tableValue}>{fondo}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* ROW 3 */}
+            <View style={styles.tableGroup}>
+              <View style={styles.tableRow}>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>MANTENIMIENTO</Text></View>
+                  <Text style={styles.tableValue}>{maint}</Text>
+                </View>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>INCLUÍDO</Text></View>
+                  <Text style={styles.tableValue}>{maintIncludes}</Text>
+                </View>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>ANTIGÜEDAD</Text></View>
+                  <Text style={styles.tableValue}>{age}</Text>
+                </View>
+                <View style={styles.tableCol}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>PUBLICIDAD</Text></View>
+                  <Text style={styles.tableValue}>{publicidad}</Text>
+                </View>
+              </View>
+            </View>
+            
+            {/* ROW 4 */}
+            <View style={styles.tableGroup}>
+              <View style={styles.tableRow}>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>JARDÍN M²</Text></View>
+                  <Text style={styles.tableValue}>{jardinM2}</Text>
+                </View>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>SALA TV</Text></View>
+                  <Text style={styles.tableValue}>{salaTv}</Text>
+                </View>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>ESTUDIO</Text></View>
+                  <Text style={styles.tableValue}>{estudio}</Text>
+                </View>
+                <View style={styles.tableCol}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>UNID. PRIVATIVAS</Text></View>
+                  <Text style={styles.tableValue}>{unidades}</Text>
+                </View>
+              </View>
+            </View>
+            
+            {/* ROW 5 */}
+            <View style={styles.tableGroup}>
+              <View style={styles.tableRow}>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>EN COTO</Text></View>
+                  <Text style={styles.tableValue}>{enCoto}</Text>
+                </View>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>VIGILANCIA</Text></View>
+                  <Text style={styles.tableValue}>{vigilancia}</Text>
+                </View>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>JARDÍN</Text></View>
+                  <Text style={styles.tableValue}>{jardin}</Text>
+                </View>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>TERRAZA</Text></View>
+                  <Text style={styles.tableValue}>{terraza}</Text>
+                </View>
+                <View style={styles.tableCol}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>BALCÓN</Text></View>
+                  <Text style={styles.tableValue}>{balcon}</Text>
+                </View>
+              </View>
+            </View>
+            
+            {/* ROW 6 */}
+            <View style={styles.tableGroup}>
+              <View style={styles.tableRow}>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>AMUEBLADO</Text></View>
+                  <Text style={styles.tableValue}>{amueblado}</Text>
+                </View>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>ESTUDIANTES</Text></View>
+                  <Text style={styles.tableValue}>{estudiantes}</Text>
+                </View>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>MASCOTA</Text></View>
+                  <Text style={styles.tableValue}>{mascota}</Text>
+                </View>
+                <View style={[styles.tableCol, styles.tableColBorderRight]}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>CUARTO SERV</Text></View>
+                  <Text style={styles.tableValue}>{cuartoServ}</Text>
+                </View>
+                <View style={styles.tableCol}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>BAÑO SERV</Text></View>
+                  <Text style={styles.tableValue}>{banoServ}</Text>
+                </View>
+              </View>
+            </View>
+            
+            {/* ROW 7 */}
+            <View style={styles.tableGroup}>
+              <View style={styles.tableFullWidthContainer}>
+                <Text style={styles.tableFullWidthHeader}>CONDICIONES DE VISITA/RESTRICCIONES</Text>
+              </View>
+              <Text style={styles.tableFullWidthValue}>{rest}</Text>
+            </View>
+            
+            {/* REFERENCE CODE AT BOTTOM */}
+            <View style={[styles.tableGroup, { marginTop: "auto", marginBottom: 0 }]}>
+              <View style={styles.tableRow}>
+                <View style={styles.tableCol}>
+                  <View style={styles.tableHeaderContainer}><Text style={styles.tableHeader}>REFERENCIA</Text></View>
+                  <Text style={styles.tableValue}>{reference}</Text>
+                </View>
+              </View>
+            </View>
+
+          </View>
+
+          {/* RIGHT COLUMN: DESCRIPCIÓN */}
+          <View style={styles.rightColumn}>
+            <Text style={[styles.descTitle, {color: "#ffffff"}]}>Descripción de la propiedad:</Text>
+            {renderDescription(page1Desc, true)}
+          </View>
+        </View>
       </Page>
+
+      {/* PÁGINA 2: MAPA Y GALERÍA */}
+      {(hasGallery || page2Desc) && (
+        <Page size="A4" style={styles.page}>
+          <View style={styles.page2Container}>
+            
+            {page2Desc && (
+              <View style={{ marginBottom: 20 }}>
+                <Text style={[styles.descTitle, {color: BRAND_RED}]}>Descripción (continuación):</Text>
+                {renderDescription(page2Desc, false)}
+              </View>
+            )}
+
+            {hasGallery && (
+              <View style={styles.galleryGrid}>
+                {absoluteGallery.slice(0, 10).map((imgUrl: string, i: number) => (
+                  <Image key={i} src={imgUrl} style={styles.galleryImage} />
+                ))}
+              </View>
+            )}
+
+          </View>
+
+          {/* FOOTER */}
+          <View style={styles.footer}>
+            <View>
+              <Text style={styles.footerTitle}>¡AGENDA TU CITA!</Text>
+              <View style={styles.footerTextRow}>
+                <Svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#ffffff" strokeWidth="2">
+                  <Path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" />
+                </Svg>
+                <Text style={styles.footerText}>Tel. 33 3629-7122</Text>
+              </View>
+              <View style={styles.footerTextRow}>
+                <Svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#ffffff" strokeWidth="2">
+                  <Path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                </Svg>
+                <Text style={styles.footerText}>Av. Terranova #1455 Int. 102, Providencia 4a Secc; C.P. 44639, Guadalajara, Jal.</Text>
+              </View>
+            </View>
+            <View>
+              <View style={styles.footerTextRow}>
+                <Text style={styles.footerText}>viterrainmobiliaria.com</Text>
+              </View>
+              <View style={styles.footerTextRow}>
+                <Text style={styles.footerText}>viterragrupoinmobiliario</Text>
+              </View>
+              <View style={styles.footerTextRow}>
+                <Text style={styles.footerText}>@viterrainmobiliaria</Text>
+              </View>
+            </View>
+          </View>
+        </Page>
+      )}
     </Document>
   );
 }
