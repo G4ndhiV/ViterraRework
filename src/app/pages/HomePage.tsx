@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
@@ -6,7 +6,7 @@ import { PropertyCard } from "../components/PropertyCard";
 import { SearchBar, SearchFilters } from "../components/SearchBar";
 import { useFeaturedHomeProperties } from "../hooks/useFeaturedHomeProperties";
 import { useCatalogPriceSlices } from "../hooks/useCatalogPriceSlices";
-import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Bed, Bath, Square } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
@@ -16,6 +16,7 @@ import { HeroBackdropMedia } from "../components/HeroBackdropMedia";
 import { DEFAULT_SITE_CONTENT } from "../../data/siteContent";
 import { Reveal } from "../components/Reveal";
 import { cn } from "../components/ui/utils";
+import { useInstagramFeed } from "../hooks/useInstagramFeed";
 function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?: "dark" | "light" }) {
   return (
     <div className="text-center">
@@ -36,6 +37,7 @@ export function HomePage() {
   const pl = usePreviewLayout();
   const reduceMotion = useReducedMotion();
   const { content } = useSiteContent();
+  const { posts: igPosts } = useInstagramFeed(3);
   const h = content.home;
   const experienceMediaOnRight = h.experienceMediaPosition === "right";
   const {
@@ -45,18 +47,13 @@ export function HomePage() {
     reload: reloadFeatured,
   } = useFeaturedHomeProperties();
   const catalogPriceSlices = useCatalogPriceSlices();
-  const [activeFeaturedId, setActiveFeaturedId] = useState<string | null>(null);
-  const activeFeaturedProperty = useMemo(
-    () =>
-      featuredProperties.find((p) => p.id === activeFeaturedId) ??
-      featuredProperties[0] ??
-      null,
-    [featuredProperties, activeFeaturedId]
-  );
-  const activeFeaturedIndex = useMemo(
-    () => featuredProperties.findIndex((p) => p.id === activeFeaturedProperty?.id),
-    [featuredProperties, activeFeaturedProperty?.id]
-  );
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const scrollCarousel = (direction: 'left' | 'right') => {
+    if (carouselRef.current) {
+      const scrollAmount = window.innerWidth > 768 ? 400 : 300;
+      carouselRef.current.scrollBy({ left: direction === 'left' ? -scrollAmount : scrollAmount, behavior: 'smooth' });
+    }
+  };
   const featuredLabel = (title?: string, fallback?: string) => {
     const a = title?.trim();
     const b = fallback?.trim();
@@ -64,26 +61,6 @@ export function HomePage() {
     const MAX_CHARS = 44;
     return base.length > MAX_CHARS ? `${base.slice(0, MAX_CHARS - 3).trimEnd()}...` : base;
   };
-  const goFeaturedPrev = () => {
-    if (featuredProperties.length <= 1 || activeFeaturedIndex < 0) return;
-    const next = (activeFeaturedIndex - 1 + featuredProperties.length) % featuredProperties.length;
-    setActiveFeaturedId(featuredProperties[next].id);
-  };
-  const goFeaturedNext = () => {
-    if (featuredProperties.length <= 1 || activeFeaturedIndex < 0) return;
-    const next = (activeFeaturedIndex + 1) % featuredProperties.length;
-    setActiveFeaturedId(featuredProperties[next].id);
-  };
-
-  useEffect(() => {
-    if (featuredProperties.length === 0) {
-      setActiveFeaturedId(null);
-      return;
-    }
-    if (!activeFeaturedId || !featuredProperties.some((p) => p.id === activeFeaturedId)) {
-      setActiveFeaturedId(featuredProperties[0].id);
-    }
-  }, [featuredProperties, activeFeaturedId]);
 
   const handleSearch = (filters: SearchFilters) => {
     const params = new URLSearchParams();
@@ -385,88 +362,74 @@ export function HomePage() {
                 ) : null}
               </div>
             ) : (
-              <div className="space-y-5 md:space-y-6">
-                {activeFeaturedProperty && (
-                  <div className="mx-auto flex w-full max-w-5xl items-center justify-center gap-0.5 sm:gap-1 md:gap-2">
-                    {featuredProperties.length > 1 ? (
-                      <button
-                        type="button"
-                        onClick={goFeaturedPrev}
-                        className="z-10 shrink-0 rounded-full p-1 text-brand-navy/55 transition-colors hover:bg-slate-100 hover:text-primary sm:p-1.5"
-                        aria-label="Propiedad destacada anterior"
-                      >
-                        <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2} />
-                      </button>
-                    ) : null}
-                    <div
-                      key={activeFeaturedProperty.id}
-                      className="relative min-h-[360px] w-full min-w-0 flex-1 sm:h-[390px] md:h-[420px]"
+              <div className="relative w-[100vw] left-1/2 -translate-x-1/2 mt-8 md:mt-12 group/carousel">
+                {featuredProperties.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => scrollCarousel('left')}
+                      className="absolute left-4 md:left-8 top-[40%] -translate-y-1/2 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white opacity-0 transition-all duration-300 hover:bg-white hover:text-brand-navy group-hover/carousel:opacity-100 hidden sm:flex"
+                      aria-label="Desplazar a la izquierda"
                     >
-                      <div className="h-full [&>article]:h-full">
-                        <PropertyCard property={activeFeaturedProperty} variant="editorial" />
-                      </div>
-                    </div>
-                    {featuredProperties.length > 1 ? (
-                      <button
-                        type="button"
-                        onClick={goFeaturedNext}
-                        className="z-10 shrink-0 rounded-full p-1 text-brand-navy/55 transition-colors hover:bg-slate-100 hover:text-primary sm:p-1.5"
-                        aria-label="Siguiente propiedad destacada"
-                      >
-                        <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2} />
-                      </button>
-                    ) : null}
-                  </div>
+                      <ChevronLeft className="h-6 w-6" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollCarousel('right')}
+                      className="absolute right-4 md:right-8 top-[40%] -translate-y-1/2 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white opacity-0 transition-all duration-300 hover:bg-white hover:text-brand-navy group-hover/carousel:opacity-100 hidden sm:flex"
+                      aria-label="Desplazar a la derecha"
+                    >
+                      <ChevronRight className="h-6 w-6" />
+                    </button>
+                  </>
                 )}
-
-                <div className="relative">
-                  <div className="overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    <div className="mx-auto flex w-max gap-2.5 md:gap-3">
-                      {featuredProperties.map((property) => {
-                        const selected = property.id === activeFeaturedProperty?.id;
-                        return (
-                          <motion.button
-                            key={property.id}
-                            type="button"
-                            onMouseEnter={() => setActiveFeaturedId(property.id)}
-                            onFocus={() => setActiveFeaturedId(property.id)}
-                            onClick={() => setActiveFeaturedId(property.id)}
-                            whileHover={reduceMotion ? undefined : { y: -2 }}
-                            whileTap={reduceMotion ? undefined : { scale: 0.99 }}
-                            className={cn(
-                              "group relative h-44 w-[130px] shrink-0 overflow-hidden border text-left transition-all duration-300 md:h-48 md:w-[146px]",
-                              selected
-                                ? "border-primary/60 bg-black text-white shadow-[0_12px_30px_-20px_rgba(8,12,22,0.85)]"
-                                : "border-white/15 bg-black text-white/90 hover:border-white/35"
-                            )}
-                            aria-label={`Show featured property ${property.title}`}
-                            aria-pressed={selected}
-                          >
-                            <img
-                              src={property.image}
-                              alt=""
-                              className={cn(
-                                "absolute inset-0 h-full w-full object-cover transition-all duration-500",
-                                selected
-                                  ? "scale-[1.03] opacity-86 blur-[0.35px] group-hover:scale-100 group-hover:opacity-100 group-hover:blur-0"
-                                  : "opacity-76 blur-[0.6px] group-hover:scale-100 group-hover:opacity-95 group-hover:blur-0"
+                <div ref={carouselRef} className="overflow-x-auto pb-12 pt-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden snap-x snap-mandatory px-4 sm:px-8 lg:px-12 scroll-pl-4 sm:scroll-pl-8 lg:scroll-pl-12 scroll-smooth">
+                  <div className="flex w-max gap-4 md:gap-6 mx-auto sm:mx-0">
+                    {featuredProperties.map((property) => (
+                      <Link
+                        to={`/propiedades/${property.id}`}
+                        state={{ property }}
+                        viewTransition
+                        key={property.id}
+                        className="group relative h-[420px] w-[280px] sm:h-[480px] sm:w-[320px] md:h-[560px] md:w-[380px] shrink-0 snap-center sm:snap-start overflow-hidden rounded-[2rem] bg-slate-900 shadow-xl transition-shadow duration-500 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.6)]"
+                      >
+                        <img
+                          src={property.image}
+                          alt={property.title}
+                          className="absolute inset-0 h-full w-full object-cover"
+                        />
+                        
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80 pointer-events-none" />
+                        
+                        <div className="absolute bottom-0 inset-x-0 p-5 sm:p-6 bg-black/20 backdrop-blur-xl border-t border-white/15 flex flex-col justify-end pointer-events-none">
+                          <div className="flex flex-col gap-1.5">
+                            <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-white/80">
+                              {property.status === 'venta' ? 'En Venta' : 'En Renta'}
+                              {property.location ? ` • ${property.location}` : ''}
+                            </p>
+                            <h3 className="text-xl sm:text-2xl font-light text-white leading-tight line-clamp-2">
+                              {featuredLabel(property.publicationTitle, property.title)}
+                            </h3>
+                            
+                            <div className="flex gap-4 text-[11px] sm:text-xs font-medium text-white/80 mt-1 mb-1">
+                              {property.bedrooms > 0 && (
+                                <span className="flex items-center gap-1.5"><Bed className="w-3.5 h-3.5 opacity-70"/> {property.bedrooms}</span>
                               )}
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/45 to-black/55 transition-opacity duration-300 group-hover:opacity-30" />
-
-                            <div className="relative z-[1] flex h-full flex-col justify-between p-3 transition-opacity duration-300 group-hover:opacity-95">
-                              <div>
-                                <p className="rounded-sm bg-black/28 px-1.5 py-1 text-[12px] font-medium leading-snug text-white/95 backdrop-blur-[1px]">
-                                  {featuredLabel(property.publicationTitle, property.title)}
-                                </p>
-                              </div>
-
-                              <div />
+                              {property.bathrooms > 0 && (
+                                <span className="flex items-center gap-1.5"><Bath className="w-3.5 h-3.5 opacity-70"/> {property.bathrooms}</span>
+                              )}
+                              {property.area > 0 && (
+                                <span className="flex items-center gap-1.5"><Square className="w-3.5 h-3.5 opacity-70"/> {property.area} m²</span>
+                              )}
                             </div>
-                          </motion.button>
-                        );
-                      })}
-                    </div>
+
+                            <p className="mt-1 text-base sm:text-lg font-medium text-white/95">
+                              ${property.price?.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -521,68 +484,68 @@ export function HomePage() {
             </p>
           </Reveal>
 
-          <div className={cn("mx-auto grid max-w-5xl gap-4", pl.gridCols("grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"))}>
-            {[
-              {
-                id: "post-1",
-                image: "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=600&h=600&fit=crop",
-                caption: "Nuevo desarrollo exclusivo en Zapopan. Departamentos con acabados premium y amenidades de lujo.",
-                date: "Hace 2 días",
-                likes: 148,
-              },
-              {
-                id: "post-2",
-                image: "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=600&h=600&fit=crop",
-                caption: "Espacios diseñados para vivir mejor. Descubre nuestra selección de propiedades con terraza.",
-                date: "Hace 5 días",
-                likes: 203,
-              },
-              {
-                id: "post-3",
-                image: "https://images.unsplash.com/photo-1600566753376-12c8ab7c5a38?w=600&h=600&fit=crop",
-                caption: "La vista perfecta existe. Conoce los penthouses disponibles en nuestra cartera exclusiva.",
-                date: "Hace 1 semana",
-                likes: 312,
-              },
-            ].map((post) => (
-              <Reveal key={post.id} y={20} delay={0.04}>
-                <a
-                  href="https://www.instagram.com/viterramx"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group block overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
-                >
-                  <div className="relative aspect-square overflow-hidden">
-                    <img
-                      src={post.image}
-                      alt={post.caption}
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                    <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-1 text-xs text-white opacity-0 backdrop-blur-sm transition-opacity duration-300 group-hover:opacity-100">
-                      <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+          <div className={cn("mx-auto grid max-w-5xl gap-6", pl.gridCols("grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"))}>
+            {igPosts.map(({ shortcode, type, videoUrl, thumbnail }) => (
+              <Reveal key={shortcode} y={20} delay={0.04}>
+                <div className="group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                  {/* Área de media */}
+                  <div className="relative overflow-hidden bg-slate-100" style={{ height: 320 }}>
+                    {type === "reel" && videoUrl ? (
+                      /* Reel: video nativo con autoplay real */
+                      <video
+                        src={videoUrl}
+                        poster={thumbnail ?? undefined}
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      /* Post / carrusel: iframe con clip del header */
+                      <iframe
+                        src={`https://www.instagram.com/${type}/${shortcode}/embed/captioned`}
+                        scrolling="no"
+                        loading="lazy"
+                        allow="encrypted-media; clipboard-write; picture-in-picture"
+                        title={`Publicación de Instagram ${shortcode}`}
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          height: 700,
+                          border: "none",
+                          marginTop: -68,
+                        }}
+                      />
+                    )}
+                  </div>
+                  {/* Footer — link a Instagram */}
+                  <a
+                    href={`https://www.instagram.com/${type}/${shortcode}/`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between border-t border-slate-100 px-4 py-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                        <rect x="2" y="2" width="20" height="20" rx="5" />
+                        <circle cx="12" cy="12" r="5" />
+                        <circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none" />
                       </svg>
-                      <span style={{ fontWeight: 500 }}>{post.likes}</span>
+                      <span className="text-xs text-slate-500">@viterrainmobiliaria</span>
                     </div>
-                  </div>
-                  <div className="p-4">
-                    <p className="line-clamp-2 text-sm leading-relaxed text-slate-700" style={{ fontWeight: 400 }}>
-                      {post.caption}
-                    </p>
-                    <p className="mt-2 text-xs text-slate-400" style={{ fontWeight: 500 }}>
-                      {post.date}
-                    </p>
-                  </div>
-                </a>
+                    <span className="text-xs font-medium text-primary transition-colors group-hover:text-primary/70" style={{ fontWeight: 500 }}>
+                      Ver en Instagram →
+                    </span>
+                  </a>
+                </div>
               </Reveal>
             ))}
           </div>
 
           <Reveal className="mt-12 flex justify-center" y={16} delay={0.08}>
             <a
-              href="https://www.instagram.com/viterramx"
+              href="https://www.instagram.com/viterrainmobiliaria/"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2.5 rounded-full border border-brand-navy/15 bg-white px-6 py-3 text-[13px] uppercase tracking-[0.14em] text-brand-navy shadow-sm transition-all hover:border-primary/40 hover:shadow-md"

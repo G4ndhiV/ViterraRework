@@ -23,7 +23,7 @@ import {
 const nowIso = () => new Date().toISOString();
 
 /** Máximo de propiedades destacadas en la portada (inicio). */
-export const MAX_FEATURED_PROPERTIES = 4;
+export const MAX_FEATURED_PROPERTIES = 50;
 
 function appStatusFromDb(s: string): "venta" | "alquiler" {
   const t = s.trim().toLowerCase();
@@ -416,7 +416,7 @@ export async function fetchCatalogProperties(
 }
 
 /**
- * Solo propiedades destacadas (portada). Pocas filas — no usar el listado completo en el home.
+ * Solo propiedades destacadas (portada).
  * Índice recomendado en Postgres: `(featured) WHERE featured = true` o partial index en `featured`.
  */
 export async function fetchFeaturedPropertiesForHome(client: SupabaseClient) {

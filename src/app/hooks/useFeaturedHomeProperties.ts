@@ -158,10 +158,23 @@ export function useFeaturedHomeProperties() {
       setLoading(false);
     })();
 
+    const channel = client
+      .channel("properties_featured_changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "properties" },
+        () => {
+          void reload();
+        }
+      )
+      .subscribe();
+
     return () => {
       genRef.current++;
+      void client.removeChannel(channel);
     };
-  }, [applyRows]);
+  }, [applyRows, reload]);
 
   return { properties, loading, error, reload };
 }
+
