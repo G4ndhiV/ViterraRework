@@ -26,6 +26,7 @@ import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { cn } from "../components/ui/utils";
 import { FeatureSection } from "../components/FeatureSectionBlocks";
+import { PublicDetailContactBlock } from "../components/PublicDetailContactBlock";
 import { WhatsAppGlyph } from "../components/WhatsAppGlyph";
 import { PropertyVideoPlayer } from "../components/PropertyVideoPlayer";
 import { propertyTours3dList, propertyVideosList, type Property } from "../components/PropertyCard";
@@ -919,48 +920,22 @@ export function PropertyDetailPage() {
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <h2 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl" style={{ fontWeight: 700 }}>
-                ¿Te interesa esta propiedad?
-              </h2>
-              <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-600" style={{ fontWeight: 400 }}>
-                Llama, escribe por WhatsApp o déjanos tus datos y un asesor te contacta.
-              </p>
-
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                {telHref ? (
-                  <a
-                    href={telHref}
-                    className="flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-900 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50"
-                    style={{ fontWeight: 600 }}
-                  >
-                    <Phone className="h-4 w-4" strokeWidth={2} />
-                    Llamar
-                  </a>
-                ) : (
-                  <span
-                    className="flex cursor-not-allowed items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 py-3 text-sm font-semibold text-slate-400"
-                    title="Añade un teléfono con al menos 3 dígitos en Contacto"
-                  >
-                    <Phone className="h-4 w-4" strokeWidth={2} />
-                    Llamar
-                  </span>
-                )}
-                <a
-                  href={whatsappHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 rounded-lg bg-[#25D366] py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#20bd5a]"
-                  style={{ fontWeight: 600 }}
-                >
-                  <WhatsAppGlyph className="h-4 w-4 text-white" />
-                  WhatsApp
-                </a>
-              </div>
-              {!property?.contactWhatsapp?.trim() ? (
-                <p className="mt-2 text-xs text-slate-500">
-                  WhatsApp: enlace global del sitio. Configura uno propio en la pestaña Contacto del admin.
-                </p>
-              ) : null}
+              <PublicDetailContactBlock
+                embedded
+                title="¿Te interesa esta propiedad?"
+                intro="Llama, escribe por WhatsApp o déjanos tus datos y un asesor te contacta."
+                phone={property.contactPhone}
+                whatsappStored={property.contactWhatsapp}
+                telHref={telHref}
+                whatsappHref={whatsappHref}
+                callButtonLabel="Llamar"
+                showGlobalWhatsappHint={!property?.contactWhatsapp?.trim()}
+                phoneInvalidHint={
+                  property?.contactPhone?.trim() && !telHref
+                    ? "El teléfono guardado no tiene suficientes dígitos para llamar; usa al menos 10 con lada."
+                    : undefined
+                }
+              />
 
               <div className="relative py-6">
                 <div className="absolute inset-0 flex items-center" aria-hidden>

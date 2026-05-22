@@ -12,6 +12,8 @@ import {
   Star,
 } from "lucide-react";
 import type { Property } from "../../PropertyCard";
+import type { Development } from "../../../data/developments";
+import { resolveDevelopmentByTokkoId } from "../../../lib/propertyDevelopmentLink";
 import { ImageWithFallback } from "../../figma/ImageWithFallback";
 import { cn } from "../../ui/utils";
 
@@ -34,10 +36,12 @@ function headline(draft: Property) {
 
 type Props = {
   draft: Property;
+  developments?: Development[];
   className?: string;
 };
 
-export function PropertyFormPreview({ draft, className }: Props) {
+export function PropertyFormPreview({ draft, developments = [], className }: Props) {
+  const linkedDevelopment = resolveDevelopmentByTokkoId(developments, draft.developmentTokkoId);
   const cover = draft.images?.[0] ?? draft.image;
   const price = formatPrice(draft.price, draft.status);
   const locationLine = [draft.location, draft.colony].filter(Boolean).join(" · ");
@@ -79,6 +83,11 @@ export function PropertyFormPreview({ draft, className }: Props) {
             {draft.type?.trim() ? (
               <span className="border border-brand-navy/10 bg-white/92 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-navy/90 backdrop-blur-sm">
                 {draft.type}
+              </span>
+            ) : null}
+            {linkedDevelopment ? (
+              <span className="border border-emerald-400/40 bg-emerald-500/90 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white shadow-sm backdrop-blur-sm">
+                {linkedDevelopment.name}
               </span>
             ) : null}
           </div>

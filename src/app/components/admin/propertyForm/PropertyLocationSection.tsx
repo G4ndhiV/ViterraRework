@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Map as LeafletMap, Marker } from "leaflet";
 import { MapPin } from "lucide-react";
 import { createViterraLeafletMarkerIcon } from "../../../lib/leafletViterraMarkerIcon";
@@ -21,6 +21,19 @@ type Props = {
   onCoordsChange: (lat: number, lng: number) => void;
 };
 
+function formatCoordInput(n: number): string {
+  if (!Number.isFinite(n)) return "";
+  return String(n);
+}
+
+/** Acepta `-`, `.` y vacío mientras se escribe; devuelve número solo si es válido. */
+function parseCoordInput(raw: string): number | null {
+  const t = raw.trim();
+  if (t === "" || t === "-" || t === "." || t === "-.") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function PropertyLocationSection({
   location,
   colony,
@@ -35,6 +48,25 @@ export function PropertyLocationSection({
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);
   const markerRef = useRef<Marker | null>(null);
+  const [latStr, setLatStr] = useState(() => formatCoordInput(lat));
+  const [lngStr, setLngStr] = useState(() => formatCoordInput(lng));
+
+  useEffect(() => {
+    setLatStr(formatCoordInput(lat));
+    setLngStr(formatCoordInput(lng));
+  }, [lat, lng]);
+
+  const applyLatInput = (raw: string) => {
+    setLatStr(raw);
+    const parsed = parseCoordInput(raw);
+    if (parsed != null) onCoordsChange(parsed, lng);
+  };
+
+  const applyLngInput = (raw: string) => {
+    setLngStr(raw);
+    const parsed = parseCoordInput(raw);
+    if (parsed != null) onCoordsChange(lat, parsed);
+  };
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -105,22 +137,30 @@ export function PropertyLocationSection({
         <PropertyField label="Dirección completa">
           <input className={propertyFieldClass} value={fullAddress} onChange={(e) => onFullAddressChange(e.target.value)} />
         </PropertyField>
-        <PropertyField label="Latitud">
+        <PropertyField label="Latitud" hint="Puedes pegar valores con signo negativo.">
           <input
-            type="number"
-            step="any"
+            type="text"
+            inputMode="decimal"
             className={propertyFieldClass}
-            value={lat}
-            onChange={(e) => onCoordsChange(Number(e.target.value), lng)}
+            value={latStr}
+            onChange={(e) => applyLatInput(e.target.value)}
+            onBlur={() => {
+              const parsed = parseCoordInput(latStr);
+              if (parsed != null) setLatStr(formatCoordInput(parsed));
+            }}
           />
         </PropertyField>
-        <PropertyField label="Longitud">
+        <PropertyField label="Longitud" hint="Ej. -101.26">
           <input
-            type="number"
-            step="any"
+            type="text"
+            inputMode="decimal"
             className={propertyFieldClass}
-            value={lng}
-            onChange={(e) => onCoordsChange(lat, Number(e.target.value))}
+            value={lngStr}
+            onChange={(e) => applyLngInput(e.target.value)}
+            onBlur={() => {
+              const parsed = parseCoordInput(lngStr);
+              if (parsed != null) setLngStr(formatCoordInput(parsed));
+            }}
           />
         </PropertyField>
       </PropertyFieldGrid>

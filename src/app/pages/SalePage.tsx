@@ -16,6 +16,7 @@ import {
   type CatalogPropertySortKey,
 } from "../lib/catalogPropertySort";
 import { applyAdvancedPropertyFilters } from "../lib/applyAdvancedPropertyFilters";
+import { propertyMatchesTypeFilter } from "../lib/propertyTypesCatalog";
 import { SlidersHorizontal, Map, LayoutGrid } from "lucide-react";
 import { Reveal } from "../components/Reveal";
 import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
@@ -61,6 +62,10 @@ export function SalePage() {
     [properties]
   );
   const catalogPrices = useMemo(() => saleProperties.map((p) => p.price), [saleProperties]);
+  const catalogPropertyTypes = useMemo(
+    () => saleProperties.map((p) => p.type).filter(Boolean),
+    [saleProperties]
+  );
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
   const [sortBy, setSortBy] = useState<CatalogPropertySortKey>("newest");
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
@@ -86,9 +91,7 @@ export function SalePage() {
     }
 
     if (filters.type) {
-      filtered = filtered.filter(
-        (property) => property.type.toLowerCase() === filters.type.toLowerCase()
-      );
+      filtered = filtered.filter((property) => propertyMatchesTypeFilter(property.type, filters.type));
     }
 
     if (filters.minPrice) {
@@ -212,7 +215,12 @@ export function SalePage() {
               viewport={{ once: true, amount: 0.35 }}
               transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
             >
-              <SearchBar onSearch={handleSearch} defaultStatus="venta" catalogPrices={catalogPrices} />
+              <SearchBar
+                onSearch={handleSearch}
+                defaultStatus="venta"
+                catalogPrices={catalogPrices}
+                extraPropertyTypes={catalogPropertyTypes}
+              />
             </motion.div>
           </Reveal>
         </div>

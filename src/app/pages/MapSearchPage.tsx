@@ -7,6 +7,9 @@ import { MapSearchHeaderBar } from "../components/MapSearchHeaderBar";
 import { MapSearchListingCard } from "../components/map/MapSearchListingCard";
 import type { Property } from "../components/PropertyCard";
 import { useCatalogProperties } from "../hooks/useCatalogProperties";
+import { useTokkoPropertyTypes } from "../hooks/useTokkoPropertyTypes";
+import { propertyMatchesTypeFilter } from "../lib/propertyTypesCatalog";
+import { PropertyTypeFilterField } from "../components/PropertyTypeFilterField";
 import {
   pointInZone,
   zoneFromLeafletLayer,
@@ -96,7 +99,7 @@ function pickMapCardPlacement(
 function applyFilters(list: Property[], f: MapFilters, zone: SearchZone | null): Property[] {
   let out = [...list];
   if (f.type) {
-    out = out.filter((p) => p.type.toLowerCase() === f.type.toLowerCase());
+    out = out.filter((p) => propertyMatchesTypeFilter(p.type, f.type));
   }
   if (f.status) {
     out = out.filter((p) => p.status === f.status);
@@ -200,6 +203,12 @@ function statusFromSearchParams(searchParams: URLSearchParams): "" | "venta" | "
 
 export function MapSearchPage() {
   const { properties: catalogProperties } = useCatalogProperties();
+  const catalogPropertyTypes = useMemo(
+    () => catalogProperties.map((p) => p.type).filter(Boolean),
+    [catalogProperties]
+  );
+  const { types: propertyTypeOptions, loading: propertyTypesLoading } =
+    useTokkoPropertyTypes(catalogPropertyTypes);
   const [searchParams] = useSearchParams();
   const mapEl = useRef<HTMLDivElement>(null);
   const mapShellRef = useRef<HTMLDivElement>(null);
@@ -751,23 +760,15 @@ export function MapSearchPage() {
   const filterFields = (
     <>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-500" style={{ fontWeight: 600 }}>
-            Tipo
-          </label>
-          <select
-            value={filters.type}
-            onChange={(e) => setFilters((s) => ({ ...s, type: e.target.value }))}
-            className="w-full rounded-none border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm text-slate-900 shadow-inner focus:border-primary focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/25"
-            style={{ fontWeight: 500 }}
-          >
-            <option value="">Todos los tipos</option>
-            <option value="casa">Casa</option>
-            <option value="apartamento">Apartamento</option>
-            <option value="villa">Villa</option>
-            <option value="penthouse">Penthouse</option>
-          </select>
-        </div>
+        <PropertyTypeFilterField
+          value={filters.type}
+          onChange={(type) => setFilters((s) => ({ ...s, type }))}
+          options={propertyTypeOptions}
+          loading={propertyTypesLoading}
+          emptyOptionLabel="Todos los tipos"
+          labelClassName="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-500"
+          inputClassName="w-full rounded-none border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm text-slate-900 shadow-inner focus:border-primary focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/25"
+        />
         <div>
           <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-500" style={{ fontWeight: 600 }}>
             Operación
