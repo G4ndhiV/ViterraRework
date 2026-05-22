@@ -1,5 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Development, DevelopmentUnit } from "../data/developments";
+import {
+  developmentMediaFromApp,
+  developmentTours3dFromRow,
+  developmentVideosFromRow,
+} from "./developmentMedia";
+import { resolveDevelopmentReferenceCode } from "./developmentReferenceCode";
+import { normalizeWhatsappLinkForStorage } from "./whatsappLink";
 
 const nowIso = () => new Date().toISOString();
 
@@ -42,7 +49,13 @@ type DevelopmentRow = Record<string, unknown> & {
   in_charge_name?: string | null;
   in_charge_phone?: string | null;
   in_charge_email?: string | null;
+  in_charge_whatsapp?: string | null;
   reference_code?: string | null;
+  rich_description?: string | null;
+  property_videos?: unknown;
+  property_tours_3d?: unknown;
+  video_url?: string | null;
+  tour_3d_url?: string | null;
 };
 
 type DevelopmentUnitRow = {
@@ -123,11 +136,10 @@ async function fetchLinkedPropertyStatsByTokko(
 
 function linkedStatsForRow(
   row: DevelopmentRow,
-  byTokko: Map<string, LinkedPropertyStats>
+  byTokko: Map<string, LinkedPropertyStats>,
 ): LinkedPropertyStats {
-  const tokko = typeof row.tokko_id === "string" ? row.tokko_id.trim() : "";
-  if (!tokko) return { count: 0, minPrice: null, maxPrice: null };
-  return byTokko.get(tokko.toLowerCase()) ?? { count: 0, minPrice: null, maxPrice: null };
+  const key = (row.tokko_id?.trim() || `manual_${row.id}`).toLowerCase();
+  return byTokko.get(key) ?? { count: 0, minPrice: null, maxPrice: null };
 }
 
 /** Prioridad: unidades del catálogo `properties`; si no hay vínculo, inventario manual; luego columna `units`. */
@@ -211,9 +223,16 @@ export function rowToDevelopment(
     displayOnWeb: row.display_on_web ?? true,
     inChargeName: row.in_charge_name?.trim() || undefined,
     inChargePhone: row.in_charge_phone?.trim() ?? "",
+    inChargeWhatsapp: row.in_charge_whatsapp?.trim() || undefined,
     inChargeEmail: row.in_charge_email?.trim() ?? "",
+    richDescription: row.rich_description?.trim() || undefined,
+    videos: developmentVideosFromRow(row),
+    tours3d: developmentTours3dFromRow(row),
+    videoUrl: row.video_url?.trim() || undefined,
+    tour3dUrl: row.tour_3d_url?.trim() || undefined,
     referenceCode: row.reference_code?.trim() || undefined,
     tokkoId: row.tokko_id?.trim() || undefined,
+    payload: row.payload && typeof row.payload === "object" ? row.payload : undefined,
   };
 }
 
@@ -313,10 +332,14 @@ export async function fetchDevelopmentByTokkoId(
   const row = devRes.data as DevelopmentRow | null;
   if (!row) return { data: null, error: null };
 
-  const unitRes = await client.from("development_units").select("*").eq("development_id", row.id);
+  const [unitRes, linkedByTokko] = await Promise.all([
+    client.from("development_units").select("*").eq("development_id", row.id),
+    fetchLinkedPropertyStatsByTokko(client),
+  ]);
   if (unitRes.error) return { data: null, error: unitRes.error };
   const units = groupUnitsByDevelopment((unitRes.data ?? []) as DevelopmentUnitRow[]).get(row.id) ?? [];
-  return { data: rowToDevelopment(row, units), error: null };
+  const linked = linkedStatsForRow(row, linkedByTokko);
+  return { data: rowToDevelopment(row, units, linked), error: null };
 }
 
 export async function fetchDevelopmentById(
@@ -344,6 +367,24 @@ export async function upsertDevelopment(client: SupabaseClient, d: Development) 
   const ts = nowIso();
   const imgs = d.images?.length ? d.images : d.image ? [d.image] : [];
   const tokkoId = d.tokkoId?.trim() || `manual_${d.id}`;
+  const linkedByTokko = await fetchLinkedPropertyStatsByTokko(client);
+  const linked = linkedStatsForRow({ tokko_id: tokkoId } as DevelopmentRow, linkedByTokko);
+  const manualUnits = d.developmentUnits ?? [];
+  const persistedUnits = resolveDisplayedUnits(
+    { units: d.units } as DevelopmentRow,
+    manualUnits,
+    linked.count,
+  );
+  const persistedPriceRange = computePriceRange(
+    manualUnits,
+    linked,
+    d.priceRange?.trim() || "Por definir",
+  );
+  const media = developmentMediaFromApp(d);
+  const wa = d.inChargeWhatsapp?.trim() ? normalizeWhatsappLinkForStorage(d.inChargeWhatsapp) : null;
+  const referenceCode = resolveDevelopmentReferenceCode(d.referenceCode, tokkoId, d.id);
+  const existingPayload =
+    d.payload && typeof d.payload === "object" ? d.payload : ({} as Record<string, unknown>);
   const row = {
     id: d.id,
     tokko_id: tokkoId,
@@ -353,23 +394,33 @@ export async function upsertDevelopment(client: SupabaseClient, d: Development) 
     full_address: d.fullAddress || null,
     type: d.type || null,
     description: d.description || null,
+    rich_description: d.richDescription?.trim() || null,
+    property_videos: media.videosJson,
+    property_tours_3d: media.toursJson,
+    video_url: media.legacyVideo.video_url,
+    tour_3d_url: media.legacyTourUrl,
     image: d.image || imgs[0] || null,
     images: imgs,
     status: d.status || null,
-    units: d.units,
+    units: persistedUnits,
     delivery_date: d.deliveryDate || null,
-    price_range: d.priceRange || null,
+    price_range: persistedPriceRange || null,
     amenities: d.amenities ?? [],
     services: d.services ?? [],
     additional_features: d.additionalFeatures ?? [],
     lat: d.coordinates?.lat ?? null,
     lng: d.coordinates?.lng ?? null,
     featured: Boolean(d.featured),
-    payload: { ...(d.payload ?? {}), source: "viterra_admin" } as Record<string, unknown>,
+    payload: {
+      ...existingPayload,
+      source: "viterra_admin",
+      viterra_videos: media.videosJson,
+      viterra_tours_3d: media.toursJson,
+    } as Record<string, unknown>,
     synced_at: ts,
     updated_at: ts,
     web_url: null,
-    reference_code: d.referenceCode?.trim() || null,
+    reference_code: referenceCode,
     publication_title: null,
     deleted_at: null,
     display_on_web: d.displayOnWeb !== false,
@@ -378,6 +429,7 @@ export async function upsertDevelopment(client: SupabaseClient, d: Development) 
     in_charge_name: d.inChargeName?.trim() || null,
     in_charge_email: d.inChargeEmail?.trim() || null,
     in_charge_phone: d.inChargePhone?.trim() || null,
+    in_charge_whatsapp: wa || null,
     development_type_tokko_id: null,
   };
 

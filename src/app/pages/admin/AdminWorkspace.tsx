@@ -321,6 +321,7 @@ export function AdminWorkspace() {
 
     const needsDevelopments =
       activeTab === "developments" ||
+      activeTab === "properties" ||
       activeTab === "leads" ||
       activeTab === "consultas" ||
       activeTab === "clients" ||
@@ -1155,7 +1156,7 @@ export function AdminWorkspace() {
   );
 
   const handleSaveDevelopment = useCallback(
-    async (payload: Development) => {
+    async (payload: Development): Promise<boolean> => {
       const normalizedPayload: Development = {
         ...payload,
         featured: Boolean(payload.featured),
@@ -1164,10 +1165,24 @@ export function AdminWorkspace() {
       const existed = developments.some((d) => d.id === normalizedPayload.id);
       const client = getSupabaseClient();
       if (client) {
+        const { hasSession } = await syncSupabaseAuthSession(client);
+        if (!hasSession) {
+          toast.error(
+            "No hay sesión activa. Inicia sesión de nuevo para guardar desarrollos (RLS requiere usuario autenticado).",
+          );
+          return false;
+        }
         const res = await upsertDevelopment(client, normalizedPayload);
         if (res.error) {
-          toast.error(res.error.message);
-          return;
+          const msg = res.error.message ?? "";
+          const rlsHint =
+            /permission denied|row-level security|42501|policy/i.test(msg)
+              ? " Falta política RLS de escritura en developments: aplica la migración 20260522110000_developments_authenticated_write.sql en Supabase."
+              : /column.*does not exist|schema cache/i.test(msg)
+                ? " Aplica también la migración 20260522100000_development_media.sql en Supabase."
+                : "";
+          toast.error(msg + rlsHint);
+          return false;
         }
         const { action, diff } = buildDevelopmentSaveEvent(prev, normalizedPayload, existed);
         if (isInventoryTimelineAction(action)) {
@@ -1182,13 +1197,13 @@ export function AdminWorkspace() {
         const { data, error: fetchErr } = await fetchDevelopmentsWithUnits(client, { publicOnly: false });
         if (fetchErr) {
           toast.error(fetchErr.message);
-          return;
+          return false;
         }
         setDevelopments(data ?? []);
         toast.success(
-          existed ? "Desarrollo actualizado correctamente." : "Desarrollo añadido correctamente."
+          existed ? "Desarrollo actualizado correctamente." : "Desarrollo añadido correctamente.",
         );
-        return;
+        return true;
       }
       const { action, diff } = buildDevelopmentSaveEvent(prev, normalizedPayload, existed);
       if (isInventoryTimelineAction(action)) {
@@ -1207,10 +1222,76 @@ export function AdminWorkspace() {
           : [...prevState, normalizedPayload];
       });
       toast.success(
-        existed ? "Desarrollo actualizado correctamente." : "Desarrollo añadido correctamente."
+        existed ? "Desarrollo actualizado correctamente." : "Desarrollo añadido correctamente.",
       );
+      return true;
     },
-    [developments, logCatalogActivity]
+    [developments, logCatalogActivity],
+  );
+
+  const [propertyLinking, setPropertyLinking] = useState(false);
+
+  const refreshDevelopmentsCatalog = useCallback(async () => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    const { data, error } = await fetchDevelopmentsWithUnits(client, { publicOnly: false });
+    if (!error && data) setDevelopments(data);
+  }, []);
+
+  const handleLinkPropertyToDevelopment = useCallback(
+    async (property: Property, linkTokkoId: string) => {
+      if (!canManageInventory) return;
+      const client = getSupabaseClient();
+      if (!client) {
+        toast.error("Supabase no configurado.");
+        return;
+      }
+      setPropertyLinking(true);
+      try {
+        const updated: Property = { ...property, developmentTokkoId: linkTokkoId.trim() };
+        const res = await updateProperty(client, updated);
+        if (res.error) {
+          toast.error(res.error.message);
+          return;
+        }
+        await reloadProperties({ silent: true });
+        await refreshDevelopmentsCatalog();
+        toast.success("Propiedad vinculada al desarrollo.");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "No se pudo vincular la propiedad.");
+      } finally {
+        setPropertyLinking(false);
+      }
+    },
+    [canManageInventory, reloadProperties, refreshDevelopmentsCatalog],
+  );
+
+  const handleUnlinkPropertyFromDevelopment = useCallback(
+    async (property: Property) => {
+      if (!canManageInventory) return;
+      const client = getSupabaseClient();
+      if (!client) {
+        toast.error("Supabase no configurado.");
+        return;
+      }
+      setPropertyLinking(true);
+      try {
+        const updated: Property = { ...property, developmentTokkoId: undefined };
+        const res = await updateProperty(client, updated);
+        if (res.error) {
+          toast.error(res.error.message);
+          return;
+        }
+        await reloadProperties({ silent: true });
+        await refreshDevelopmentsCatalog();
+        toast.success("Vínculo con el desarrollo eliminado.");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "No se pudo quitar el vínculo.");
+      } finally {
+        setPropertyLinking(false);
+      }
+    },
+    [canManageInventory, reloadProperties, refreshDevelopmentsCatalog],
   );
 
   const leadColumnStatuses = useMemo(() => {
@@ -1853,6 +1934,12 @@ export function AdminWorkspace() {
           });
         }
         void reloadProperties({ silent: true });
+        if (saved.developmentTokkoId?.trim()) {
+          const { data: devData, error: devErr } = await fetchDevelopmentsWithUnits(client, {
+            publicOnly: false,
+          });
+          if (!devErr && devData) setDevelopments(devData);
+        }
         toast.success(
           exists ? "Propiedad actualizada correctamente." : "Propiedad añadida al catálogo correctamente."
         );
@@ -4387,8 +4474,17 @@ export function AdminWorkspace() {
           ) : (
             <AdminDevelopmentsManager
               developments={developments}
+              catalogProperties={properties}
+              propertiesLoading={catalogPropertiesLoading}
+              propertyLinking={propertyLinking}
+              onLinkProperty={handleLinkPropertyToDevelopment}
+              onUnlinkProperty={handleUnlinkPropertyFromDevelopment}
               onSave={handleSaveDevelopment}
               onDelete={handleDeleteDevelopment}
+              onEditProperty={(property) => {
+                setActiveTab("properties");
+                setPropertyForm({ mode: "edit", property });
+              }}
             />
           ))}
 
@@ -5241,6 +5337,9 @@ export function AdminWorkspace() {
               ? properties.filter((x) => x.featured && x.id !== propertyForm.property.id).length
               : properties.filter((x) => x.featured).length
           }
+          developments={developments}
+          developmentsLoading={developmentsLoading}
+          catalogProperties={properties}
         />
       </div>
 

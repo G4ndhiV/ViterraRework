@@ -10,6 +10,9 @@ export interface DevelopmentUnit {
   forRent: boolean;
 }
 
+import type { PropertyTour3dEntry } from "../lib/propertyTours3d";
+import type { PropertyVideoEntry } from "../lib/propertyVideos";
+
 export interface Development {
   id: string;
   name: string;
@@ -18,6 +21,7 @@ export interface Development {
   fullAddress: string;
   type: string;
   description: string;
+  richDescription?: string;
   image: string;
   images: string[];
   status: "En Construcción" | "Pre-venta" | "Disponible" | "Próximamente";
@@ -28,20 +32,22 @@ export interface Development {
   services: string[];
   additionalFeatures: string[];
   developmentUnits: DevelopmentUnit[];
+  videos?: PropertyVideoEntry[];
+  tours3d?: PropertyTour3dEntry[];
+  /** @deprecated Primer video externo. */
+  videoUrl?: string;
+  /** @deprecated Primer tour 3D. */
+  tour3dUrl?: string;
   coordinates: {
     lat: number;
     lng: number;
   };
   featured?: boolean;
-  /** Columna `display_on_web` en Supabase (por defecto true en creación admin). */
   displayOnWeb?: boolean;
-  /** Teléfono de contacto del desarrollo (`in_charge_phone` en Supabase). */
   inChargePhone?: string;
-  /** Nombre del responsable (`in_charge_name` en Supabase / Tokko `users_in_charge`). */
+  inChargeWhatsapp?: string;
   inChargeName?: string;
-  /** Email de contacto (`in_charge_email` en Supabase). */
   inChargeEmail?: string;
-  /** Código de referencia (`reference_code`). */
   referenceCode?: string;
   tokkoId?: string;
   payload?: Record<string, unknown>;

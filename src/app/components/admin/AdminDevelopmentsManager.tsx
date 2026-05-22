@@ -18,60 +18,64 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { Development } from "../../data/developments";
+import type { Property } from "../PropertyCard";
 import { copyPublicPageUrl } from "../../lib/copyPublicLink";
 import { PdfDownloadDropdown } from "../pdf/PdfDownloadDropdown";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "../ui/dialog";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 import { Button } from "../ui/button";
-import { Label } from "../ui/label";
-import { Switch } from "../ui/switch";
 import { cn } from "../ui/utils";
 import { AdminDevelopmentsMap } from "./AdminDevelopmentsMap";
-import { ImageGalleryEditor } from "./ImageGalleryEditor";
+import { DevelopmentFormDialog } from "./DevelopmentFormDialog";
 import { useAuth } from "../../contexts/AuthContext";
-
-const DEFAULT_DEV_IMAGE =
-  "https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1280&q=80";
 
 interface Props {
   developments: Development[];
-  onSave: (input: Development) => void | Promise<void>;
+  catalogProperties?: Property[];
+  propertiesLoading?: boolean;
+  propertyLinking?: boolean;
+  onLinkProperty?: (property: Property, linkTokkoId: string) => void | Promise<void>;
+  onUnlinkProperty?: (property: Property) => void | Promise<void>;
+  onSave: (input: Development) => boolean | Promise<boolean>;
   onDelete: (id: string) => void | Promise<void>;
+  onEditProperty?: (property: Property) => void;
 }
 
-type DevelopmentStatus = Development["status"];
+type DevelopmentFormState =
+  | { mode: "create" }
+  | { mode: "edit"; development: Development };
 
-const statuses: DevelopmentStatus[] = ["En Construcción", "Pre-venta", "Disponible", "Próximamente"];
+const DEVELOPMENT_STATUSES: Development["status"][] = [
+  "En Construcción",
+  "Pre-venta",
+  "Disponible",
+  "Próximamente",
+];
 
-const emptyForm = {
-  name: "",
-  location: "",
-  colony: "",
-  fullAddress: "",
-  type: "",
-  description: "",
-  images: [] as string[],
-  status: "Disponible" as DevelopmentStatus,
-  units: 1,
-  deliveryDate: "",
-  priceRange: "",
-  inChargePhone: "",
-  inChargeEmail: "",
-  featured: false,
-};
-
-export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Props) {
+export function AdminDevelopmentsManager({
+  developments,
+  catalogProperties = [],
+  propertiesLoading = false,
+  propertyLinking = false,
+  onLinkProperty,
+  onUnlinkProperty,
+  onSave,
+  onDelete,
+  onEditProperty,
+}: Props) {
   const { user } = useAuth();
   const readOnly = user?.role === "asesor" || user?.role === "lider_grupo";
-  const [editing, setEditing] = useState<Development | null>(null);
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const [developmentForm, setDevelopmentForm] = useState<DevelopmentFormState | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [newDevelopmentId, setNewDevelopmentId] = useState(() => crypto.randomUUID());
   const [searchQuery, setSearchQuery] = useState("");
   const [referenceCodeQuery, setReferenceCodeQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -80,7 +84,6 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
   const [stateFilter, setStateFilter] = useState("all");
   const [deliveryFilter, setDeliveryFilter] = useState("all");
   const [inventoryView, setInventoryView] = useState<"cards" | "list" | "map">("cards");
-  const [newDevelopmentId, setNewDevelopmentId] = useState(() => crypto.randomUUID());
   const typeOptions = useMemo(
     () => Array.from(new Set(developments.map((d) => d.type).filter(Boolean))),
     [developments]
@@ -137,65 +140,17 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
   const featuredCount = useMemo(() => developments.filter((d) => d.featured).length, [developments]);
 
   const openCreate = () => {
-    setEditing(null);
-    setForm(emptyForm);
     setNewDevelopmentId(crypto.randomUUID());
-    setOpen(true);
+    setDevelopmentForm({ mode: "create" });
   };
 
   const openEdit = (d: Development) => {
-    setEditing(d);
-    setForm({
-      name: d.name,
-      location: d.location,
-      colony: d.colony,
-      fullAddress: d.fullAddress,
-      type: d.type,
-      description: d.description,
-      images: d.images?.length ? [...d.images] : d.image ? [d.image] : [],
-      status: d.status,
-      units: d.units,
-      deliveryDate: d.deliveryDate,
-      priceRange: d.priceRange,
-      inChargePhone: d.inChargePhone ?? "",
-      inChargeEmail: d.inChargeEmail ?? "",
-      featured: Boolean(d.featured),
-    });
-    setOpen(true);
+    setDevelopmentForm({ mode: "edit", development: d });
   };
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim() || !form.location.trim() || !form.type.trim()) return;
-    const id = editing?.id ?? newDevelopmentId;
-    const gallery = form.images.length > 0 ? form.images : [DEFAULT_DEV_IMAGE];
-    const payload: Development = {
-      id,
-      name: form.name.trim(),
-      location: form.location.trim(),
-      colony: form.colony.trim() || form.location.trim(),
-      fullAddress: form.fullAddress.trim() || form.location.trim(),
-      type: form.type.trim(),
-      description: form.description.trim() || "Sin descripción",
-      image: gallery[0] ?? DEFAULT_DEV_IMAGE,
-      images: gallery,
-      status: form.status,
-      units: Math.max(1, Number(form.units) || 1),
-      deliveryDate: form.deliveryDate.trim() || "Por definir",
-      priceRange: form.priceRange.trim() || "Por definir",
-      amenities: editing?.amenities ?? [],
-      services: editing?.services ?? [],
-      additionalFeatures: editing?.additionalFeatures ?? [],
-      developmentUnits: editing?.developmentUnits ?? [],
-      coordinates: editing?.coordinates ?? { lat: 20.67, lng: -103.35 },
-      featured: Boolean(form.featured),
-      inChargePhone: form.inChargePhone.trim(),
-      inChargeEmail: form.inChargeEmail.trim(),
-      referenceCode: editing?.referenceCode,
-      tokkoId: editing?.tokkoId,
-    };
-    onSave(payload);
-    setOpen(false);
+  const toggleFeatured = (d: Development) => {
+    if (readOnly) return;
+    void onSave({ ...d, featured: !d.featured });
   };
 
   return (
@@ -305,7 +260,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
             className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
           >
             <option value="all">Estado de la construcción</option>
-            {statuses.map((status) => (
+            {DEVELOPMENT_STATUSES.map((status) => (
               <option key={status} value={status}>
                 {status}
               </option>
@@ -561,9 +516,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                             </button>
                             <button
                               type="button"
-                              onClick={() => {
-                                if (window.confirm("¿Eliminar este desarrollo?")) onDelete(development.id);
-                              }}
+                              onClick={() => setDeleteTargetId(development.id)}
                               className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
                               title="Eliminar"
                             >
@@ -624,6 +577,32 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                   {development.status.toUpperCase()}
                 </span>
               </div>
+              {!readOnly ? (
+                <button
+                  type="button"
+                  className={cn(
+                    "absolute left-3 top-3 z-10 rounded-lg p-1.5 shadow-sm transition",
+                    development.featured
+                      ? "bg-amber-400 text-amber-950 hover:bg-amber-300"
+                      : "bg-white/90 text-slate-500 hover:bg-white hover:text-amber-600",
+                  )}
+                  title={development.featured ? "Quitar de destacados" : "Destacar desarrollo"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleFeatured(development);
+                  }}
+                >
+                  <Star
+                    className="h-4 w-4"
+                    strokeWidth={2}
+                    fill={development.featured ? "currentColor" : "none"}
+                  />
+                </button>
+              ) : development.featured ? (
+                <span className="absolute left-3 top-3 rounded-lg bg-amber-400/95 p-1.5 text-amber-950">
+                  <Star className="h-4 w-4 fill-current" />
+                </span>
+              ) : null}
               </button>
             )}
 
@@ -690,9 +669,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (window.confirm("¿Eliminar este desarrollo?")) onDelete(development.id);
-                        }}
+                        onClick={() => setDeleteTargetId(development.id)}
                         className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
                         title="Eliminar"
                       >
@@ -746,351 +723,50 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
         </div>
       )}
 
-      <Dialog open={open} onOpenChange={setOpen} key={editing?.id ?? `new-${newDevelopmentId}`}>
-        <DialogContent
-          hideCloseButton
-          className={cn(
-            "!fixed !inset-0 !left-0 !top-0 z-50 flex !h-[100dvh] !max-h-[100dvh] !w-full !max-w-none !translate-x-0 !translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-none duration-200",
-            "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
-            "data-[state=open]:!zoom-in-100 data-[state=closed]:!zoom-out-100 sm:!max-w-none"
-          )}
-        >
-          <div className="h-0.5 shrink-0 bg-gradient-to-r from-brand-gold/90 via-primary to-brand-burgundy/90" aria-hidden />
-          <form id="viterra-development-form" onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
-            <div className="shrink-0 border-b border-stone-200/80 bg-stone-50/90 px-3 py-2.5 sm:px-4 sm:py-3">
-              <DialogHeader className="gap-0 p-0 text-left">
-                <p className="text-[10px] text-slate-500" style={{ fontWeight: 500 }}>
-                  <span className="text-primary/90">Panel admin</span>
-                  <span className="text-slate-400"> · </span>
-                  Desarrollos
-                </p>
-                <div className="mt-1.5 flex flex-col gap-2 min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-between min-[1100px]:gap-4">
-                  <div className="min-w-0 flex-1 space-y-0.5">
-                    <DialogTitle
-                      className="font-heading text-xl leading-tight tracking-tight text-brand-navy sm:text-2xl"
-                      style={{ fontWeight: 700 }}
-                    >
-                      {editing ? "Editar desarrollo" : "Nuevo desarrollo"}
-                    </DialogTitle>
-                    <DialogDescription className="text-xs text-slate-600" style={{ fontWeight: 500 }}>
-                      Completa los datos del desarrollo. La ficha será visible en el sitio público.
-                    </DialogDescription>
-                  </div>
-                  <div className="flex w-full shrink-0 flex-col gap-1.5 min-[1100px]:w-auto min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-end min-[1100px]:gap-2">
-                    <div className="flex items-center gap-1 min-[1100px]:mr-0.5">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9 shrink-0 border-stone-300 bg-white text-slate-600 hover:bg-stone-50 hover:text-slate-800"
-                        title="Copiar enlace público"
-                        aria-label="Copiar enlace público"
-                        onClick={() =>
-                          copyPublicPageUrl(`/desarrollos/${editing?.id ?? newDevelopmentId}`)
-                        }
-                      >
-                        <Link2 className="h-4 w-4" strokeWidth={1.5} />
-                      </Button>
-                      <PdfDownloadDropdown 
-                        data={(editing || form) as any} 
-                        type="development" 
-                        className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 h-9 w-9 shrink-0 border border-stone-300 bg-white text-slate-600 hover:bg-stone-50 hover:text-slate-800"
-                      />
-                    </div>
-                    <DialogClose asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-9 w-fit shrink-0 border-stone-300 bg-white px-3 text-sm text-slate-700 hover:bg-stone-50 hover:text-slate-800"
-                        style={{ fontWeight: 600 }}
-                      >
-                        Regresar
-                      </Button>
-                    </DialogClose>
-                    <DialogClose asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-9 w-fit shrink-0 border-stone-300 bg-white px-3 text-sm text-slate-700 hover:bg-stone-50 hover:text-slate-800"
-                        style={{ fontWeight: 600 }}
-                      >
-                        Cerrar
-                      </Button>
-                    </DialogClose>
-                    <Button
-                      type="submit"
-                      className="h-9 w-full min-w-[10rem] bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-brand-red-hover min-[1100px]:w-auto"
-                    >
-                      {editing ? "Guardar cambios" : "Crear desarrollo"}
-                    </Button>
-                  </div>
-                </div>
-              </DialogHeader>
-            </div>
+      <DevelopmentFormDialog
+        open={developmentForm !== null}
+        onOpenChange={(o) => {
+          if (!o) setDevelopmentForm(null);
+        }}
+        mode={developmentForm?.mode ?? "create"}
+        development={developmentForm?.mode === "edit" ? developmentForm.development : null}
+        newId={newDevelopmentId}
+        onSave={async (payload) => {
+          const ok = await onSave(payload);
+          if (ok) setDevelopmentForm(null);
+        }}
+        readOnly={readOnly}
+        catalogProperties={catalogProperties}
+        propertiesLoading={propertiesLoading}
+        propertyLinking={propertyLinking}
+        onLinkProperty={onLinkProperty}
+        onUnlinkProperty={onUnlinkProperty}
+        onEditProperty={onEditProperty}
+      />
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5 sm:px-4 sm:py-3 lg:px-6">
-              <div className="mx-auto grid max-w-[120rem] grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-[min(100%,26rem)_minmax(0,1fr)] xl:gap-x-6 xl:gap-y-3 xl:items-start">
-                <div className="min-w-0 space-y-3 xl:sticky xl:top-1 xl:col-start-1 xl:row-start-1 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto xl:pr-1">
-                  <ImageGalleryEditor
-                    segment="hero"
-                    variant="featured"
-                    label="Galería"
-                    hint="La primera imagen es la portada en listados y en la ficha pública."
-                    disabled={readOnly}
-                    images={form.images}
-                    onChange={(next) => setForm((p) => ({ ...p, images: next }))}
-                  />
-                  <div className="rounded-xl border border-slate-200/90 bg-white p-3 shadow-[0_6px_24px_-10px_rgba(20,28,46,0.1)] sm:p-3.5">
-                    <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2 sm:gap-3">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                          Estatus
-                        </Label>
-                        <select
-                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm"
-                          style={{ fontWeight: 500 }}
-                          disabled={readOnly}
-                          value={form.status}
-                          onChange={(e) => setForm((p) => ({ ...p, status: e.target.value as DevelopmentStatus }))}
-                        >
-                          {statuses.map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                          Unidades
-                        </Label>
-                        <input
-                          type="number"
-                          min={1}
-                          className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
-                          style={{ fontWeight: 500 }}
-                          disabled={readOnly}
-                          value={form.units}
-                          onChange={(e) => setForm((p) => ({ ...p, units: Number(e.target.value) }))}
-                        />
-                      </div>
-                      <div className="col-span-1 grid grid-cols-2 gap-2 sm:gap-3 min-[400px]:col-span-2">
-                        <div className="min-w-0 space-y-1">
-                          <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                            Tel. (web / WhatsApp)
-                          </Label>
-                          <input
-                            type="tel"
-                            className="w-full min-w-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                            style={{ fontWeight: 500 }}
-                            disabled={readOnly}
-                            placeholder="+52…"
-                            value={form.inChargePhone}
-                            onChange={(e) => setForm((p) => ({ ...p, inChargePhone: e.target.value }))}
-                          />
-                        </div>
-                        <div className="min-w-0 space-y-1">
-                          <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                            Entrega
-                          </Label>
-                          <input
-                            className="w-full min-w-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                            style={{ fontWeight: 500 }}
-                            disabled={readOnly}
-                            value={form.deliveryDate}
-                            onChange={(e) => setForm((p) => ({ ...p, deliveryDate: e.target.value }))}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <section
-                  className={cn(
-                    "min-w-0 space-y-2.5 rounded-xl border border-slate-200/90 bg-white p-3 shadow-[0_6px_24px_-10px_rgba(20,28,46,0.1)] sm:p-3.5 xl:col-start-2 xl:row-start-1",
-                    "xl:max-h-[min(36rem,calc(100dvh-13rem))] xl:overflow-y-auto xl:pr-1"
-                  )}
-                >
-                  <div className="flex flex-col gap-3 border-b border-slate-200/60 pb-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:pb-3">
-                    <div className="min-w-0 sm:flex-1 sm:pt-0.5">
-                      <h3 className="font-heading text-base text-brand-navy sm:text-lg" style={{ fontWeight: 700 }}>
-                        Datos del desarrollo
-                      </h3>
-                      <p className="mt-0.5 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
-                        Identificación, ubicación, contacto, comercial y descripción pública.
-                      </p>
-                    </div>
-
-                    <div
-                      className={cn(
-                        "flex w-full shrink-0 items-center gap-2 rounded-xl border px-2.5 py-2 shadow-sm sm:mt-0 sm:max-w-[min(100%,20rem)] sm:py-1.5",
-                        form.featured
-                          ? "border-amber-300/50 bg-gradient-to-r from-amber-50/90 to-amber-50/20 ring-1 ring-amber-200/30"
-                          : "border-slate-200/80 bg-gradient-to-r from-slate-50/70 to-white ring-1 ring-slate-900/[0.04]"
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors",
-                          form.featured
-                            ? "border-amber-200/80 bg-amber-100/80 text-amber-700"
-                            : "border-slate-200/90 bg-white text-amber-500/80"
-                        )}
-                        aria-hidden
-                      >
-                        <Star
-                          className="h-3.5 w-3.5"
-                          strokeWidth={2}
-                          fill={form.featured ? "currentColor" : "none"}
-                        />
-                      </div>
-                      <div className="min-w-0 flex-1 pr-0.5">
-                        <Label
-                          htmlFor="viterra-development-featured"
-                          className="block cursor-pointer text-[12px] leading-tight text-slate-800 sm:text-sm"
-                          style={{ fontWeight: 600 }}
-                        >
-                          <span className="sm:hidden">Destacado</span>
-                          <span className="hidden sm:inline">Destacar desarrollo</span>
-                        </Label>
-                      </div>
-                      <div className="flex shrink-0 self-center pl-0.5">
-                        <Switch
-                          id="viterra-development-featured"
-                          checked={Boolean(form.featured)}
-                          disabled={readOnly}
-                          onCheckedChange={(v) => setForm((p) => ({ ...p, featured: v }))}
-                          className="data-[state=unchecked]:bg-slate-200/80"
-                          aria-label="Destacar desarrollo"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                        Nombre
-                      </Label>
-                      <input
-                        required
-                        className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
-                        style={{ fontWeight: 500 }}
-                        placeholder="Ej. Residencial Bosque Real"
-                        value={form.name}
-                        onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                        Tipo
-                      </Label>
-                      <input
-                        required
-                        className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
-                        style={{ fontWeight: 500 }}
-                        placeholder="Conjunto, torre…"
-                        value={form.type}
-                        onChange={(e) => setForm((p) => ({ ...p, type: e.target.value }))}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                        Ubicación
-                      </Label>
-                      <input
-                        required
-                        className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
-                        style={{ fontWeight: 500 }}
-                        value={form.location}
-                        onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                        Colonia
-                      </Label>
-                      <input
-                        className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
-                        style={{ fontWeight: 500 }}
-                        value={form.colony}
-                        onChange={(e) => setForm((p) => ({ ...p, colony: e.target.value }))}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                      Dirección completa
-                    </Label>
-                    <input
-                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
-                      style={{ fontWeight: 500 }}
-                      value={form.fullAddress}
-                      onChange={(e) => setForm((p) => ({ ...p, fullAddress: e.target.value }))}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                      Correo (sitio web)
-                    </Label>
-                    <input
-                      type="email"
-                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
-                      style={{ fontWeight: 500 }}
-                      placeholder="contacto@ejemplo.com"
-                      value={form.inChargeEmail}
-                      onChange={(e) => setForm((p) => ({ ...p, inChargeEmail: e.target.value }))}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                      Rango de precio
-                    </Label>
-                    <input
-                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
-                      style={{ fontWeight: 500 }}
-                      value={form.priceRange}
-                      onChange={(e) => setForm((p) => ({ ...p, priceRange: e.target.value }))}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                      Descripción
-                    </Label>
-                    <textarea
-                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
-                      style={{ fontWeight: 500 }}
-                      rows={4}
-                      value={form.description}
-                      onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-                    />
-                  </div>
-                </section>
-
-                <div className="min-w-0 xl:col-span-2 xl:row-start-2">
-                  <ImageGalleryEditor
-                    segment="gallery"
-                    variant="featured"
-                    label="Galería"
-                    hint="La primera imagen es la portada en listados y en la ficha pública."
-                    disabled={readOnly}
-                    images={form.images}
-                    onChange={(next) => setForm((p) => ({ ...p, images: next }))}
-                  />
-                </div>
-              </div>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <AlertDialog open={deleteTargetId !== null} onOpenChange={(o) => !o && setDeleteTargetId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar este desarrollo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se ocultará del panel admin. Las propiedades vinculadas conservan su desarrollo asignado hasta que
+              lo cambies en cada ficha.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => {
+                if (deleteTargetId) void onDelete(deleteTargetId);
+                setDeleteTargetId(null);
+              }}
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

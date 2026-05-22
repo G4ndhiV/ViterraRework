@@ -22,6 +22,23 @@ import {
 } from "lucide-react";
 import { useDevelopmentDetail } from "../hooks/useDevelopmentsCatalog";
 import { displayDeliveryDate } from "../data/developments";
+import { previewDevelopmentReferenceCode } from "../lib/developmentReferenceCode";
+import { developmentTours3dList, developmentVideosList } from "../lib/developmentMedia";
+import { hasRichDescription, RICH_DESCRIPTION_HTML_CLASS } from "../lib/propertyDescription";
+import {
+  propertyTour3dDisplayTitle,
+  resolvePropertyTour3dUrls,
+} from "../lib/propertyTours3d";
+import {
+  propertyVideoDisplayTitle,
+  resolveAllPropertyVideoUrls,
+} from "../lib/propertyVideos";
+import { resolveTelHref } from "../lib/phoneLink";
+import { resolveWhatsappHref } from "../lib/whatsappLink";
+import { useSiteContent } from "../../contexts/SiteContentContext";
+import { mergeSiteSection } from "../../lib/siteContentMerge";
+import { PublicDetailContactBlock } from "../components/PublicDetailContactBlock";
+import { PropertyVideoPlayer } from "../components/PropertyVideoPlayer";
 import { WhatsAppGlyph } from "../components/WhatsAppGlyph";
 import { cn } from "../components/ui/utils";
 import type { Property } from "../components/PropertyCard";
@@ -30,12 +47,13 @@ import { FeatureSection } from "../components/FeatureSectionBlocks";
 import { getSupabaseClient } from "../lib/supabaseClient";
 import { messageForCatalogLeadRpcError, submitCatalogLeadViaRpc } from "../lib/supabaseLeads";
 
-const DEVELOPMENT_DETAIL_TABS = [
-  { id: "descripcion" as const, label: "Descripción" },
-  { id: "caracteristicas" as const, label: "Características" },
-  { id: "unidades" as const, label: "Unidades" },
-  { id: "ubicacion" as const, label: "Ubicación" },
-];
+type DevelopmentDetailTabId =
+  | "descripcion"
+  | "video"
+  | "tour3d"
+  | "caracteristicas"
+  | "unidades"
+  | "ubicacion";
 
 function precioDesdeTexto(priceRange: string | undefined): string {
   const t = (priceRange ?? "").trim();
@@ -54,31 +72,24 @@ function propertyCardHeadline(p: Property) {
   return p.publicationTitle?.trim() || p.title;
 }
 
-function digitsOnlyPhone(s: string | undefined): string {
-  return String(s ?? "").replace(/\D/g, "");
-}
-
-/** URI `tel:` con formato internacional (+); 10 dígitos → prefijo México 52. */
-function telHrefFromStoredPhone(raw: string | undefined): string {
-  const d = digitsOnlyPhone(raw);
-  if (d.length < 10) return "";
-  const intl = d.length === 10 ? `52${d}` : d;
-  return `tel:+${intl}`;
-}
-
-/** Mismo número que para WhatsApp (wa.me). */
-function whatsappHrefFromStoredPhone(raw: string | undefined): string {
-  const d = digitsOnlyPhone(raw);
-  if (d.length < 10) return "";
-  const intl = d.length === 10 ? `52${d}` : d;
-  return `https://wa.me/${intl}`;
+function developmentContactMessage(
+  dev: { name: string; referenceCode?: string },
+  extra: string,
+): string {
+  const ref = dev.referenceCode?.trim();
+  const parts = [`Hola, me interesa el desarrollo ${dev.name}.`];
+  if (ref) parts.push(`Referencia: ${ref}.`);
+  parts.push(extra);
+  return parts.join(" ");
 }
 
 export function DevelopmentDetailPage() {
   const { id } = useParams();
   const { development, linkedProperties, loading, error } = useDevelopmentDetail(id);
+  const { content } = useSiteContent();
+  const contactSite = mergeSiteSection("contact", content.contact);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [activeTab, setActiveTab] = useState("descripcion");
+  const [activeTab, setActiveTab] = useState<DevelopmentDetailTabId>("descripcion");
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -232,13 +243,112 @@ export function DevelopmentDetailPage() {
 
   const contactPhoneRaw = development?.inChargePhone?.trim() ?? "";
   const telContactHref = useMemo(
-    () => telHrefFromStoredPhone(contactPhoneRaw),
-    [contactPhoneRaw]
+    () => resolveTelHref(contactPhoneRaw),
+    [contactPhoneRaw],
   );
-  const whatsappContactHref = useMemo(
-    () => whatsappHrefFromStoredPhone(contactPhoneRaw),
-    [contactPhoneRaw]
+  const siteWhatsappFallback = contactSite.quickWhatsappHref || "https://wa.me/523318878494";
+
+  const resolvedVideos = useMemo(() => {
+    if (!development) return [];
+    const client = getSupabaseClient();
+    return resolveAllPropertyVideoUrls(developmentVideosList(development), client);
+  }, [development]);
+
+  const resolvedTours3d = useMemo(() => {
+    if (!development) return [];
+    return resolvePropertyTour3dUrls(developmentTours3dList(development));
+  }, [development]);
+
+  const hasVideo = resolvedVideos.length > 0;
+  const hasTour3d = resolvedTours3d.length > 0;
+
+  const displayReference = useMemo(() => {
+    if (!development) return "";
+    return (
+      development.referenceCode?.trim() ||
+      previewDevelopmentReferenceCode(development.referenceCode, development.tokkoId, development.id)
+    );
+  }, [development]);
+
+  const whatsappInterestMessage = useMemo(
+    () =>
+      development
+        ? developmentContactMessage(
+            { name: development.name, referenceCode: displayReference },
+            "¿Podrían darme más información?",
+          )
+        : "",
+    [development, displayReference],
   );
+
+  const whatsappVisitMessage = useMemo(
+    () =>
+      development
+        ? developmentContactMessage(
+            { name: development.name, referenceCode: displayReference },
+            "Me gustaría agendar una visita.",
+          )
+        : "",
+    [development, displayReference],
+  );
+
+  const whatsappContactHref = useMemo(() => {
+    const stored = development?.inChargeWhatsapp?.trim();
+    return resolveWhatsappHref(stored, siteWhatsappFallback, whatsappInterestMessage);
+  }, [development?.inChargeWhatsapp, siteWhatsappFallback, whatsappInterestMessage]);
+
+  const whatsappVisitHref = useMemo(() => {
+    const stored = development?.inChargeWhatsapp?.trim();
+    return resolveWhatsappHref(stored, siteWhatsappFallback, whatsappVisitMessage);
+  }, [development?.inChargeWhatsapp, siteWhatsappFallback, whatsappVisitMessage]);
+
+  const scheduleVisitHref = useMemo(() => {
+    if (whatsappVisitHref && whatsappVisitHref.includes("wa.me")) return whatsappVisitHref;
+    if (telContactHref) return telContactHref;
+    return "/contacto";
+  }, [whatsappVisitHref, telContactHref]);
+
+  const contactAdvisorHref = useMemo(() => {
+    if (telContactHref) return telContactHref;
+    if (whatsappContactHref && whatsappContactHref.includes("wa.me")) return whatsappContactHref;
+    return "/contacto";
+  }, [telContactHref, whatsappContactHref]);
+
+  const scheduleVisitExternal = scheduleVisitHref.startsWith("http") || scheduleVisitHref.startsWith("tel:");
+  const contactAdvisorExternal =
+    contactAdvisorHref.startsWith("http") || contactAdvisorHref.startsWith("tel:");
+
+  const detailTabs = useMemo(() => {
+    const tabs: Array<{ id: DevelopmentDetailTabId; label: string }> = [
+      { id: "descripcion", label: "Descripción" },
+    ];
+    if (hasVideo) {
+      tabs.push({
+        id: "video",
+        label: resolvedVideos.length > 1 ? `Videos (${resolvedVideos.length})` : "Video",
+      });
+    }
+    if (hasTour3d) {
+      tabs.push({
+        id: "tour3d",
+        label:
+          resolvedTours3d.length > 1
+            ? `Recorridos 3D (${resolvedTours3d.length})`
+            : "Recorrido 3D",
+      });
+    }
+    tabs.push(
+      { id: "caracteristicas", label: "Características" },
+      { id: "unidades", label: "Unidades" },
+      { id: "ubicacion", label: "Ubicación" },
+    );
+    return tabs;
+  }, [hasVideo, hasTour3d, resolvedVideos.length, resolvedTours3d.length]);
+
+  useEffect(() => {
+    if (!hasVideo && activeTab === "video") setActiveTab("descripcion");
+    if (!hasTour3d && activeTab === "tour3d") setActiveTab("descripcion");
+  }, [hasVideo, hasTour3d, activeTab, development?.id]);
   const locationQuery = useMemo(
     () =>
       encodeURIComponent(
@@ -353,7 +463,9 @@ export function DevelopmentDetailPage() {
     "border border-black/15 bg-white text-neutral-950 shadow-[0_1px_3px_rgba(0,0,0,0.12)]";
 
   const descriptionNeedsExpand =
-    development.description.length > DESCRIPTION_COLLAPSE_THRESHOLD;
+    (hasRichDescription(development.richDescription)
+      ? development.richDescription!.length
+      : development.description.length) > DESCRIPTION_COLLAPSE_THRESHOLD;
 
   return (
     <div className="viterra-page min-h-screen flex flex-col bg-slate-50">
@@ -456,7 +568,7 @@ export function DevelopmentDetailPage() {
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-200">
                 <div className="flex overflow-x-auto">
-                  {DEVELOPMENT_DETAIL_TABS.map((tab) => (
+                  {detailTabs.map((tab) => (
                     <button
                       key={tab.id}
                       type="button"
@@ -491,15 +603,33 @@ export function DevelopmentDetailPage() {
                               "space-y-4",
                               descriptionNeedsExpand &&
                                 !descriptionExpanded &&
-                                "max-h-[min(14rem,42vh)] overflow-hidden md:max-h-[min(16rem,38vh)]"
+                                "max-h-[min(14rem,42vh)] overflow-hidden md:max-h-[min(16rem,38vh)]",
                             )}
                           >
-                            <p className="text-base leading-relaxed text-slate-700" style={{ fontWeight: 400 }}>
-                              {development.description}
-                            </p>
-                            <p className="text-base leading-relaxed text-slate-700" style={{ fontWeight: 400 }}>
-                              {INTRO_LOCATION_BLURB}
-                            </p>
+                            {hasRichDescription(development.richDescription) ? (
+                              <>
+                                {development.description?.trim() ? (
+                                  <p
+                                    className="whitespace-pre-line text-base leading-relaxed text-slate-600"
+                                    style={{ fontWeight: 400 }}
+                                  >
+                                    {development.description.trim()}
+                                  </p>
+                                ) : null}
+                                <div
+                                  className={RICH_DESCRIPTION_HTML_CLASS}
+                                  dangerouslySetInnerHTML={{ __html: development.richDescription! }}
+                                />
+                              </>
+                            ) : development.description?.trim() ? (
+                              <p className="text-base leading-relaxed text-slate-700" style={{ fontWeight: 400 }}>
+                                {development.description}
+                              </p>
+                            ) : (
+                              <p className="text-base leading-relaxed text-slate-600" style={{ fontWeight: 400 }}>
+                                {INTRO_LOCATION_BLURB}
+                              </p>
+                            )}
                           </div>
                           {descriptionNeedsExpand && !descriptionExpanded ? (
                             <div
@@ -519,6 +649,54 @@ export function DevelopmentDetailPage() {
                             {descriptionExpanded ? "Ver menos" : "Ver más"}
                           </button>
                         ) : null}
+                      </div>
+                    )}
+
+                    {activeTab === "video" && hasVideo && (
+                      <div className="space-y-8">
+                        {resolvedVideos.map(({ entry, playbackUrl }, index) => {
+                          const heading = propertyVideoDisplayTitle(
+                            entry,
+                            index,
+                            resolvedVideos.length,
+                          );
+                          return (
+                            <div key={entry.id} className="space-y-2">
+                              {heading ? (
+                                <h3 className="text-base font-semibold text-slate-800">{heading}</h3>
+                              ) : null}
+                              <PropertyVideoPlayer
+                                url={playbackUrl}
+                                title={heading ?? development.name}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {activeTab === "tour3d" && hasTour3d && (
+                      <div className="space-y-8">
+                        {resolvedTours3d.map(({ entry, embedUrl }, index) => {
+                          const heading = propertyTour3dDisplayTitle(
+                            entry,
+                            index,
+                            resolvedTours3d.length,
+                          );
+                          return (
+                            <div key={entry.id} className="space-y-2">
+                              {heading ? (
+                                <h3 className="text-base font-semibold text-slate-800">{heading}</h3>
+                              ) : null}
+                              <iframe
+                                title={heading ?? "Recorrido virtual 3D"}
+                                src={embedUrl}
+                                className="h-[min(70vh,520px)] w-full rounded-xl border border-slate-200 bg-slate-100"
+                                allow="fullscreen; xr-spatial-tracking; gyroscope; accelerometer"
+                              />
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
 
@@ -783,49 +961,24 @@ export function DevelopmentDetailPage() {
               </div>
             </div>
 
-            {/* Lead — mismo patrón que referencia visual: acciones rápidas + formulario */}
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <h2 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl" style={{ fontWeight: 700 }}>
-                ¿Te interesa este desarrollo?
-              </h2>
-              <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-600" style={{ fontWeight: 400 }}>
-                Llama, escribe por WhatsApp o déjanos tus datos y un asesor te contacta.
-              </p>
-
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                {telContactHref ? (
-                  <a
-                    href={telContactHref}
-                    className="flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-900 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50"
-                    style={{ fontWeight: 600 }}
-                  >
-                    <Phone className="h-4 w-4" strokeWidth={2} />
-                    Llama
-                  </a>
-                ) : (
-                  <span className="flex cursor-not-allowed items-center justify-center gap-2 rounded-lg border border-dashed border-slate-200 bg-slate-50 py-3 text-sm font-medium text-slate-400">
-                    <Phone className="h-4 w-4" strokeWidth={2} />
-                    Llama
-                  </span>
-                )}
-                {whatsappContactHref ? (
-                  <a
-                    href={whatsappContactHref}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 rounded-lg bg-[#25D366] py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#20bd5a]"
-                    style={{ fontWeight: 600 }}
-                  >
-                    <WhatsAppGlyph className="h-4 w-4 text-white" />
-                    WhatsApp
-                  </a>
-                ) : (
-                  <span className="flex cursor-not-allowed items-center justify-center gap-2 rounded-lg bg-slate-200 py-3 text-sm font-medium text-slate-500">
-                    <WhatsAppGlyph className="h-4 w-4" />
-                    WhatsApp
-                  </span>
-                )}
-              </div>
+              <PublicDetailContactBlock
+                embedded
+                title="¿Te interesa este desarrollo?"
+                intro="Llama, escribe por WhatsApp o déjanos tus datos y un asesor te contacta."
+                phone={contactPhoneRaw}
+                whatsappStored={development.inChargeWhatsapp}
+                telHref={telContactHref}
+                whatsappHref={whatsappContactHref}
+                responsibleName={development.inChargeName}
+                callButtonLabel="Llama"
+                showGlobalWhatsappHint={!development.inChargeWhatsapp?.trim()}
+                phoneInvalidHint={
+                  !telContactHref && contactPhoneRaw
+                    ? "El teléfono guardado no tiene suficientes dígitos para llamar; usa al menos 10 con lada."
+                    : undefined
+                }
+              />
 
               <div className="relative py-6">
                 <div className="absolute inset-0 flex items-center" aria-hidden>
@@ -983,21 +1136,51 @@ export function DevelopmentDetailPage() {
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+                {development.inChargeName?.trim() ? (
+                  <p className="mb-3 text-sm text-slate-600">
+                    <span className="font-medium text-slate-800">Asesor:</span>{" "}
+                    {development.inChargeName.trim()}
+                  </p>
+                ) : null}
                 <div className="space-y-3">
-                  <Link
-                    to="/contacto"
-                    className="block w-full rounded-lg bg-[#C8102E] px-6 py-3 text-center font-medium text-white transition-all duration-300 hover:bg-[#a00d25] hover:shadow-lg"
-                    style={{ fontWeight: 600 }}
-                  >
-                    Agendar visita
-                  </Link>
-                  <Link
-                    to="/contacto"
-                    className="block w-full rounded-lg border-2 border-slate-900 px-6 py-3 text-center font-medium text-slate-900 transition-all hover:bg-slate-50"
-                    style={{ fontWeight: 600 }}
-                  >
-                    Contactar asesor
-                  </Link>
+                  {scheduleVisitExternal ? (
+                    <a
+                      href={scheduleVisitHref}
+                      target={scheduleVisitHref.startsWith("http") ? "_blank" : undefined}
+                      rel={scheduleVisitHref.startsWith("http") ? "noopener noreferrer" : undefined}
+                      className="block w-full rounded-lg bg-[#C8102E] px-6 py-3 text-center font-medium text-white transition-all duration-300 hover:bg-[#a00d25] hover:shadow-lg"
+                      style={{ fontWeight: 600 }}
+                    >
+                      Agendar visita
+                    </a>
+                  ) : (
+                    <Link
+                      to={scheduleVisitHref}
+                      className="block w-full rounded-lg bg-[#C8102E] px-6 py-3 text-center font-medium text-white transition-all duration-300 hover:bg-[#a00d25] hover:shadow-lg"
+                      style={{ fontWeight: 600 }}
+                    >
+                      Agendar visita
+                    </Link>
+                  )}
+                  {contactAdvisorExternal ? (
+                    <a
+                      href={contactAdvisorHref}
+                      target={contactAdvisorHref.startsWith("http") ? "_blank" : undefined}
+                      rel={contactAdvisorHref.startsWith("http") ? "noopener noreferrer" : undefined}
+                      className="block w-full rounded-lg border-2 border-slate-900 px-6 py-3 text-center font-medium text-slate-900 transition-all hover:bg-slate-50"
+                      style={{ fontWeight: 600 }}
+                    >
+                      Contactar asesor
+                    </a>
+                  ) : (
+                    <Link
+                      to={contactAdvisorHref}
+                      className="block w-full rounded-lg border-2 border-slate-900 px-6 py-3 text-center font-medium text-slate-900 transition-all hover:bg-slate-50"
+                      style={{ fontWeight: 600 }}
+                    >
+                      Contactar asesor
+                    </Link>
+                  )}
                 </div>
 
                 <div className="mt-6 space-y-2.5 border-t border-slate-200 pt-5 text-[13px]">
@@ -1006,7 +1189,7 @@ export function DevelopmentDetailPage() {
                       Referencia:
                     </span>
                     <span className="break-all text-right text-slate-900" style={{ fontWeight: 600 }}>
-                      {development.referenceCode?.trim() || "—"}
+                      {displayReference || "—"}
                     </span>
                   </div>
                   <div className="flex justify-between">

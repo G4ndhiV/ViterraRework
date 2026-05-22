@@ -7,6 +7,7 @@ import {
   PROPERTY_VIDEO_MAX_BYTES,
   deletePropertyMediaObject,
   uploadPropertyVideo,
+  type UploadEntityVideoFn,
 } from "../../../lib/supabasePropertyMedia";
 import type { PropertyVideoEntry } from "../../PropertyCard";
 import { PropertyVideoPlayer } from "../../PropertyVideoPlayer";
@@ -25,9 +26,20 @@ type Props = {
   propertyId: string;
   videos: PropertyVideoEntry[];
   onChange: (videos: PropertyVideoEntry[]) => void;
+  /** Por defecto sube a `properties/{id}/video/`. Desarrollos pasan `uploadDevelopmentVideo`. */
+  uploadVideo?: UploadEntityVideoFn;
+  maxVideosLabel?: string;
 };
 
-export function PropertyVideosEditor({ client, propertyId, videos, onChange }: Props) {
+export function PropertyVideosEditor({
+  client,
+  propertyId,
+  videos,
+  onChange,
+  uploadVideo,
+  maxVideosLabel = "propiedad",
+}: Props) {
+  const doUpload = uploadVideo ?? uploadPropertyVideo;
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploadPct, setUploadPct] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -58,7 +70,7 @@ export function PropertyVideosEditor({ client, propertyId, videos, onChange }: P
     const url = urlInput.trim();
     if (!url) return;
     if (list.length >= MAX_VIDEOS) {
-      window.alert(`Máximo ${MAX_VIDEOS} videos por propiedad.`);
+      window.alert(`Máximo ${MAX_VIDEOS} videos por ${maxVideosLabel}.`);
       return;
     }
     const label = titleInput.trim() || undefined;
@@ -73,7 +85,7 @@ export function PropertyVideosEditor({ client, propertyId, videos, onChange }: P
       return;
     }
     if (list.length >= MAX_VIDEOS) {
-      window.alert(`Máximo ${MAX_VIDEOS} videos por propiedad.`);
+      window.alert(`Máximo ${MAX_VIDEOS} videos por ${maxVideosLabel}.`);
       return;
     }
     if (file.size > PROPERTY_VIDEO_MAX_BYTES) {
@@ -83,7 +95,7 @@ export function PropertyVideosEditor({ client, propertyId, videos, onChange }: P
     setUploading(true);
     setUploadPct(0);
     try {
-      const { path, publicUrl } = await uploadPropertyVideo(client, propertyId, file, setUploadPct);
+      const { path, publicUrl } = await doUpload(client, propertyId, file, setUploadPct);
       const baseName = file.name.replace(/\.[^.]+$/, "").trim();
       const label = titleInput.trim() || baseName || undefined;
       onChange([

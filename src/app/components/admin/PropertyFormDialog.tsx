@@ -9,6 +9,7 @@ import { Switch } from "../ui/switch";
 import { cn } from "../ui/utils";
 import { copyPublicPageUrl } from "../../lib/copyPublicLink";
 import type { Property } from "../PropertyCard";
+import type { Development } from "../../data/developments";
 import {
   Building2,
   ChevronRight,
@@ -53,6 +54,9 @@ type Props = {
   newId: string;
   onSave: (property: Property) => void;
   otherFeaturedCount: number;
+  developments?: Development[];
+  developmentsLoading?: boolean;
+  catalogProperties?: Property[];
 };
 
 const STEP_ICONS: Record<PropertyFormStepId, typeof ImageIcon> = {
@@ -108,6 +112,9 @@ export function PropertyFormDialog({
   newId,
   onSave,
   otherFeaturedCount,
+  developments = [],
+  developmentsLoading = false,
+  catalogProperties = [],
 }: Props) {
   const [draft, setDraft] = useState<Property | null>(null);
   const [activeStep, setActiveStep] = useState<PropertyFormStepId>("medios");
@@ -463,6 +470,9 @@ export function PropertyFormDialog({
                       <PropertyTechnicalSection
                         client={client}
                         draft={draft}
+                        developments={developments}
+                        developmentsLoading={developmentsLoading}
+                        catalogProperties={catalogProperties}
                         onDraftChange={patchDraft}
                       />
                     )}
@@ -508,7 +518,7 @@ export function PropertyFormDialog({
                 </main>
 
                 <aside className="hidden w-[17.5rem] shrink-0 overflow-y-auto border-l border-stone-200/80 bg-gradient-to-b from-stone-100/80 to-stone-50 px-4 py-6 xl:block xl:w-[22rem] xl:px-5 2xl:w-[24rem]">
-                  <PropertyFormPreview draft={draft} />
+                  <PropertyFormPreview draft={draft} developments={developments} />
                 </aside>
               </div>
             </div>

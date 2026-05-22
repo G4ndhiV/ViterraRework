@@ -16,6 +16,7 @@ import {
   type CatalogPropertySortKey,
 } from "../lib/catalogPropertySort";
 import { applyAdvancedPropertyFilters } from "../lib/applyAdvancedPropertyFilters";
+import { propertyMatchesTypeFilter } from "../lib/propertyTypesCatalog";
 import { SlidersHorizontal, Map, LayoutGrid } from "lucide-react";
 import { Reveal } from "../components/Reveal";
 import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
@@ -61,6 +62,10 @@ export function RentPage() {
     [properties]
   );
   const catalogPrices = useMemo(() => rentProperties.map((p) => p.price), [rentProperties]);
+  const catalogPropertyTypes = useMemo(
+    () => rentProperties.map((p) => p.type).filter(Boolean),
+    [rentProperties]
+  );
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
   const [sortBy, setSortBy] = useState<CatalogPropertySortKey>("newest");
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
@@ -86,9 +91,7 @@ export function RentPage() {
     }
 
     if (filters.type) {
-      filtered = filtered.filter(
-        (property) => property.type.toLowerCase() === filters.type.toLowerCase()
-      );
+      filtered = filtered.filter((property) => propertyMatchesTypeFilter(property.type, filters.type));
     }
 
     if (filters.minPrice) {
@@ -212,7 +215,12 @@ export function RentPage() {
               viewport={{ once: true, amount: 0.35 }}
               transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
             >
-              <SearchBar onSearch={handleSearch} defaultStatus="alquiler" catalogPrices={catalogPrices} />
+              <SearchBar
+                onSearch={handleSearch}
+                defaultStatus="alquiler"
+                catalogPrices={catalogPrices}
+                extraPropertyTypes={catalogPropertyTypes}
+              />
             </motion.div>
           </Reveal>
         </div>

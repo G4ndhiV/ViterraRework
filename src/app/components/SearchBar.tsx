@@ -7,6 +7,8 @@ import {
   SearchBarCatalogPriceRange,
   type SearchBarCatalogPriceRangeHandle,
 } from "./SearchBarCatalogPriceRange";
+import { useTokkoPropertyTypes } from "../hooks/useTokkoPropertyTypes";
+import { PropertyTypeFilterField } from "./PropertyTypeFilterField";
 
 interface SearchBarProps {
   onSearch?: (filters: SearchFilters) => void;
@@ -17,10 +19,16 @@ interface SearchBarProps {
   defaultStatus?: "" | "alquiler" | "venta";
   /** Enlace a dibujar zona en mapa (`/propiedades/mapa`). */
   showMapZoneLink?: boolean;
+  /** Oculta el selector de tipo (p. ej. listado de desarrollos). */
+  hideTypeFilter?: boolean;
+  /** Oculta recámaras, baños y superficie en filtros avanzados. */
+  hidePropertyAdvancedFilters?: boolean;
   /** Precios del catálogo (MXN). Vacío si usas `catalogPriceSlices`. */
   catalogPrices?: number[];
   /** Precios por operación: si ambos tienen datos, se muestra toggle Venta / Alquiler para el dominio del slider. */
   catalogPriceSlices?: { venta: number[]; alquiler: number[] };
+  /** Tipos personalizados del catálogo (p. ej. «Otro») además de `tokko_property_types`. */
+  extraPropertyTypes?: string[];
 }
 
 export interface SearchFilters {
@@ -50,9 +58,14 @@ export function SearchBar({
   variant = "default",
   defaultStatus = "",
   showMapZoneLink = true,
+  hideTypeFilter = false,
+  hidePropertyAdvancedFilters = false,
   catalogPrices,
   catalogPriceSlices,
+  extraPropertyTypes = [],
 }: SearchBarProps) {
+  const { types: propertyTypeOptions, loading: propertyTypesLoading } =
+    useTokkoPropertyTypes(extraPropertyTypes);
   const previewCanvas = usePreviewCanvas();
   const [searchParams] = useSearchParams();
   const advancedToggleId = useId();
@@ -149,7 +162,11 @@ export function SearchBar({
       ? "lg:grid-cols-[minmax(10.25rem,auto)_minmax(0,1.5fr)_minmax(0,0.9fr)_minmax(11rem,auto)] lg:items-end lg:gap-x-5"
       : showStatusFilter
         ? "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5"
-        : "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5";
+        : hideTypeFilter
+          ? "lg:grid-cols-[minmax(0,1fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5"
+          : "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5";
+
+  const showAdvancedFiltersBlock = !hidePropertyAdvancedFilters;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -292,25 +309,16 @@ export function SearchBar({
           />
         </div>
 
-        <div className="min-w-0 w-full">
-          <label className={labelClass}>Tipo</label>
-          <select
+        {!hideTypeFilter ? (
+          <PropertyTypeFilterField
             value={filters.type}
-            onChange={(e) => setFilters({ ...filters, type: e.target.value })}
-            className={cn(
-              fieldClass,
-              "cursor-pointer appearance-none bg-[length:12px] bg-[right_0.25rem_center] bg-no-repeat pr-9"
-            )}
-            style={selectChevronStyle}
-          >
-            <option value="">Todos</option>
-            <option value="casa">Casa</option>
-            <option value="apartamento">Apartamento</option>
-            <option value="villa">Villa</option>
-            <option value="penthouse">Penthouse</option>
-            <option value="oficina">Oficina</option>
-          </select>
-        </div>
+            onChange={(type) => setFilters({ ...filters, type })}
+            options={propertyTypeOptions}
+            loading={propertyTypesLoading}
+            labelClassName={labelClass}
+            inputClassName={fieldClass}
+          />
+        ) : null}
 
         {showStatusFilter ? (
           <div className="min-w-0 w-full">
@@ -348,6 +356,7 @@ export function SearchBar({
         </div>
       </div>
 
+      {showAdvancedFiltersBlock ? (
       <div className={cn(isAmbient && previewCanvas ? "mt-7 sm:mt-8" : compactAmbient ? "mt-4 sm:mt-5" : "mt-5")}>
         <div
           className={cn(
@@ -460,6 +469,7 @@ export function SearchBar({
           </div>
         ) : null}
       </div>
+      ) : null}
 
       {showMapZoneLink && (
         <div

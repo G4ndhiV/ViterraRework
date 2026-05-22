@@ -12,6 +12,7 @@ import {
   type CatalogPropertySortKey,
 } from "../lib/catalogPropertySort";
 import { applyAdvancedPropertyFilters } from "../lib/applyAdvancedPropertyFilters";
+import { propertyMatchesTypeFilter } from "../lib/propertyTypesCatalog";
 import { SlidersHorizontal, Building2, Map, LayoutGrid, MapPinned } from "lucide-react";
 
 export function PropertiesPage() {
@@ -22,6 +23,10 @@ export function PropertiesPage() {
       venta: properties.filter((p) => p.status === "venta").map((p) => p.price),
       alquiler: properties.filter((p) => p.status === "alquiler").map((p) => p.price),
     }),
+    [properties]
+  );
+  const catalogPropertyTypes = useMemo(
+    () => properties.map((p) => p.type).filter(Boolean),
     [properties]
   );
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
@@ -51,9 +56,7 @@ export function PropertiesPage() {
 
     // Filter by type
     if (filters.type) {
-      filtered = filtered.filter(
-        (property) => property.type.toLowerCase() === filters.type.toLowerCase()
-      );
+      filtered = filtered.filter((property) => propertyMatchesTypeFilter(property.type, filters.type));
     }
 
     // Filter by status
@@ -125,7 +128,11 @@ export function PropertiesPage() {
 
       {/* Search Section */}
       <section className="relative z-20 -mt-16 max-w-7xl mx-auto px-6 lg:px-8 w-full mb-16">
-        <SearchBar onSearch={handleSearch} catalogPriceSlices={catalogPriceSlices} />
+        <SearchBar
+          onSearch={handleSearch}
+          catalogPriceSlices={catalogPriceSlices}
+          extraPropertyTypes={catalogPropertyTypes}
+        />
       </section>
 
       {/* Results Section */}

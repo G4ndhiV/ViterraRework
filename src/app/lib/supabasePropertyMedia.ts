@@ -49,6 +49,24 @@ export function propertyMediaPathFromPublicUrl(publicUrl: string): string | null
   return path;
 }
 
+export async function uploadDevelopmentImage(
+  client: SupabaseClient,
+  developmentId: string,
+  file: File,
+): Promise<string> {
+  const ext = extensionForUpload(file);
+  const path = `developments/${developmentId}/photos/${crypto.randomUUID()}.${ext}`;
+  const { error } = await client.storage.from(PROPERTY_MEDIA_BUCKET_ID).upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+    contentType: file.type || undefined,
+  });
+  if (error) throw error;
+  const url = propertyMediaPublicUrl(client, path);
+  if (!url) throw new Error("No se obtuvo URL pública de la imagen.");
+  return url;
+}
+
 export async function uploadPropertyImage(
   client: SupabaseClient,
   propertyId: string,
@@ -67,12 +85,43 @@ export async function uploadPropertyImage(
   return url;
 }
 
-export async function uploadPropertyVideo(
+export type UploadEntityVideoFn = (
   client: SupabaseClient,
-  propertyId: string,
+  entityId: string,
   file: File,
-  onProgress?: (pct: number) => void
-): Promise<{ path: string; publicUrl: string }> {
+  onProgress?: (pct: number) => void,
+) => Promise<{ path: string; publicUrl: string }>;
+
+export const uploadDevelopmentVideo: UploadEntityVideoFn = async (
+  client,
+  developmentId,
+  file,
+  onProgress,
+) => {
+  if (file.size > PROPERTY_VIDEO_MAX_BYTES) {
+    throw new Error("El video supera el límite de 5 GB. Usa una URL externa.");
+  }
+  const ext = extensionForUpload(file);
+  const path = `developments/${developmentId}/video/${crypto.randomUUID()}.${ext}`;
+  onProgress?.(0);
+  const { error } = await client.storage.from(PROPERTY_MEDIA_BUCKET_ID).upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+    contentType: file.type || undefined,
+  });
+  if (error) throw error;
+  onProgress?.(100);
+  const publicUrl = propertyMediaPublicUrl(client, path);
+  if (!publicUrl) throw new Error("No se obtuvo URL pública del video.");
+  return { path, publicUrl };
+}
+
+export const uploadPropertyVideo: UploadEntityVideoFn = async (
+  client,
+  propertyId,
+  file,
+  onProgress,
+) => {
   if (file.size > PROPERTY_VIDEO_MAX_BYTES) {
     throw new Error("El video supera el límite de 5 GB. Usa una URL externa.");
   }

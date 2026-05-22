@@ -1,10 +1,16 @@
 import { motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
-import { ArrowRight, Loader2, MapPin, CheckCircle } from "lucide-react";
+import { SearchBar, type SearchFilters } from "../components/SearchBar";
+import { ArrowRight, MapPin, CheckCircle, SlidersHorizontal } from "lucide-react";
 import { Link } from "react-router";
-import { useDevelopmentsCatalogInfinite } from "../hooks/useDevelopmentsCatalog";
+import { useDevelopmentsCatalog } from "../hooks/useDevelopmentsCatalog";
+import {
+  developmentsCatalogPrices,
+  filterDevelopmentsCatalog,
+} from "../lib/developmentCatalogFilter";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
 import { mergeSiteSection } from "../../lib/siteContentMerge";
@@ -68,35 +74,46 @@ export function DevelopmentsPage() {
   const pl = usePreviewLayout();
   const { content } = useSiteContent();
   const page = mergeSiteSection("developments", content.developments);
-  const {
-    developments,
-    initialLoading,
-    loadingMore,
-    error,
-    loadMoreError,
-    hasMore,
-    loadMore,
-    reload,
-  } = useDevelopmentsCatalogInfinite(true);
+  const [searchParams] = useSearchParams();
+  const { developments, loading, error, reload } = useDevelopmentsCatalog(true);
+  const [filteredDevelopments, setFilteredDevelopments] = useState(developments);
 
-  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+  const catalogPrices = useMemo(() => developmentsCatalogPrices(developments), [developments]);
 
   useEffect(() => {
-    const el = loadMoreSentinelRef.current;
-    if (!el || !hasMore) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const hit = entries.some((e) => e.isIntersecting);
-        if (hit) void loadMore();
-      },
-      { root: null, rootMargin: "400px 0px", threshold: 0 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [hasMore, loadMore, developments.length]);
+    setFilteredDevelopments(developments);
+  }, [developments]);
 
-  const featuredDevelopments = developments.filter((x) => x.featured);
-  const otherDevelopments = developments.filter((x) => !x.featured);
+  const handleSearch = useCallback(
+    (filters: SearchFilters) => {
+      setFilteredDevelopments(filterDevelopmentsCatalog(developments, filters));
+    },
+    [developments]
+  );
+
+  useEffect(() => {
+    const filters: SearchFilters = {
+      query: searchParams.get("query") || "",
+      type: "",
+      status: "",
+      minPrice: searchParams.get("minPrice") || "",
+      maxPrice: searchParams.get("maxPrice") || "",
+      minBedrooms: "",
+      minBathrooms: "",
+      minArea: "",
+      maxArea: "",
+    };
+    const hasFilters = filters.query || filters.minPrice || filters.maxPrice;
+    if (hasFilters) {
+      handleSearch(filters);
+    } else {
+      setFilteredDevelopments(developments);
+    }
+  }, [searchParams, developments, handleSearch]);
+
+  const featuredDevelopments = filteredDevelopments.filter((x) => x.featured);
+  const otherDevelopments = filteredDevelopments.filter((x) => !x.featured);
+  const hasActiveFilters = filteredDevelopments.length !== developments.length;
 
   /** Etiqueta sobre imagen: blanco sólido + texto negro (legible en cualquier foto). */
   const statusBadgeClass =
@@ -177,7 +194,42 @@ export function DevelopmentsPage() {
       </section>
       </PreviewSectionChrome>
 
-      {error && developments.length === 0 && !initialLoading && (
+      <section className="border-b border-brand-navy/10 bg-brand-canvas py-12">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <Reveal y={22}>
+            <motion.div
+              initial={reduceMotion ? false : { opacity: 0.94, y: 10 }}
+              whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.35 }}
+              transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <SearchBar
+                onSearch={handleSearch}
+                hideTypeFilter
+                hidePropertyAdvancedFilters
+                showMapZoneLink={false}
+                catalogPrices={catalogPrices}
+              />
+            </motion.div>
+          </Reveal>
+        </div>
+      </section>
+
+      {!loading && developments.length > 0 && (
+        <section className="border-b border-brand-navy/10 bg-white py-6">
+          <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
+            <SlidersHorizontal className="h-5 w-5 text-primary" strokeWidth={1.5} aria-hidden />
+            <p className="font-heading text-sm font-medium text-brand-navy/90 not-italic">
+              {filteredDevelopments.length} desarrollo
+              {filteredDevelopments.length !== 1 ? "s" : ""}{" "}
+              {hasActiveFilters ? "coinciden con tu búsqueda" : "disponible"}
+              {filteredDevelopments.length !== 1 && !hasActiveFilters ? "s" : ""}
+            </p>
+          </div>
+        </section>
+      )}
+
+      {error && developments.length === 0 && !loading && (
         <section className="border-b border-brand-navy/10 bg-white py-14">
           <div className="mx-auto max-w-lg px-4 text-center sm:px-6">
             <p className="font-heading text-slate-800" style={{ fontWeight: 600 }}>
@@ -195,7 +247,7 @@ export function DevelopmentsPage() {
         </section>
       )}
 
-      {initialLoading && (
+      {loading && (
         <>
           <section className="bg-white py-12 sm:py-16 md:py-24">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -225,7 +277,7 @@ export function DevelopmentsPage() {
       )}
 
       {/* Featured Developments */}
-      {!initialLoading && featuredDevelopments.length > 0 && (
+      {!loading && featuredDevelopments.length > 0 && (
         <PreviewSectionChrome blockId="dev-featured" label="Proyectos destacados (títulos)">
         <section className="bg-white py-12 sm:py-16 md:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -337,7 +389,7 @@ export function DevelopmentsPage() {
       )}
 
       {/* Other Developments Grid */}
-      {!initialLoading && otherDevelopments.length > 0 && (
+      {!loading && otherDevelopments.length > 0 && (
         <section className="bg-brand-canvas py-12 sm:py-16 md:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <Reveal className="mb-8 sm:mb-12" y={20}>
@@ -421,7 +473,7 @@ export function DevelopmentsPage() {
         </section>
       )}
 
-      {!initialLoading && !error && developments.length === 0 && (
+      {!loading && !error && developments.length === 0 && (
         <section className="border-b border-brand-navy/10 bg-white py-16">
           <div className="mx-auto max-w-xl px-4 text-center text-brand-navy/75">
             <p className="font-heading text-lg" style={{ fontWeight: 500 }}>
@@ -431,31 +483,15 @@ export function DevelopmentsPage() {
         </section>
       )}
 
-      {!initialLoading && hasMore && developments.length > 0 && (
-        <div ref={loadMoreSentinelRef} className="h-3 w-full shrink-0" aria-hidden />
-      )}
-
-      {(loadingMore || loadMoreError) && developments.length > 0 && (
-        <div className="flex flex-col items-center justify-center gap-3 border-t border-brand-navy/10 bg-white px-4 py-8">
-          {loadingMore && (
-            <>
-              <Loader2 className="h-8 w-8 animate-spin text-primary" strokeWidth={1.75} aria-hidden />
-              <span className="sr-only">Cargando más desarrollos…</span>
-            </>
-          )}
-          {loadMoreError && (
-            <>
-              <p className="text-center text-sm text-red-700">{loadMoreError}</p>
-              <button
-                type="button"
-                className="rounded-lg border border-brand-navy/25 bg-white px-4 py-2 text-sm font-medium text-brand-navy hover:bg-brand-navy/[0.04]"
-                onClick={() => void loadMore()}
-              >
-                Reintentar
-              </button>
-            </>
-          )}
-        </div>
+      {!loading && !error && developments.length > 0 && filteredDevelopments.length === 0 && (
+        <section className="border-b border-brand-navy/10 bg-white py-16">
+          <div className="mx-auto max-w-xl px-4 text-center text-brand-navy/75">
+            <p className="font-heading text-lg" style={{ fontWeight: 500 }}>
+              No hay desarrollos que coincidan con tu búsqueda.
+            </p>
+            <p className="mt-2 text-sm">Prueba con otra ubicación o ajusta el rango de precios.</p>
+          </div>
+        </section>
       )}
 
       {/* CTA Section */}
