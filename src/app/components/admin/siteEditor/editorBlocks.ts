@@ -50,4 +50,11 @@ export const EDITOR_PAGE_BLOCKS: Record<SiteKey, { id: string; label: string }[]
   rent: [{ id: "rent-hero", label: "Cabecera" }],
   sale: [{ id: "sale-hero", label: "Cabecera" }],
   header: [{ id: "header-social", label: "Redes del encabezado" }],
+  footer: [
+    { id: "footer-brand", label: "Marca e introducción" },
+    { id: "footer-quick", label: "Enlaces rápidos" },
+    { id: "footer-services", label: "Servicios (automático)" },
+    { id: "footer-contact", label: "Contacto" },
+    { id: "footer-legal", label: "Copyright" },
+  ],
 };

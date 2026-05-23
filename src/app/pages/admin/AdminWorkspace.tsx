@@ -361,8 +361,6 @@ export function AdminWorkspace() {
     updateUser,
     updateUserPassword,
     updateUserPermissions,
-    archiveUser,
-    reactivateUser,
     deleteUser,
   } = useAuth();
 
@@ -4610,8 +4608,6 @@ export function AdminWorkspace() {
                     onUpdatePermissions={(id, role, permissions) =>
                       updateUserPermissions(id, role, permissions, user.name)
                     }
-                    onArchive={(id) => archiveUser(id, user.name)}
-                    onReactivate={(id) => reactivateUser(id, user.name)}
                     onDelete={(id) => deleteUser(id, user.name)}
                     onSendMessageNavigate={goToMessagesWith}
                     focusUser={usersPanelFocus}
@@ -5180,8 +5176,6 @@ export function AdminWorkspace() {
               onUpdatePermissions={(id, role, permissions) =>
                 updateUserPermissions(id, role, permissions, user.name)
               }
-              onArchive={(id) => archiveUser(id, user.name)}
-              onReactivate={(id) => reactivateUser(id, user.name)}
               onDelete={(id) => deleteUser(id, user.name)}
               onSendMessageNavigate={goToMessagesWith}
             />

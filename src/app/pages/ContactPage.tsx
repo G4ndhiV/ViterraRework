@@ -11,10 +11,6 @@ import {
   Building2,
   Send,
   ChevronDown,
-  Facebook,
-  Instagram,
-  Globe,
-  Youtube,
   ArrowRight,
   MessageCircle,
 } from "lucide-react";
@@ -25,12 +21,12 @@ import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSect
 import { HeroBackdropMedia } from "../components/HeroBackdropMedia";
 import { Reveal } from "../components/Reveal";
 import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
+import { ContactSocialGlyph } from "../components/ContactSocialGlyph";
 import { cn } from "../components/ui/utils";
 import {
   CONTACT_SOCIAL_LABELS,
   DEFAULT_SITE_CONTENT,
   type ContactInfoIcon,
-  type ContactSocialPlatform,
   type SiteContent,
 } from "../../data/siteContent";
 import {
@@ -80,31 +76,6 @@ function normalizeExternalHref(raw: string): string {
   if (/^https?:\/\//i.test(t) || t.startsWith("/") || t.startsWith("#") || t.startsWith("mailto:") || t.startsWith("tel:"))
     return t;
   return `https://${t}`;
-}
-
-function ContactSocialGlyph({
-  platform,
-  className,
-}: {
-  platform: ContactSocialPlatform;
-  className?: string;
-}) {
-  const strokeIcon = cn("h-5 w-5", className);
-  switch (platform) {
-    case "facebook":
-      return <Facebook className={strokeIcon} strokeWidth={1.5} aria-hidden />;
-    case "instagram":
-      return <Instagram className={strokeIcon} strokeWidth={1.5} aria-hidden />;
-    case "youtube":
-      return <Youtube className={strokeIcon} strokeWidth={1.5} aria-hidden />;
-    case "whatsapp":
-      return <MessageCircle className={strokeIcon} strokeWidth={1.5} aria-hidden />;
-    case "tiktok":
-    case "threads":
-    case "website":
-    default:
-      return <Globe className={strokeIcon} strokeWidth={1.5} aria-hidden />;
-  }
 }
 
 function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?: "dark" | "light" }) {

@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from "react-router";
 import type { ComponentType } from "react";
 import { RootLayout } from "./RootLayout";
 import { AdminLayout } from "./pages/admin/AdminLayout";
+import { HomePage } from "./pages/HomePage";
 
 const lazyPage = (loader: () => Promise<{ [key: string]: unknown }>, exportName: string) => async () => {
   const mod = await loader();
@@ -18,7 +19,7 @@ export const router = createBrowserRouter([
     children: [
       {
         path: "/",
-        lazy: lazyPage(() => import("./pages/HomePage"), "HomePage"),
+        element: <HomePage />,
       },
       {
         path: "/renta",
