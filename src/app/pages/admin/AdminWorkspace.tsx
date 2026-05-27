@@ -3018,6 +3018,11 @@ export function AdminWorkspace() {
           </nav>
         </div>
 
+        {/* Ver como (solo admin real) */}
+        {isRealAdmin && (
+          <AdminViewAsRoleSwitcher value={adminViewAs} onChange={handleAdminViewAsChange} />
+        )}
+
         {/* User Card */}
         <button
           type="button"
@@ -3052,11 +3057,6 @@ export function AdminWorkspace() {
           activeTab === "sitio" && canEditSite && "pb-2 pt-2 sm:pb-2 sm:pt-2 lg:pb-2"
         )}
       >
-        {isRealAdmin && (
-          <div className="mb-2 max-w-3xl">
-            <AdminViewAsRoleSwitcher value={adminViewAs} onChange={handleAdminViewAsChange} />
-          </div>
-        )}
 
         {activeTab === "dashboard" && (
           <header
