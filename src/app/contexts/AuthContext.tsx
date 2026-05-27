@@ -514,6 +514,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [location.pathname, hydrateTokkoDirectory]);
 
+  // Ref para evitar stale closures en applySession sin hacer que el efecto
+  // dependa de location.pathname (lo que causaba re-fetch del rol en cada cambio de módulo).
+  const pathnameRef = useRef(location.pathname);
+  pathnameRef.current = location.pathname;
+
   useEffect(() => {
     const client = getSupabaseClient();
     if (!client) {
@@ -530,10 +535,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (c) {
         /**
          * Refuerzo con `tokko_users` + reintentos.
-         * OJO: En rutas públicas esto no aporta valor, pero sí puede sumar segundos (queries + backoff).
-         * Solo lo hacemos en `/admin/*` para mejorar la consistencia de carga del sitio.
+         * Usamos pathnameRef.current para leer la ruta actual sin que location.pathname
+         * sea una dependencia del efecto: evita re-ejecutar fetchSession (y potencialmente
+         * perder el rol de admin) en cada navegación de módulo dentro del CRM.
          */
-        const appUser = tokkoDbNeededForPath(location.pathname)
+        const appUser = tokkoDbNeededForPath(pathnameRef.current)
           ? await loadUserWithTokkoMerge(c, session)
           : sessionToAppUser(session);
         setUser(appUser);
@@ -571,7 +577,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, [location.pathname, mergeSessionUserIntoDirectory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mergeSessionUserIntoDirectory]); // location.pathname eliminado a propósito: el cambio de módulo
+  // NO debe re-ejecutar fetchSession (causaba pérdida de rol admin al navegar).
+  // El segundo useEffect (loadTokkoProfileAndDirectory) ya maneja la recarga de perfil en /admin.
 
   useEffect(() => {
     if (!tokkoDbNeededForPath(location.pathname)) return;
