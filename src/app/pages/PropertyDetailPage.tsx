@@ -522,14 +522,6 @@ export function PropertyDetailPage() {
                       Destacada
                     </span>
                   ) : null}
-                  {propertyTags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-lg border border-slate-200/90 bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
-                    >
-                      {tag}
-                    </span>
-                  ))}
                 </div>
 
                 <div className="absolute top-4 right-4 flex gap-2">
