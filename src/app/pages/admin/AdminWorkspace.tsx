@@ -4522,8 +4522,10 @@ export function AdminWorkspace() {
               )}
 
               <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_16px_48px_-28px_rgba(20,28,46,0.14)] ring-1 ring-black/[0.03]">
-                {companySubtab === "users" && user && (
-                  <div className="p-5 md:p-8">
+                {/* Los paneles users / settings / leadStages se mantienen SIEMPRE montados
+                    (hidden CSS en lugar de &&) para evitar el reset de estado al cambiar tab. */}
+                <div className={cn(companySubtab !== "users" && "hidden")}>
+                  {user && <div className="p-5 md:p-8">
                     <AdminUsersManager
                       currentUser={user}
                       users={users}
@@ -4551,8 +4553,8 @@ export function AdminWorkspace() {
                       onFocusUserConsumed={handleUsersPanelFocusConsumed}
                       onUserDetailClosed={handleUserDetailClosed}
                     />
-                  </div>
-                )}
+                  </div>}
+                </div>
                 {companySubtab === "site" && canEditSite && (
                   <div className="flex h-[calc(100dvh-1.25rem)] max-h-[calc(100dvh-1.25rem)] min-h-0 w-full flex-col overflow-hidden p-2 sm:p-2.5 md:p-3 lg:h-[calc(100dvh-0.75rem)] lg:max-h-[calc(100dvh-0.75rem)]">
                     <Suspense fallback={adminModuleFallback()}>
@@ -4562,7 +4564,7 @@ export function AdminWorkspace() {
                     </Suspense>
                   </div>
                 )}
-                {companySubtab === "settings" && (
+                <div className={cn(companySubtab !== "settings" && "hidden")}>
                   <AdminCompanySettings
                     counts={{
                       leads: leads.length,
@@ -4588,8 +4590,8 @@ export function AdminWorkspace() {
                       }
                     }}
                   />
-                )}
-                {companySubtab === "leadStages" && (
+                </div>
+                <div className={cn(companySubtab !== "leadStages" && "hidden")}>
                   <div className="flex flex-col gap-6 p-5 md:p-8">
                     {isAdmin && (
                       <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_28px_-12px_rgba(20,28,46,0.12)] ring-1 ring-black/[0.03]">
@@ -5063,7 +5065,7 @@ export function AdminWorkspace() {
                       </DndProvider>
                     </section>}
                   </div>
-                )}
+                </div>
               </section>
             </div>
           ))}
@@ -5076,9 +5078,12 @@ export function AdminWorkspace() {
             initialPeerId={messagesInitialPeerId}
             onPeerIdChange={(peerId) => {
               if (!peerId) return;
+              // Usamos history.replaceState en lugar de navigate() para actualizar
+              // la URL sin triggear un re-render de React Router (y todo AdminWorkspace).
               const next = `${buildAdminHref("messages")}?with=${encodeURIComponent(peerId)}`;
-              if (`${location.pathname}${location.search}` !== next) {
-                navigate(next, { replace: true });
+              const current = `${window.location.pathname}${window.location.search}`;
+              if (current !== next) {
+                window.history.replaceState(null, "", next);
               }
             }}
           />
