@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowRight, Building2, Check, Home, Loader2, UserCircle2 } from "lucide-react";
+import { ArrowRight, Building2, Check, ChevronDown, Filter, Home, Loader2, Search, UserCircle2 } from "lucide-react";
 import { getSupabaseClient } from "../../lib/supabaseClient";
 import {
   fetchCatalogActivities,
@@ -192,110 +192,122 @@ export function AdminActivitiesModule({ onOpenInModule }: Props) {
 
   return (
     <div className="space-y-6">
-      <header className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
-        <div className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy" aria-hidden />
-        <div className="relative px-5 pb-6 pt-6 md:px-8">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary" style={{ fontWeight: 600 }}>
-                Catálogo
-              </p>
-              <h2 className="mt-1.5 text-xl font-semibold text-slate-900" style={{ fontWeight: 600 }}>
-                Actividades del inventario
-              </h2>
-              <p className="mt-1.5 max-w-2xl text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                Altas, bajas y cambios de precio en propiedades y desarrollos.
-              </p>
-            </div>
-          </div>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <label className="flex flex-col gap-1.5 text-sm text-slate-700">
-              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Fecha desde</span>
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
-              />
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm text-slate-700">
-              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Fecha hasta</span>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
-              />
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm text-slate-700 sm:col-span-2 lg:col-span-1">
-              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Buscar asesor por nombre
-              </span>
-              <input
-                type="search"
-                value={actorNameSearch}
-                onChange={(e) => setActorNameSearch(e.target.value)}
-                placeholder="Nombre o apellido…"
-                autoComplete="off"
-                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm placeholder:text-slate-400"
-                aria-label="Filtrar actividades por nombre del asesor"
-              />
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm text-slate-700">
-              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Ítem</span>
-              <select
-                value={entityFilter}
-                onChange={(e) => setEntityFilter(e.target.value as typeof entityFilter)}
-                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
-              >
-                <option value="all">Propiedades y desarrollos</option>
-                <option value="property">Solo propiedades</option>
-                <option value="development">Solo desarrollos</option>
-              </select>
-            </label>
-          </div>
-          <div className="mt-4 space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Tipo de actividad</p>
-            <div
-              className="flex flex-wrap gap-1.5 rounded-xl border border-slate-200 bg-slate-100/90 p-1.5 sm:inline-flex sm:flex-nowrap"
-              role="group"
-              aria-label="Filtrar por tipo de actividad"
-            >
-              {(
-                [
-                  { on: typeAlta, set: setTypeAlta, label: "Nueva propiedad o desarrollo" },
-                  { on: typePrecio, set: setTypePrecio, label: "Cambio de precio" },
-                  { on: typeBaja, set: setTypeBaja, label: "Baja de propiedad o desarrollo" },
-                ] as const
-              ).map(({ on, set, label }) => (
-                <button
-                  key={label}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => set(!on)}
-                  className={cn(
-                    "inline-flex min-h-[2.375rem] min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors sm:flex-initial sm:px-3.5",
-                    on
-                      ? "bg-white font-semibold text-slate-900 shadow-sm ring-1 ring-slate-200/90"
-                      : "font-medium text-slate-600 hover:bg-slate-200/60 hover:text-slate-900",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "flex h-5 w-5 shrink-0 items-center justify-center rounded border text-white transition-colors",
-                      on ? "border-slate-700 bg-slate-800" : "border-slate-300 bg-white",
-                    )}
-                    aria-hidden
-                  >
-                    {on ? <Check className="h-3 w-3 stroke-[3]" /> : null}
-                  </span>
-                  <span className="min-w-0 max-w-[16rem] leading-snug sm:max-w-none">{label}</span>
-                </button>
-              ))}
-            </div>
+      <div className="relative border-b border-slate-200 bg-transparent pb-8 mb-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-3xl font-light tracking-tight text-slate-900 mb-2">
+              Actividades del inventario
+            </h2>
+            <p className="text-sm text-slate-500 max-w-xl">
+              Altas, bajas y cambios de precio en propiedades y desarrollos.
+            </p>
           </div>
         </div>
-      </header>
+      </div>
+
+      <div className="mb-8 flex flex-col rounded-2xl border border-slate-200 bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)]">
+        <div className="flex flex-col sm:flex-row sm:items-center p-1.5 gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" strokeWidth={1.5} />
+            <input
+              type="search"
+              value={actorNameSearch}
+              onChange={(e) => setActorNameSearch(e.target.value)}
+              placeholder="Buscar por nombre del asesor..."
+              autoComplete="off"
+              aria-label="Filtrar actividades por nombre del asesor"
+              className="w-full border-none bg-transparent py-3 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-0 font-medium"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 border-t border-slate-100 bg-slate-50 px-4 py-2.5 rounded-b-2xl overflow-x-auto">
+          <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 mr-2">
+            <Filter className="h-3.5 w-3.5" strokeWidth={2} />
+            Filtros
+          </span>
+
+          <label className="flex shrink-0 items-center gap-2 text-sm font-medium text-slate-600">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Desde</span>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="border-none bg-transparent py-1 text-sm font-medium text-slate-600 focus:outline-none focus:ring-0 cursor-pointer"
+              aria-label="Fecha desde"
+            />
+          </label>
+
+          <div className="h-5 w-px bg-slate-300 shrink-0" />
+
+          <label className="flex shrink-0 items-center gap-2 text-sm font-medium text-slate-600">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Hasta</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="border-none bg-transparent py-1 text-sm font-medium text-slate-600 focus:outline-none focus:ring-0 cursor-pointer"
+              aria-label="Fecha hasta"
+            />
+          </label>
+
+          <div className="h-5 w-px bg-slate-300 shrink-0" />
+
+          <div className="relative shrink-0">
+            <select
+              value={entityFilter}
+              onChange={(e) => setEntityFilter(e.target.value as typeof entityFilter)}
+              className="appearance-none border-none bg-transparent py-1 pl-2 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+              aria-label="Filtrar por ítem"
+            >
+              <option value="all">Propiedades y desarrollos</option>
+              <option value="property">Solo propiedades</option>
+              <option value="development">Solo desarrollos</option>
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+          </div>
+
+          <div className="h-5 w-px bg-slate-300 shrink-0" />
+
+          <div
+            className="flex shrink-0 items-center gap-1"
+            role="group"
+            aria-label="Filtrar por tipo de actividad"
+          >
+            {(
+              [
+                { on: typeAlta, set: setTypeAlta, label: "Altas" },
+                { on: typePrecio, set: setTypePrecio, label: "Cambios de precio" },
+                { on: typeBaja, set: setTypeBaja, label: "Bajas" },
+              ] as const
+            ).map(({ on, set, label }) => (
+              <button
+                key={label}
+                type="button"
+                aria-pressed={on}
+                onClick={() => set(!on)}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm transition-colors",
+                  on
+                    ? "bg-white font-semibold text-slate-900 shadow-sm ring-1 ring-slate-200/90"
+                    : "font-medium text-slate-500 hover:text-slate-900",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex h-4 w-4 shrink-0 items-center justify-center rounded border text-white transition-colors",
+                    on ? "border-slate-700 bg-slate-800" : "border-slate-300 bg-white",
+                  )}
+                  aria-hidden
+                >
+                  {on ? <Check className="h-2.5 w-2.5 stroke-[3]" /> : null}
+                </span>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {error ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">{error}</div>

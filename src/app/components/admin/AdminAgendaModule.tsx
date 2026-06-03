@@ -313,32 +313,17 @@ export function AdminAgendaModule({
 
   return (
     <div className="space-y-5">
-      <header className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
-        <div
-          className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute -right-20 top-8 h-56 w-56 rounded-full bg-gradient-to-br from-primary/[0.07] to-transparent blur-3xl"
-          aria-hidden
-        />
-        <div className="relative px-5 pb-6 pt-6 md:px-8 md:pb-7 md:pt-7">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between lg:gap-8">
+      <header className="relative border-b border-slate-200 bg-transparent pb-8 mb-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
-            <p
-              className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary"
-              style={{ fontWeight: 600 }}
-            >
-              CRM
-            </p>
-            <h1 className="font-heading mt-1.5 text-2xl tracking-tight text-brand-navy sm:text-3xl" style={{ fontWeight: 700 }}>
+            <h2 className="text-3xl font-light tracking-tight text-slate-900 mb-2">
               Agenda
-            </h1>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
+            </h2>
+            <p className="text-sm text-slate-500 max-w-xl">
               Citas y seguimientos en vista semanal. Crea una cita nueva cuando la necesites.
             </p>
           </div>
-          <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-3.5">
+          <div className="flex w-full shrink-0 flex-col gap-4 sm:flex-row sm:items-center lg:w-auto">
             {(isGroupLeader || isAdmin) && (
               <div className="flex items-center gap-2.5 w-full sm:w-auto relative" ref={comboboxRef}>
                 <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider hidden md:inline">
@@ -471,15 +456,14 @@ export function AdminAgendaModule({
                 </div>
               </div>
             )}
-            <Button
+            <button
               type="button"
-              className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto font-semibold"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-black sm:w-auto"
               onClick={openAdd}
             >
-              <Plus className="h-4 w-4" strokeWidth={2} />
+              <Plus className="h-4 w-4" strokeWidth={1.5} />
               Nueva cita
-            </Button>
-          </div>
+            </button>
           </div>
         </div>
       </header>

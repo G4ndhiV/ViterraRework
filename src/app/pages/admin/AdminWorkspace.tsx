@@ -4471,32 +4471,20 @@ export function AdminWorkspace() {
             <AdminCompanySkeleton />
           ) : (
             <div className="space-y-5">
-              <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
-                <div
-                  className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
-                  aria-hidden
-                />
-                <div
-                  className="pointer-events-none absolute -right-20 top-8 h-56 w-56 rounded-full bg-gradient-to-br from-primary/[0.07] to-transparent blur-3xl"
-                  aria-hidden
-                />
-                <div className="relative px-5 pb-6 pt-6 md:px-8 md:pb-7 md:pt-7">
-                  <p
-                    className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary"
-                    style={{ fontWeight: 600 }}
-                  >
-                    Centro de administración
-                  </p>
-                  <h2 className="font-heading mt-2 text-2xl tracking-tight text-brand-navy sm:text-3xl" style={{ fontWeight: 700 }}>
-                    {isGroupLeader ? "Pipeline de ventas" : "Mi empresa"}
-                  </h2>
-                  <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
-                    {isGroupLeader
-                      ? "Gestiona tus grupos asignados y configura las columnas del pipeline de cada equipo."
-                      : isAdmin
-                        ? "Equipo, sitio, embudo comercial y ajustes. Como administrador puedes abrir el pipeline de cada grupo y ajustar columnas, orden y colores."
-                        : "Equipo, sitio, embudo comercial y ajustes del espacio de trabajo. Elige un área para continuar."}
-                  </p>
+              <div className="relative border-b border-slate-200 bg-transparent pb-8 mb-8">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                  <div>
+                    <h2 className="text-3xl font-light tracking-tight text-slate-900 mb-2">
+                      {isGroupLeader ? "Pipeline de ventas" : "Mi Empresa"}
+                    </h2>
+                    <p className="text-sm text-slate-500 max-w-xl">
+                      {isGroupLeader
+                        ? "Gestiona tus grupos asignados y configura las columnas del pipeline de cada equipo."
+                        : isAdmin
+                          ? "Equipo, sitio, embudo comercial y ajustes. Como administrador puedes abrir el pipeline de cada grupo y ajustar columnas, orden y colores."
+                          : "Equipo, sitio, embudo comercial y ajustes del espacio de trabajo. Elige un área para continuar."}
+                    </p>
+                  </div>
                 </div>
               </div>
 

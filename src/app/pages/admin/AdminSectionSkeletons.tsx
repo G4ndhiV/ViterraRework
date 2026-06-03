@@ -388,14 +388,17 @@ export function AdminKpisSkeleton() {
 export function AdminCompanySkeleton() {
   return (
     <div className="space-y-5" aria-busy aria-label="Cargando administración">
-      <div className="overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 p-6 shadow-md ring-1 ring-slate-900/[0.04]">
-        <ShimmerBlock className="mb-2 h-3 w-40" />
-        <ShimmerBlock className="h-8 w-64 max-w-full" />
-        <ShimmerBlock className="mt-3 h-4 w-full max-w-2xl" />
+      <div className="relative border-b border-slate-200 bg-transparent pb-8 mb-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0 space-y-3">
+            <ShimmerBlock className="h-9 w-48 max-w-full" />
+            <ShimmerBlock className="h-4 w-full max-w-2xl" />
+          </div>
+        </div>
       </div>
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <ShimmerBlock key={i} className="h-20 w-full rounded-xl" />
+      <div className="flex gap-1 rounded-xl border border-slate-200/80 bg-white p-1 shadow-sm">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <ShimmerBlock key={i} className="h-11 flex-1 rounded-lg" />
         ))}
       </div>
       <ShimmerBlock className="min-h-[320px] w-full rounded-2xl border border-slate-200/80 bg-white/95 shadow-sm" />
@@ -407,44 +410,39 @@ export function AdminCompanySkeleton() {
 export function AdminClientsSkeleton() {
   return (
     <div className="space-y-6" aria-busy aria-label="Cargando clientes">
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
-        <div className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy" aria-hidden />
-        <div
-          className="pointer-events-none absolute -right-20 top-8 h-56 w-56 rounded-full bg-gradient-to-br from-primary/[0.07] to-transparent blur-3xl"
-          aria-hidden
-        />
-        <div className="relative px-5 pb-6 pt-6 md:px-8 md:pb-7 md:pt-7">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0 space-y-2">
-              <ShimmerBlock className="h-7 w-56 max-w-full" />
-              <ShimmerBlock className="h-4 w-full max-w-xl" />
-              <ShimmerBlock className="h-4 w-full max-w-lg" />
-            </div>
-            <ShimmerBlock className="h-10 w-full rounded-lg sm:w-40" />
+      <div className="relative border-b border-slate-200 bg-transparent pb-8 mb-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0 space-y-3">
+            <ShimmerBlock className="h-9 w-40 max-w-full" />
+            <ShimmerBlock className="h-4 w-full max-w-xl" />
           </div>
+          <ShimmerBlock className="h-10 w-full rounded-xl sm:w-40" />
+        </div>
+      </div>
 
-          <div className="mt-8 flex flex-col gap-3 border-t border-slate-200/80 pt-6">
-            <ShimmerBlock className="h-11 min-h-[2.75rem] w-full rounded-2xl" />
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <ShimmerBlock className="h-11 min-h-[2.75rem] w-full rounded-2xl" />
-              <ShimmerBlock className="h-11 min-h-[2.75rem] w-full rounded-2xl" />
-              <ShimmerBlock className="h-11 min-h-[2.75rem] w-full rounded-2xl lg:col-span-1 sm:col-span-2" />
+      <div className="mb-8 flex flex-col rounded-2xl border border-slate-200 bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)]">
+        <div className="flex flex-col sm:flex-row sm:items-center p-2 gap-2">
+          <div className="relative flex-1 p-2">
+            <ShimmerBlock className="h-6 w-1/3" />
+          </div>
+        </div>
+        <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-4 py-3 rounded-b-2xl">
+          <div className="flex items-center gap-3">
+            <ShimmerBlock className="h-4 w-16 shrink-0" />
+            <div className="grid flex-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <ShimmerBlock className="h-8 w-full rounded-lg" />
+              <ShimmerBlock className="h-8 w-full rounded-lg" />
+              <ShimmerBlock className="h-8 w-full rounded-lg" />
             </div>
-
-            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <ShimmerBlock className="h-3 w-28" />
-                <ShimmerBlock className="h-4 w-14" />
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="space-y-1">
-                    <ShimmerBlock className="h-3 w-24" />
-                    <ShimmerBlock className="h-8 w-full rounded-lg" />
-                  </div>
-                ))}
-              </div>
-            </div>
+          </div>
+          <div className="flex items-center gap-4 border-t border-slate-200/70 pt-2.5 overflow-x-auto">
+            <ShimmerBlock className="h-4 w-28 shrink-0" />
+            <div className="h-5 w-px bg-slate-300 shrink-0" />
+            <ShimmerBlock className="h-4 w-24 shrink-0" />
+            <div className="h-5 w-px bg-slate-300 shrink-0" />
+            <ShimmerBlock className="h-4 w-24 shrink-0" />
+            <div className="h-5 w-px bg-slate-300 shrink-0" />
+            <ShimmerBlock className="h-4 w-20 shrink-0" />
           </div>
         </div>
       </div>
@@ -510,13 +508,30 @@ export function AdminClientsSkeleton() {
 export function AdminActivitiesSkeleton() {
   return (
     <div className="space-y-8" aria-busy aria-label="Cargando actividades">
-      <div className="rounded-2xl border border-slate-200/80 bg-white/95 p-4 shadow-sm">
-        <div className="mb-4 flex flex-wrap gap-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <ShimmerBlock key={i} className="h-9 w-24 rounded-lg" />
-          ))}
+      <div className="relative border-b border-slate-200 bg-transparent pb-8 mb-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0 space-y-3">
+            <ShimmerBlock className="h-9 w-64 max-w-full" />
+            <ShimmerBlock className="h-4 w-full max-w-md" />
+          </div>
         </div>
-        <ShimmerBlock className="h-10 w-full max-w-xl rounded-lg" />
+      </div>
+
+      <div className="mb-8 flex flex-col rounded-2xl border border-slate-200 bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)]">
+        <div className="flex flex-col sm:flex-row sm:items-center p-2 gap-2">
+          <div className="relative flex-1 p-2">
+            <ShimmerBlock className="h-6 w-1/3" />
+          </div>
+        </div>
+        <div className="flex items-center gap-4 border-t border-slate-100 bg-slate-50 px-4 py-3 rounded-b-2xl overflow-x-auto">
+          <ShimmerBlock className="h-4 w-16 shrink-0" />
+          <div className="h-5 w-px bg-slate-300 shrink-0" />
+          <ShimmerBlock className="h-4 w-24 shrink-0" />
+          <div className="h-5 w-px bg-slate-300 shrink-0" />
+          <ShimmerBlock className="h-4 w-24 shrink-0" />
+          <div className="h-5 w-px bg-slate-300 shrink-0" />
+          <ShimmerBlock className="h-4 w-32 shrink-0" />
+        </div>
       </div>
       {Array.from({ length: 3 }).map((_, d) => (
         <div key={d} className="space-y-3">
