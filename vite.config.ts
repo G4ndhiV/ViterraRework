@@ -95,4 +95,41 @@ export default defineConfig({
     },
   },
   assetsInclude: ["**/*.svg", "**/*.csv"],
+  build: {
+    // vendor-pdf (@react-pdf, ~1.4 MB) es grande por naturaleza pero está aislado y
+    // se descarga solo al generar un PDF, así que no cuenta como regresión del bundle inicial.
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        // Separa vendors pesados estáticos en chunks cacheables independientes.
+        // (@react-pdf y @tiptap se separan solos vía lazy() → chunks async on-demand.)
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          // PDF y Excel: compartidos entre chunks lazy → forzarlos a vendor evita que
+          // Rollup los "suba" al chunk de AdminWorkspace. Solo se descargan al usarse.
+          if (
+            id.includes("@react-pdf") ||
+            id.includes("fontkit") ||
+            id.includes("/yoga-layout") ||
+            id.includes("/pdfkit") ||
+            id.includes("/restructure") ||
+            id.includes("unicode-") ||
+            id.includes("/linebreak") ||
+            id.includes("/hyphen")
+          ) {
+            return "vendor-pdf";
+          }
+          if (id.includes("/xlsx") || id.includes("sheetjs")) return "vendor-xlsx";
+          if (id.includes("@tiptap") || id.includes("prosemirror")) return "vendor-editor";
+          if (id.includes("recharts") || id.includes("/d3-") || id.includes("victory-vendor")) {
+            return "vendor-charts";
+          }
+          if (id.includes("/leaflet")) return "vendor-maps";
+          if (id.includes("react-dnd") || id.includes("dnd-core")) return "vendor-dnd";
+          if (id.includes("@radix-ui")) return "vendor-radix";
+          if (id.includes("/motion/") || id.includes("framer-motion")) return "vendor-motion";
+        },
+      },
+    },
+  },
 });

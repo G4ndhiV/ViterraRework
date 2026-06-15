@@ -88,7 +88,7 @@ import { AddLeadDialog } from "../../components/admin/AddLeadDialog";
 import { LeadDetailDialog } from "../../components/admin/LeadDetailDialog";
 import { AdminConsultasModule } from "../../components/admin/AdminConsultasModule";
 import { AdminClientsManager } from "../../components/admin/AdminClientsManager";
-import { PropertyFormDialog } from "../../components/admin/PropertyFormDialog";
+// PropertyFormDialog se carga con lazy() (arrastra el editor TipTap) — ver abajo.
 import {
   AlertDialog,
   AlertDialogAction,
@@ -172,7 +172,7 @@ import { AdminAgendaModule } from "../../components/admin/AdminAgendaModule";
 import { AdminDevelopmentsManager } from "../../components/admin/AdminDevelopmentsManager";
 import { AdminCompanySettings } from "../../components/admin/AdminCompanySettings";
 import { AdminUsersManager } from "../../components/admin/AdminUsersManager";
-import { AdminUserProfilePanel } from "../../components/admin/AdminUserProfilePanel";
+// AdminUserProfilePanel se carga con lazy() (arrastra @react-pdf + xlsx del reporte de desempeño) — ver abajo.
 import { MessagesModule } from "../../components/admin/messages/MessagesModule";
 import { useDirectMessages } from "../../hooks/useDirectMessages";
 import { AdvisorDashboard } from "../../components/admin/AdvisorDashboard";
@@ -220,7 +220,7 @@ import {
   type AdminTab,
   type CompanySubtab,
 } from "./adminNavigation";
-import { PdfDownloadDropdown } from "../../components/pdf/PdfDownloadDropdown";
+// PdfDownloadDropdown se carga con lazy() (arrastra @react-pdf) — ver abajo.
 import {
   AdminActivitiesSkeleton,
   AdminClientsSkeleton,
@@ -243,6 +243,16 @@ const AdminSiteEditor = lazy(() =>
 );
 const PropertyMap = lazy(() =>
   import("../../components/PropertyMap").then((m) => ({ default: m.PropertyMap }))
+);
+// PDF (@react-pdf) y editor TipTap solo se cargan al usarse (descarga de ficha / formulario de propiedad).
+const PdfDownloadDropdown = lazy(() =>
+  import("../../components/pdf/PdfDownloadDropdown").then((m) => ({ default: m.PdfDownloadDropdown }))
+);
+const PropertyFormDialog = lazy(() =>
+  import("../../components/admin/PropertyFormDialog").then((m) => ({ default: m.PropertyFormDialog }))
+);
+const AdminUserProfilePanel = lazy(() =>
+  import("../../components/admin/AdminUserProfilePanel").then((m) => ({ default: m.AdminUserProfilePanel }))
 );
 
 type TabType = AdminTab;
@@ -4664,7 +4674,9 @@ export function AdminWorkspace() {
                             >
                               <Link2 className="h-4 w-4" strokeWidth={1.5} />
                             </button>
-                            <PdfDownloadDropdown data={property} type="property" />
+                            <Suspense fallback={null}>
+                              <PdfDownloadDropdown data={property} type="property" />
+                            </Suspense>
                             <button
                               type="button"
                               onClick={() => navigate(`/propiedades/${property.id}`)}
@@ -4817,7 +4829,9 @@ export function AdminWorkspace() {
                                 >
                                   <Link2 className="h-4 w-4" strokeWidth={1.5} />
                                 </button>
-                                <PdfDownloadDropdown data={property} type="property" />
+                                <Suspense fallback={null}>
+                                  <PdfDownloadDropdown data={property} type="property" />
+                                </Suspense>
                                 <button
                                   type="button"
                                   onClick={() => navigate(`/propiedades/${property.id}`)}
@@ -5557,8 +5571,9 @@ export function AdminWorkspace() {
           />
         )}
 
-        {activeTab === "profile" &&
-          (viewingTeamMemberProfile && user && profileUserId ? (
+        {activeTab === "profile" && (
+          <Suspense fallback={<div className="py-16 text-center text-sm text-slate-400">Cargando perfil…</div>}>
+          {viewingTeamMemberProfile && user && profileUserId ? (
             <AdminUsersManager
               embeddedUserId={profileUserId}
               onEmbeddedClose={handleUserDetailClosed}
@@ -5602,7 +5617,9 @@ export function AdminWorkspace() {
               leadsLoading={leadsLoading}
               onOpenKpis={() => goTab("kpis")}
             />
-          ))}
+          )}
+          </Suspense>
+        )}
 
         <LeadDetailDialog
           open={!!leadDialog && (activeTab === "leads" || activeTab === "consultas")}
@@ -5724,29 +5741,33 @@ export function AdminWorkspace() {
           </AlertDialogContent>
         </AlertDialog>
 
-        <PropertyFormDialog
-          key={
-            propertyForm
-              ? `${propertyForm.mode}-${propertyForm.property?.id ?? "new"}`
-              : "closed"
-          }
-          open={!!propertyForm && activeTab === "properties" && canManageInventory}
-          onOpenChange={(o) => {
-            if (!o) setPropertyForm(null);
-          }}
-          mode={propertyForm?.mode ?? "create"}
-          property={propertyForm?.mode === "edit" ? propertyForm.property : null}
-          newId={newPropertyDraftId}
-          onSave={handleSaveProperty}
-          otherFeaturedCount={
-            propertyForm?.mode === "edit" && propertyForm.property
-              ? properties.filter((x) => x.featured && x.id !== propertyForm.property.id).length
-              : properties.filter((x) => x.featured).length
-          }
-          developments={developments}
-          developmentsLoading={developmentsLoading}
-          catalogProperties={properties}
-        />
+        {activeTab === "properties" && (
+          <Suspense fallback={null}>
+            <PropertyFormDialog
+              key={
+                propertyForm
+                  ? `${propertyForm.mode}-${propertyForm.property?.id ?? "new"}`
+                  : "closed"
+              }
+              open={!!propertyForm && canManageInventory}
+              onOpenChange={(o) => {
+                if (!o) setPropertyForm(null);
+              }}
+              mode={propertyForm?.mode ?? "create"}
+              property={propertyForm?.mode === "edit" ? propertyForm.property : null}
+              newId={newPropertyDraftId}
+              onSave={handleSaveProperty}
+              otherFeaturedCount={
+                propertyForm?.mode === "edit" && propertyForm.property
+                  ? properties.filter((x) => x.featured && x.id !== propertyForm.property.id).length
+                  : properties.filter((x) => x.featured).length
+              }
+              developments={developments}
+              developmentsLoading={developmentsLoading}
+              catalogProperties={properties}
+            />
+          </Suspense>
+        )}
       </div>
 
     </div>
