@@ -110,6 +110,37 @@ const newHistoryEntry = (
 
 const normalizeRole = (role: string | undefined): UserRole => (role === "agente" ? "asesor" : (role as UserRole)) || "asesor";
 
+/**
+ * Cache del último rol CONFIRMADO por `tokko_users` (DB), por usuario. Evita el bug de degradar
+ * al admin a "asesor" cuando el JWT no trae `role` en metadata y la resolución cae al default,
+ * o cuando la lectura de DB falla/expira en un TOKEN_REFRESHED. Solo se escribe con rol real de DB.
+ */
+const CONFIRMED_ROLE_KEY = "viterra_confirmed_role";
+function loadConfirmedRole(userId: string): UserRole | null {
+  try {
+    const raw = localStorage.getItem(CONFIRMED_ROLE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw) as { id?: string; role?: string };
+    return obj.id === userId && typeof obj.role === "string" ? normalizeRole(obj.role) : null;
+  } catch {
+    return null;
+  }
+}
+function saveConfirmedRole(userId: string, role: UserRole): void {
+  try {
+    localStorage.setItem(CONFIRMED_ROLE_KEY, JSON.stringify({ id: userId, role }));
+  } catch {
+    /* ignore */
+  }
+}
+function clearConfirmedRole(): void {
+  try {
+    localStorage.removeItem(CONFIRMED_ROLE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 const ALL_PERMISSIONS: UserPermission[] = ALL_MODULE_PERMISSIONS;
 
 const normalizeUser = (raw: Partial<User>): User => {
@@ -292,7 +323,21 @@ function mergeTokkoRowIntoUser(base: User, row: Record<string, unknown>): User {
  * previo puede devolver vacío y sin esto el JWT (sin `role` en metadata) deja al usuario como asesor.
  * Limitado a 2 intentos con 400 ms de espera fija para no bloquear `authReady` más de ~500 ms.
  */
-async function loadUserWithTokkoMerge(client: SupabaseClient, session: Session): Promise<User> {
+/**
+ * Si el JWT no trae `role` explícito, evita degradar usando el último rol confirmado por DB
+ * (cache). Así un TOKEN_REFRESHED o una ruta pública no convierten al admin en asesor.
+ */
+function applyConfirmedRole(u: User, su: Session["user"]): User {
+  if (roleStringFromAuthUser(su)) return u; // El JWT trae rol explícito → confiar en él.
+  const cached = loadConfirmedRole(su.id);
+  if (!cached || cached === u.role) return u;
+  return normalizeUser({ ...u, role: cached, permissions: [...defaultPermissionsByRole[cached]] });
+}
+
+async function loadUserWithTokkoMerge(
+  client: SupabaseClient,
+  session: Session,
+): Promise<{ user: User; confirmed: boolean }> {
   const appUser = sessionToAppUser(session);
   const maxAttempts = 2;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -303,7 +348,9 @@ async function loadUserWithTokkoMerge(client: SupabaseClient, session: Session):
         `fetchTokkoUserRow (intento ${attempt + 1})`
       );
       if (!error && data) {
-        return mergeTokkoRowIntoUser(appUser, data as Record<string, unknown>);
+        const merged = mergeTokkoRowIntoUser(appUser, data as Record<string, unknown>);
+        saveConfirmedRole(session.user.id, merged.role); // rol real de DB → cache
+        return { user: merged, confirmed: true };
       }
       if (import.meta.env.DEV && error) {
         console.warn(`[Viterra] fetchTokkoUserRow intento ${attempt + 1}/${maxAttempts}:`, error.message);
@@ -317,7 +364,8 @@ async function loadUserWithTokkoMerge(client: SupabaseClient, session: Session):
       await new Promise((r) => setTimeout(r, 400));
     }
   }
-  return appUser;
+  // DB no confirmó: no degradar si tenemos un rol confirmado previo para este usuario.
+  return { user: applyConfirmedRole(appUser, session.user), confirmed: false };
 }
 
 /** Fila `tokko_users` → usuario del directorio CRM (misma lógica que el refuerzo por sesión). */
@@ -503,7 +551,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // avoids a DB round-trip on every tab navigation (pathname change).
       if (!forceReload && directoryLoadedForUserIdRef.current === session.user.id) return;
 
-      const appUser = await loadUserWithTokkoMerge(client, session);
+      const { user: appUser } = await loadUserWithTokkoMerge(client, session);
       setUser(appUser);
       directoryLoadedForUserIdRef.current = session.user.id;
       void hydrateTokkoDirectory(appUser);
@@ -538,13 +586,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
          * Usamos pathnameRef.current para leer la ruta actual sin que location.pathname
          * sea una dependencia del efecto: evita re-ejecutar fetchSession (y potencialmente
          * perder el rol de admin) en cada navegación de módulo dentro del CRM.
+         * En rutas sin DB usamos applyConfirmedRole para NO degradar al admin a asesor
+         * cuando el JWT no trae `role` (causa del bug de cambio espontáneo de rol).
          */
         const appUser = tokkoDbNeededForPath(pathnameRef.current)
-          ? await loadUserWithTokkoMerge(c, session)
-          : sessionToAppUser(session);
+          ? (await loadUserWithTokkoMerge(c, session)).user
+          : applyConfirmedRole(sessionToAppUser(session), session.user);
         setUser(appUser);
       } else {
-        const appUser = sessionToAppUser(session);
+        const appUser = applyConfirmedRole(sessionToAppUser(session), session.user);
         mergeSessionUserIntoDirectory(appUser);
         setUser(appUser);
       }
@@ -596,6 +646,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const refreshed = next.find((u) => u.id === user.id);
       if (!refreshed || !refreshed.isActive) {
         void getSupabaseClient()?.auth.signOut();
+        clearConfirmedRole();
         setUser(null);
       } else {
         setUser(refreshed);
@@ -675,7 +726,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      const appUser = await loadUserWithTokkoMerge(client, session);
+      const { user: appUser } = await loadUserWithTokkoMerge(client, session);
       setUser(appUser);
 
       if (!flagRow) {
@@ -693,6 +744,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout: AuthContextType["logout"] = async () => {
     const client = getSupabaseClient();
     await client?.auth.signOut();
+    clearConfirmedRole();
     setUser(null);
   };
 
@@ -891,7 +943,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         return;
       }
-      const appUser = await loadUserWithTokkoMerge(client, session);
+      const { user: appUser } = await loadUserWithTokkoMerge(client, session);
       setUser(appUser);
       mergeSessionUserIntoDirectory(appUser);
     } catch (e) {
