@@ -122,6 +122,7 @@ import { AutoMoveRulesPanel } from "../../components/admin/AutoMoveRulesPanel";
 import { useAdminSidebar } from "./useAdminSidebar";
 import { useAdminViewAs } from "./useAdminViewAs";
 import { useAdminAppointments } from "./useAdminAppointments";
+import { usePropertiesFilters } from "./usePropertiesFilters";
 import {
   effectiveRoleFromView,
   getVisiblePipelineGroupIdsForView,
@@ -392,16 +393,25 @@ export function AdminWorkspace() {
   const [seedClientFromLead, setSeedClientFromLead] = useState<{ lead: Lead; nonce: number } | null>(
     null
   );
-  const [propertySearchQuery, setPropertySearchQuery] = useState("");
-  const [propertyReferenceCodeQuery, setPropertyReferenceCodeQuery] = useState("");
-  const [propertyOperationFilter, setPropertyOperationFilter] = useState("all");
-  const [propertyTypeFilter, setPropertyTypeFilter] = useState("all");
-  const [propertyLocationFilter, setPropertyLocationFilter] = useState("all");
-  /** Misma noción que en desarrollos: todas / solo destacadas (portada) / sin destacar. */
-  const [propertyFeaturedFilter, setPropertyFeaturedFilter] = useState<"all" | "featured" | "normal">("all");
-  const [propertyCatalogSort, setPropertyCatalogSort] = useState<CatalogPropertySortKey>("newest");
+  const {
+    propertySearchQuery,
+    setPropertySearchQuery,
+    propertyReferenceCodeQuery,
+    setPropertyReferenceCodeQuery,
+    propertyOperationFilter,
+    setPropertyOperationFilter,
+    propertyTypeFilter,
+    setPropertyTypeFilter,
+    propertyLocationFilter,
+    setPropertyLocationFilter,
+    propertyFeaturedFilter,
+    setPropertyFeaturedFilter,
+    propertyCatalogSort,
+    setPropertyCatalogSort,
+    propertyInventoryView,
+    setPropertyInventoryView,
+  } = usePropertiesFilters();
   const [expandedLeaderGroupId, setExpandedLeaderGroupId] = useState<string | null>(null);
-  const [propertyInventoryView, setPropertyInventoryView] = useState<"cards" | "list" | "map">("cards");
   const [adminHeaderQuery, setAdminHeaderQuery] = useState("");
   const {
     adminViewAs,
