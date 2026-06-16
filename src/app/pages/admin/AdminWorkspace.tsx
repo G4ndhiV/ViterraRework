@@ -122,6 +122,7 @@ import { AutoMoveRulesPanel } from "../../components/admin/AutoMoveRulesPanel";
 import { useAdminSidebar } from "./useAdminSidebar";
 import { useAdminViewAs } from "./useAdminViewAs";
 import { useLeadsData } from "./useLeadsData";
+import { AdminDashboardContent } from "../../components/admin/AdminDashboardContent";
 import { useAdminAppointments } from "./useAdminAppointments";
 import { usePropertiesFilters } from "./usePropertiesFilters";
 import { useLeadsFilters } from "./useLeadsFilters";
@@ -179,12 +180,9 @@ import { AdminUsersManager } from "../../components/admin/AdminUsersManager";
 // AdminUserProfilePanel se carga con lazy() (arrastra @react-pdf + xlsx del reporte de desempeño) — ver abajo.
 import { MessagesModule } from "../../components/admin/messages/MessagesModule";
 import { useDirectMessages } from "../../hooks/useDirectMessages";
-import { AdvisorDashboard } from "../../components/admin/AdvisorDashboard";
-import { GroupLeaderDashboard } from "../../components/admin/GroupLeaderDashboard";
 import { PipelineStageReorderRow } from "../../components/admin/PipelineStageReorderRow";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import { AdminDashboard } from "../../components/admin/dashboard/AdminDashboard";
 import { cn } from "../../components/ui/utils";
 import {
   DEFAULT_BUILTIN_STAGE_HEX,
@@ -231,11 +229,9 @@ import {
   AdminClientsSkeleton,
   AdminCompanySkeleton,
   AdminConsultasSkeleton,
-  AdminDashboardSkeleton,
   AdminDevelopmentsSkeleton,
   AdminKpisSkeleton,
   AdminLeadsTabSkeleton,
-  AdminPipelineDashboardSkeleton,
   AdminPropertiesSkeleton,
   AdminWorkspaceAuthLoadingShell,
 } from "./AdminSectionSkeletons";
@@ -3245,45 +3241,26 @@ export function AdminWorkspace() {
 
         {/* Dashboard Tab */}
         {activeTab === "dashboard" && (
-          <div className="space-y-8">
-            {dashboardChartsLoading ? (
-              isAdvisor || isGroupLeader ? (
-                <AdminPipelineDashboardSkeleton />
-              ) : (
-                <AdminDashboardSkeleton />
-              )
-            ) : isAdvisor ? (
-              <AdvisorDashboard
-                leads={leadsForUser}
-                properties={properties}
-                customStages={customKanbanStages}
-              />
-            ) : isGroupLeader ? (
-              <GroupLeaderDashboard
-                leads={leadsInActivePipeline}
-                properties={properties}
-                customStages={customKanbanStages}
-                users={users}
-              />
-            ) : (
-              <AdminDashboard
-                leads={leadsForUser}
-                properties={properties}
-                appointments={appointments}
-                users={users}
-                customStages={customKanbanStages}
-                onNavigate={(tab) => {
-                  if (tab === "company") goTab("company", "users");
-                  else goTab(tab);
-                }}
-                onNewLead={() => {
-                  goTab("leads");
-                  setAddLeadOpen(true);
-                }}
-                onOpenUsers={() => goTab("company", "users")}
-              />
-            )}
-          </div>
+          <AdminDashboardContent
+            loading={dashboardChartsLoading}
+            isAdvisor={isAdvisor}
+            isGroupLeader={isGroupLeader}
+            leadsForUser={leadsForUser}
+            leadsInActivePipeline={leadsInActivePipeline}
+            properties={properties}
+            appointments={appointments}
+            users={users}
+            customStages={customKanbanStages}
+            onNavigate={(tab) => {
+              if (tab === "company") goTab("company", "users");
+              else goTab(tab);
+            }}
+            onNewLead={() => {
+              goTab("leads");
+              setAddLeadOpen(true);
+            }}
+            onOpenUsers={() => goTab("company", "users")}
+          />
         )}
 
         {/* KPI's Tab */}

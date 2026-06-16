@@ -18,7 +18,8 @@ muchas piezas pequeñas, cohesivas y testeables, **sin cambiar comportamiento**.
 | Tras 2.7 (filtrado props) | 5.399 | 26 | 20 | 43 | 39 |
 | Tras 2.8 (agrupación leads) | 5.387 | 26 | 20 | 43 | 39 |
 | Tras 2.9 (selección por grupo) | 5.393 | 26 | 20 | 43 | 39 |
-| Tras 2.10 (useLeadsData) | **5.360** | 26 | 19 | 42 | 38 |
+| Tras 2.10 (useLeadsData) | 5.360 | 26 | 19 | 42 | 38 |
+| Tras 3.1 (AdminDashboardContent) | **5.337** | 25 | 19 | 42 | 38 |
 
 (El conteo de líneas baja poco en los hooks de puro `useState` por lo verboso del destructure;
 el valor real es la reducción de estado/efectos que el componente maneja directamente y la
@@ -50,8 +51,10 @@ testeabilidad.)
 - [ ] `usePipelineConfig` — **ALTO riesgo**: `pipelineByGroup`, `activePipelineGroupId`, hidratación, CRUD de etapas, copia, reglas de auto-move, `visiblePipelineGroupIds` (acoplado a permisos).
 - [ ] `useDevelopmentsData` — `developments` + `developmentsLoading` + recarga.
 
-### Fase 3 — pestañas → componentes
-- [ ] Cada bloque `{activeTab === "x" && (...)}` a su propio componente (dashboard, leads, propiedades, consultas, clientes, agenda, actividades, empresa, perfil). Es lo que más reduce líneas.
+### Fase 3 — pestañas → componentes (INICIADA)
+- [x] **3.1** Dashboard → `components/admin/AdminDashboardContent.tsx` (patrón establecido).
+- [ ] Pestañas "gordas" (las que más reducen líneas, ~600 c/u, superficie de props grande): **Propiedades**, **Empresa**, **Leads**.
+- [ ] Pestañas delgadas restantes (consultas, clientes, agenda, actividades, perfil).
 
 ### Fase 4 — red de seguridad ampliada
 - [ ] Smoke-tests por pestaña (que cada módulo monte y haga su acción principal). Idealmente **antes** de tocar `useLeadsData`/`usePipelineConfig`.
