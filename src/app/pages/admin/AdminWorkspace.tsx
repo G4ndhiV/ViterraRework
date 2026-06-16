@@ -119,6 +119,7 @@ import {
 import { AdminWorkspaceSearch } from "../../components/admin/AdminWorkspaceSearch";
 import { AdminViewAsRoleSwitcher } from "../../components/admin/AdminViewAsRoleSwitcher";
 import { AutoMoveRulesPanel } from "../../components/admin/AutoMoveRulesPanel";
+import { useAdminSidebar } from "./useAdminSidebar";
 import {
   contextUserForViewAs,
   effectiveRoleFromView,
@@ -269,18 +270,8 @@ function adminModuleFallback(className?: string) {
   );
 }
 
-const ADMIN_SIDEBAR_EXPANDED_KEY = "viterra-admin-sidebar-expanded";
 /** Debe coincidir con `lg:w-[14.5rem]` del aside para anclar el asa en la unión con el contenido. */
 const ADMIN_SIDEBAR_LG_WIDTH = "14.5rem";
-
-function readStoredAdminSidebarExpanded(): boolean {
-  if (typeof window === "undefined") return true;
-  try {
-    return window.localStorage.getItem(ADMIN_SIDEBAR_EXPANDED_KEY) !== "0";
-  } catch {
-    return true;
-  }
-}
 
 // ─── AdminWorkspace ─────────────────────────────────────────────────────────
 
@@ -417,33 +408,9 @@ export function AdminWorkspace() {
   const [propertyInventoryView, setPropertyInventoryView] = useState<"cards" | "list" | "map">("cards");
   const [adminHeaderQuery, setAdminHeaderQuery] = useState("");
   const [adminViewAs, setAdminViewAs] = useState<AdminViewAsRole>(loadAdminViewAsRole);
-  const [adminSidebarExpanded, setAdminSidebarExpanded] = useState(readStoredAdminSidebarExpanded);
-  /** Menú hamburguesa de módulos en móvil/iPad (<lg). */
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { adminSidebarExpanded, setAdminSidebarExpanded, mobileMenuOpen, setMobileMenuOpen } =
+    useAdminSidebar();
   const [searchQuery, setSearchQuery] = useState("");
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(ADMIN_SIDEBAR_EXPANDED_KEY, adminSidebarExpanded ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
-  }, [adminSidebarExpanded]);
-
-  // Drawer móvil: cerrar con Escape y bloquear el scroll del fondo mientras está abierto.
-  useEffect(() => {
-    if (!mobileMenuOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMobileMenuOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [mobileMenuOpen]);
   /** Ámbito del texto de búsqueda en leads (admin, líder y asesor comparten la misma lógica). */
   const [leadSearchNameScope, setLeadSearchNameScope] = useState<"all" | "client" | "advisor">("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
