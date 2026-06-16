@@ -126,6 +126,7 @@ import { usePropertiesFilters } from "./usePropertiesFilters";
 import { useLeadsFilters } from "./useLeadsFilters";
 import { filterLeadsForDisplay } from "./leadsFiltering";
 import { filterPropertiesForDisplay } from "./propertiesFiltering";
+import { computeLeadStatusesForRendering, groupLeadsByStatus } from "./leadsGrouping";
 import {
   effectiveRoleFromView,
   getVisiblePipelineGroupIdsForView,
@@ -2462,29 +2463,16 @@ export function AdminWorkspace() {
     normalizeStageToken,
   ]);
 
-  const leadStatusesForRendering = useMemo(() => {
-    const seen = new Set(leadColumnStatuses);
-    const extraIds = [...new Set(filteredLeadsForBoard.map((l) => l.status))]
-      .filter((id) => !!id && !seen.has(id))
-      .sort();
-    return [...leadColumnStatuses, ...extraIds];
-  }, [leadColumnStatuses, filteredLeadsForBoard]);
+  const leadStatusesForRendering = useMemo(
+    () => computeLeadStatusesForRendering(leadColumnStatuses, filteredLeadsForBoard),
+    [leadColumnStatuses, filteredLeadsForBoard],
+  );
 
   /** Vista tabla: grupos por estado (orden del pipeline), sin columnas fijas que fuercen scroll horizontal */
-  const leadsTableGroupedByStatus = useMemo(() => {
-    const byStatus = new Map<string, Lead[]>();
-    for (const lead of filteredLeadsForBoard) {
-      const list = byStatus.get(lead.status) ?? [];
-      list.push(lead);
-      byStatus.set(lead.status, list);
-    }
-    const sections: { statusId: string; label: string; leads: Lead[] }[] = [];
-    for (const id of leadStatusesForRendering) {
-      const list = byStatus.get(id);
-      if (list?.length) sections.push({ statusId: id, label: resolveStatusLabel(id), leads: list });
-    }
-    return sections;
-  }, [filteredLeadsForBoard, leadStatusesForRendering, resolveStatusLabel]);
+  const leadsTableGroupedByStatus = useMemo(
+    () => groupLeadsByStatus(filteredLeadsForBoard, leadStatusesForRendering, resolveStatusLabel),
+    [filteredLeadsForBoard, leadStatusesForRendering, resolveStatusLabel],
+  );
 
   const toggleLeadsTableSection = useCallback((statusId: string) => {
     setLeadsTableSectionCollapsed((prev) => ({ ...prev, [statusId]: !prev[statusId] }));
