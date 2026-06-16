@@ -121,6 +121,7 @@ import { AdminViewAsRoleSwitcher } from "../../components/admin/AdminViewAsRoleS
 import { AutoMoveRulesPanel } from "../../components/admin/AutoMoveRulesPanel";
 import { useAdminSidebar } from "./useAdminSidebar";
 import { useAdminViewAs } from "./useAdminViewAs";
+import { useAdminAppointments } from "./useAdminAppointments";
 import {
   effectiveRoleFromView,
   getVisiblePipelineGroupIdsForView,
@@ -160,11 +161,7 @@ import {
   type CatalogActivityAction,
 } from "../../lib/catalogActivityPayload";
 import { AdminActivitiesModule } from "../../components/admin/AdminActivitiesModule";
-import {
-  AGENDA_STORAGE_KEY,
-  normalizeStoredAgenda,
-  type AgendaAppointment,
-} from "../../data/agenda";
+import { AGENDA_STORAGE_KEY } from "../../data/agenda";
 import { AdminAgendaModule } from "../../components/admin/AdminAgendaModule";
 import { AdminDevelopmentsManager } from "../../components/admin/AdminDevelopmentsManager";
 import { AdminCompanySettings } from "../../components/admin/AdminCompanySettings";
@@ -457,8 +454,7 @@ export function AdminWorkspace() {
     null
   );
   const [deletePropertyId, setDeletePropertyId] = useState<string | null>(null);
-  /** Agenda local (localStorage). Se hidrata para alimentar las métricas de citas en KPI's. */
-  const [appointments, setAppointments] = useState<AgendaAppointment[]>([]);
+  const { appointments, setAppointments } = useAdminAppointments(activeTab);
 
   const canAccessDashboard = useMemo(() => canAccessDashboardModule(effectiveUser), [effectiveUser]);
   const canAccessKpis = useMemo(() => canAccessKpisModule(effectiveUser), [effectiveUser]);
@@ -538,20 +534,6 @@ export function AdminWorkspace() {
     [user]
   );
 
-  // Carga la agenda local para alimentar las métricas de citas en KPI's.
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(AGENDA_STORAGE_KEY);
-      if (!raw) {
-        setAppointments([]);
-        return;
-      }
-      const parsed = JSON.parse(raw) as unknown;
-      setAppointments(normalizeStoredAgenda(parsed));
-    } catch {
-      setAppointments([]);
-    }
-  }, [activeTab]);
 
   // Verificar autenticación y cargar datos (grupos + pipeline siempre; leads / desarrollos / catálogo según pestaña).
   useEffect(() => {
