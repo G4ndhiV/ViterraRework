@@ -124,6 +124,7 @@ import { useAdminViewAs } from "./useAdminViewAs";
 import { useAdminAppointments } from "./useAdminAppointments";
 import { usePropertiesFilters } from "./usePropertiesFilters";
 import { useLeadsFilters } from "./useLeadsFilters";
+import { filterLeadsForDisplay } from "./leadsFiltering";
 import {
   effectiveRoleFromView,
   getVisiblePipelineGroupIdsForView,
@@ -208,12 +209,7 @@ import {
   persistSalesPipelineConfigs,
 } from "../../lib/supabaseSalesPipeline";
 import { foldSearchText } from "../../lib/searchText";
-import {
-  dashboardTimeGreetingEs,
-  leadAssignedToCrmUser,
-  teamMemberMatchesFoldedQuery,
-  teamMemberNameMatchesFoldedQuery,
-} from "./adminWorkspaceHelpers";
+import { dashboardTimeGreetingEs } from "./adminWorkspaceHelpers";
 import {
   buildAdminCanonicalHref,
   buildAdminHref,
@@ -2359,49 +2355,11 @@ export function AdminWorkspace() {
   const propertiesForSale = properties.filter(p => p.status === "venta").length;
   const propertiesForRent = properties.filter(p => p.status === "alquiler").length;
 
-  const filteredLeads = leadsInActivePipeline.filter((lead) => {
-    const createdAtDate = lead.createdAt ? new Date(lead.createdAt) : null;
-    const now = new Date();
-    const fromByRange = (() => {
-      if (createdRangeFilter === "all" || createdRangeFilter === "custom") return null;
-      const d = new Date(now);
-      if (createdRangeFilter === "1m") d.setMonth(d.getMonth() - 1);
-      if (createdRangeFilter === "3m") d.setMonth(d.getMonth() - 3);
-      if (createdRangeFilter === "6m") d.setMonth(d.getMonth() - 6);
-      if (createdRangeFilter === "1y") d.setFullYear(d.getFullYear() - 1);
-      return d;
-    })();
-    const customFromDate = createdRangeFilter === "custom" && createdFrom ? new Date(`${createdFrom}T00:00:00`) : null;
-    const customToDate = createdRangeFilter === "custom" && createdTo ? new Date(`${createdTo}T23:59:59`) : null;
-    const q = foldSearchText(searchQuery);
-    const matchesSearch = (() => {
-      if (!q) return true;
-      if (leadSearchNameScope === "client") {
-        return foldSearchText(lead.name).includes(q);
-      }
-      if (leadSearchNameScope === "advisor") {
-        return (
-          foldSearchText(lead.assignedTo).includes(q) ||
-          users.some((u) => teamMemberNameMatchesFoldedQuery(u, q) && leadAssignedToCrmUser(lead, u))
-        );
-      }
-      return (
-        foldSearchText(lead.name).includes(q) ||
-        foldSearchText(lead.email).includes(q) ||
-        foldSearchText(lead.phone).includes(q) ||
-        users.some((u) => teamMemberMatchesFoldedQuery(u, q) && leadAssignedToCrmUser(lead, u))
-      );
-    })();
-    const matchesStatus = statusFilter === "all" || lead.status === statusFilter;
-    const matchesCreatedRange =
-      createdRangeFilter === "all" ||
-      (createdAtDate !== null &&
-        !Number.isNaN(createdAtDate.getTime()) &&
-        ((fromByRange ? createdAtDate >= fromByRange : true) &&
-          (customFromDate ? createdAtDate >= customFromDate : true) &&
-          (customToDate ? createdAtDate <= customToDate : true)));
-    return matchesSearch && matchesStatus && matchesCreatedRange;
-  });
+  const filteredLeads = filterLeadsForDisplay(
+    leadsInActivePipeline,
+    { searchQuery, leadSearchNameScope, statusFilter, createdRangeFilter, createdFrom, createdTo },
+    users,
+  );
 
   const normalizeStageToken = useCallback((value: string) => {
     return value
