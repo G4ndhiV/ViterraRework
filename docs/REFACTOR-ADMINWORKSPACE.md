@@ -21,7 +21,8 @@ muchas piezas pequeñas, cohesivas y testeables, **sin cambiar comportamiento**.
 | Tras 2.10 (useLeadsData) | 5.360 | 26 | 19 | 42 | 38 |
 | Tras 3.1 (AdminDashboardContent) | 5.337 | 25 | 19 | 42 | 38 |
 | Tras 2.11 (pipelineSelection) | 5.333 | 25 | 19 | 41 | 38 |
-| Tras 2.12 (usePipelineConfig) | **5.310** | 22 | 19 | 38 | 38 |
+| Tras 2.12 (usePipelineConfig) | 5.310 | 22 | 19 | 38 | 38 |
+| Tras 3.2 (PropertyStatsCards) | **5.268** | 22 | 19 | 38 | 38 |
 
 (El conteo de líneas baja poco en los hooks de puro `useState` por lo verboso del destructure;
 el valor real es la reducción de estado/efectos que el componente maneja directamente y la
@@ -55,6 +56,7 @@ testeabilidad.)
 
 ### Fase 3 — pestañas → componentes (INICIADA)
 - [x] **3.1** Dashboard → `components/admin/AdminDashboardContent.tsx` (patrón establecido).
+- [~] **3.2** Propiedades (en piezas, por confiabilidad): tarjetas de estadísticas → `AdminPropertyStatsCards.tsx`. **Falta** toolbar (header+búsqueda+filtros) y vistas (tarjetas/lista/mapa con acciones por tarjeta).
 - [ ] Pestañas "gordas" (las que más reducen líneas, ~600 c/u, superficie de props grande): **Propiedades**, **Empresa**, **Leads**.
 - [ ] Pestañas delgadas restantes (consultas, clientes, agenda, actividades, perfil).
 

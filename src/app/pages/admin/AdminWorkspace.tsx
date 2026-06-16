@@ -123,6 +123,7 @@ import { useAdminSidebar } from "./useAdminSidebar";
 import { useAdminViewAs } from "./useAdminViewAs";
 import { useLeadsData } from "./useLeadsData";
 import { AdminDashboardContent } from "../../components/admin/AdminDashboardContent";
+import { AdminPropertyStatsCards } from "../../components/admin/AdminPropertyStatsCards";
 import { usePipelineConfig } from "./usePipelineConfig";
 import { useAdminAppointments } from "./useAdminAppointments";
 import { usePropertiesFilters } from "./usePropertiesFilters";
@@ -4042,55 +4043,12 @@ export function AdminWorkspace() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-                <div className="flex flex-col border border-slate-200 bg-white p-6">
-                  <div className="mb-4 flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-                      Inventario
-                    </p>
-                    <TrendingUp className="h-4 w-4 text-slate-400" strokeWidth={1.5} />
-                  </div>
-                  <p className="text-3xl font-light text-slate-900">
-                    {totalProperties}
-                  </p>
-                </div>
-
-                <div className="flex flex-col border border-slate-200 bg-white p-6">
-                  <div className="mb-4 flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-                      En venta
-                    </p>
-                    <Activity className="h-4 w-4 text-slate-400" strokeWidth={1.5} />
-                  </div>
-                  <p className="text-3xl font-light text-slate-900">
-                    {propertiesForSale}
-                  </p>
-                </div>
-
-                <div className="flex flex-col border border-slate-200 bg-white p-6">
-                  <div className="mb-4 flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-                      En alquiler
-                    </p>
-                    <Briefcase className="h-4 w-4 text-slate-400" strokeWidth={1.5} />
-                  </div>
-                  <p className="text-3xl font-light text-slate-900">
-                    {propertiesForRent}
-                  </p>
-                </div>
-
-                <div className="flex flex-col border border-slate-200 bg-white p-6">
-                  <div className="mb-4 flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-                      Valor prom.
-                    </p>
-                    <TrendingUp className="h-4 w-4 text-slate-400" strokeWidth={1.5} />
-                  </div>
-                  <p className="text-3xl font-light text-slate-900">
-                    ${Math.round(avgPropertyPriceNum).toLocaleString("es-MX")}
-                  </p>
-                </div>
-              </div>
+              <AdminPropertyStatsCards
+                totalProperties={totalProperties}
+                propertiesForSale={propertiesForSale}
+                propertiesForRent={propertiesForRent}
+                avgPropertyPrice={avgPropertyPriceNum}
+              />
 
               {/* Properties: tarjetas, lista o mapa */}
               {propertyInventoryView === "map" && filteredProperties.length > 0 && (
