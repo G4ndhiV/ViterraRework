@@ -13,7 +13,7 @@ import type { SiteKey } from "../app/components/admin/siteEditor/editorBlocks";
  *
  * `pilotOrder` sugiere orden de pilotos de menor a mayor riesgo.
  */
-export const SITE_CANVAS_PILOT_ORDER: SiteKey[] = ["services", "about", "developments", "contact", "home", "rent", "sale", "header", "footer"];
+export const SITE_CANVAS_PILOT_ORDER: SiteKey[] = ["services", "about", "developments", "contact", "home", "rent", "sale", "header"];
 
 export type SiteCanvasPhase = "detailBlocks_only" | "optional_page_canvas" | "full_migration";
 

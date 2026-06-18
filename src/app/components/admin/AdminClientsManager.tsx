@@ -11,6 +11,7 @@ import {
   UserCircle2,
   Filter,
   Calendar,
+  ChevronDown,
 } from "lucide-react";
 import type { User } from "../../contexts/AuthContext";
 import type { Lead } from "../../data/leads";
@@ -703,58 +704,55 @@ export function AdminClientsManager({
 
   return (
     <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
-        <div
-          className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute -right-20 top-8 h-56 w-56 rounded-full bg-gradient-to-br from-primary/[0.07] to-transparent blur-3xl"
-          aria-hidden
-        />
-        <div className="relative px-5 pb-6 pt-6 md:px-8 md:pb-7 md:pt-7">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0">
-              <h2 className="text-xl font-semibold text-slate-900">CRM · Clientes</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Fichas de clientes, relación con propiedades y desarrollos, e historial de actividad.
+      <div className="relative border-b border-slate-200 bg-transparent pb-8 mb-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <h2 className="text-3xl font-light tracking-tight text-slate-900 mb-2">Clientes</h2>
+            <p className="text-sm text-slate-500 max-w-xl">
+              Fichas de clientes, relación con propiedades y desarrollos, e historial de actividad.
+            </p>
+            {!canModifyClientRecord(currentUser) && (
+              <p className="mt-2 text-sm text-slate-500 max-w-xl">
+                Como asesor puedes revisar datos y contactar por WhatsApp; crear o cambiar fichas corresponde a un
+                administrador o líder de grupo.
               </p>
-              {!canModifyClientRecord(currentUser) && (
-                <p className="mt-2 text-sm text-slate-500">
-                  Como asesor puedes revisar datos y contactar por WhatsApp; crear o cambiar fichas corresponde a un
-                  administrador o líder de grupo.
-                </p>
-              )}
-            </div>
-            {canModifyClientRecord(currentUser) && (
-              <button
-                type="button"
-                onClick={openNew}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-hover"
-              >
-                <Plus className="h-4 w-4" />
-                Nuevo cliente
-              </button>
             )}
           </div>
+          {canModifyClientRecord(currentUser) && (
+            <button
+              type="button"
+              onClick={openNew}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-black sm:w-auto"
+            >
+              <Plus className="h-4 w-4" strokeWidth={1.5} />
+              Nuevo cliente
+            </button>
+          )}
+        </div>
+      </div>
 
-          <div className="mt-8 flex flex-col gap-3 border-t border-slate-200/80 pt-6">
-            <div className="relative min-h-[2.75rem] w-full">
-              <Search
-                className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
-                strokeWidth={1.75}
-              />
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar por nombre, correo o teléfono…"
-                className="h-full min-h-[2.75rem] w-full rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-4 text-sm text-brand-navy shadow-sm transition-all placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                style={{ fontWeight: 500 }}
-                autoComplete="off"
-              />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mb-8 flex flex-col rounded-2xl border border-slate-200 bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)]">
+        <div className="flex flex-col sm:flex-row sm:items-center p-1.5 gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" strokeWidth={1.5} />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar por nombre, correo o teléfono..."
+              className="w-full border-none bg-transparent py-3 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-0 font-medium"
+              autoComplete="off"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-4 py-3 rounded-b-2xl">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+              <Filter className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              Filtros
+            </span>
+            <div className="grid flex-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <SearchableFilterSelect
                 value={propertyFilter}
                 onChange={handlePropertyFilterChange}
@@ -763,6 +761,7 @@ export function AdminClientsManager({
                 placeholder="Buscar propiedad…"
                 previewVariant="square"
                 allIcon="home"
+                compact
               />
               <SearchableFilterSelect
                 value={developmentFilter}
@@ -772,6 +771,7 @@ export function AdminClientsManager({
                 placeholder="Buscar desarrollo…"
                 previewVariant="square"
                 allIcon="building"
+                compact
               />
               {(canManageAllClients(currentUser) || currentUser.role === "lider_grupo") && (
                 <SearchableFilterSelect
@@ -782,113 +782,116 @@ export function AdminClientsManager({
                   placeholder="Buscar asesor…"
                   previewVariant="avatar"
                   allIcon="users"
+                  compact
                 />
               )}
             </div>
+          </div>
 
-            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                  <Filter className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                  Más filtros
-                </p>
-                {extraListFiltersActive && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLeadLinkPresence("all");
-                      setPropertyLinkPresence("all");
-                      setDevelopmentLinkPresence("all");
-                      setPhoneListFilter("all");
-                      setCreatedInRange("all");
-                    }}
-                    className="text-xs font-medium text-primary decoration-primary/30 hover:underline"
-                  >
-                    Limpiar
-                  </button>
-                )}
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                <div className="space-y-0.5">
-                  <label className="text-[10px] font-medium uppercase leading-tight tracking-wide text-slate-500">
-                    Leads vinculados
-                  </label>
-                  <select
-                    value={leadLinkPresence}
-                    onChange={(e) => setLeadLinkPresence(e.target.value as "all" | "any" | "none")}
-                    className="h-8 w-full rounded-lg border border-slate-200/90 bg-white px-2.5 pr-7 text-xs text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/15"
-                    style={{ fontWeight: 500 }}
-                  >
-                    <option value="all">Cualquiera</option>
-                    <option value="any">Con al menos un lead</option>
-                    <option value="none">Sin leads</option>
-                  </select>
-                </div>
-                <div className="space-y-0.5">
-                  <label className="text-[10px] font-medium uppercase leading-tight tracking-wide text-slate-500">
-                    Propiedades
-                  </label>
-                  <select
-                    value={propertyLinkPresence}
-                    onChange={(e) => setPropertyLinkPresence(e.target.value as "all" | "any" | "none")}
-                    className="h-8 w-full rounded-lg border border-slate-200/90 bg-white px-2.5 pr-7 text-xs text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/15"
-                    style={{ fontWeight: 500 }}
-                  >
-                    <option value="all">Cualquiera</option>
-                    <option value="any">Con al menos una</option>
-                    <option value="none">Sin vincular</option>
-                  </select>
-                </div>
-                <div className="space-y-0.5">
-                  <label className="text-[10px] font-medium uppercase leading-tight tracking-wide text-slate-500">
-                    Desarrollos
-                  </label>
-                  <select
-                    value={developmentLinkPresence}
-                    onChange={(e) => setDevelopmentLinkPresence(e.target.value as "all" | "any" | "none")}
-                    className="h-8 w-full rounded-lg border border-slate-200/90 bg-white px-2.5 pr-7 text-xs text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/15"
-                    style={{ fontWeight: 500 }}
-                  >
-                    <option value="all">Cualquiera</option>
-                    <option value="any">Con al menos uno</option>
-                    <option value="none">Sin vincular</option>
-                  </select>
-                </div>
-                <div className="space-y-0.5">
-                  <label className="text-[10px] font-medium uppercase leading-tight tracking-wide text-slate-500">
-                    Teléfono
-                  </label>
-                  <select
-                    value={phoneListFilter}
-                    onChange={(e) => setPhoneListFilter(e.target.value as "all" | "with" | "without")}
-                    className="h-8 w-full rounded-lg border border-slate-200/90 bg-white px-2.5 pr-7 text-xs text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/15"
-                    style={{ fontWeight: 500 }}
-                  >
-                    <option value="all">Cualquiera</option>
-                    <option value="with">Con teléfono</option>
-                    <option value="without">Sin teléfono</option>
-                  </select>
-                </div>
-                <div className="space-y-0.5 sm:col-span-2 lg:col-span-1">
-                  <label className="inline-flex items-center gap-1 text-[10px] font-medium uppercase leading-tight tracking-wide text-slate-500">
-                    <Calendar className="h-2.5 w-2.5" strokeWidth={2} aria-hidden />
-                    Alta reciente
-                  </label>
-                  <select
-                    value={createdInRange}
-                    onChange={(e) => setCreatedInRange(e.target.value as typeof createdInRange)}
-                    className="h-8 w-full rounded-lg border border-slate-200/90 bg-white px-2.5 pr-7 text-xs text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/15"
-                    style={{ fontWeight: 500 }}
-                  >
-                    <option value="all">Cualquier fecha</option>
-                    <option value="7d">Últimos 7 días</option>
-                    <option value="30d">Últimos 30 días</option>
-                    <option value="90d">Últimos 90 días</option>
-                    <option value="1y">Último año</option>
-                  </select>
-                </div>
-              </div>
+          <div className="flex items-center gap-3 border-t border-slate-200/70 pt-2.5 overflow-x-auto">
+            <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 mr-1">
+              Más
+            </span>
+
+            <div className="relative shrink-0">
+              <select
+                value={leadLinkPresence}
+                onChange={(e) => setLeadLinkPresence(e.target.value as "all" | "any" | "none")}
+                className="appearance-none border-none bg-transparent py-1 pl-2 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+                aria-label="Leads vinculados"
+              >
+                <option value="all">Leads vinculados</option>
+                <option value="any">Con al menos un lead</option>
+                <option value="none">Sin leads</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
             </div>
+
+            <div className="h-5 w-px bg-slate-300 shrink-0" />
+
+            <div className="relative shrink-0">
+              <select
+                value={propertyLinkPresence}
+                onChange={(e) => setPropertyLinkPresence(e.target.value as "all" | "any" | "none")}
+                className="appearance-none border-none bg-transparent py-1 pl-2 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+                aria-label="Propiedades vinculadas"
+              >
+                <option value="all">Propiedades</option>
+                <option value="any">Con al menos una</option>
+                <option value="none">Sin propiedades</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+            </div>
+
+            <div className="h-5 w-px bg-slate-300 shrink-0" />
+
+            <div className="relative shrink-0">
+              <select
+                value={developmentLinkPresence}
+                onChange={(e) => setDevelopmentLinkPresence(e.target.value as "all" | "any" | "none")}
+                className="appearance-none border-none bg-transparent py-1 pl-2 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+                aria-label="Desarrollos vinculados"
+              >
+                <option value="all">Desarrollos</option>
+                <option value="any">Con al menos uno</option>
+                <option value="none">Sin desarrollos</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+            </div>
+
+            <div className="h-5 w-px bg-slate-300 shrink-0" />
+
+            <div className="relative shrink-0">
+              <select
+                value={phoneListFilter}
+                onChange={(e) => setPhoneListFilter(e.target.value as "all" | "with" | "without")}
+                className="appearance-none border-none bg-transparent py-1 pl-2 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+                aria-label="Teléfono"
+              >
+                <option value="all">Teléfono</option>
+                <option value="with">Con teléfono</option>
+                <option value="without">Sin teléfono</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+            </div>
+
+            <div className="h-5 w-px bg-slate-300 shrink-0" />
+
+            <div className="relative shrink-0">
+              <select
+                value={createdInRange}
+                onChange={(e) => setCreatedInRange(e.target.value as typeof createdInRange)}
+                className="appearance-none border-none bg-transparent py-1 pl-7 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+                aria-label="Alta reciente"
+              >
+                <option value="all">Alta reciente</option>
+                <option value="7d">Últimos 7 días</option>
+                <option value="30d">Últimos 30 días</option>
+                <option value="90d">Últimos 90 días</option>
+                <option value="1y">Último año</option>
+              </select>
+              <Calendar className="pointer-events-none absolute left-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} aria-hidden />
+              <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+            </div>
+
+            {extraListFiltersActive && (
+              <>
+                <div className="h-5 w-px bg-slate-300 shrink-0 ml-auto" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLeadLinkPresence("all");
+                    setPropertyLinkPresence("all");
+                    setDevelopmentLinkPresence("all");
+                    setPhoneListFilter("all");
+                    setCreatedInRange("all");
+                  }}
+                  className="shrink-0 text-xs font-semibold text-primary hover:underline"
+                >
+                  Limpiar
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

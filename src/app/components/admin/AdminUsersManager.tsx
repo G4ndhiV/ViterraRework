@@ -183,6 +183,8 @@ interface Props {
   onUpdateUser: (id: string, input: { name: string; email: string; profile: { phone: string; address: string; birthDate: string; workHistory: string[] } }) => void;
   onUpdatePassword: (id: string, password: string) => void;
   onUpdatePermissions: (id: string, role: UserRole, permissions: UserPermission[]) => void;
+  onArchive: (id: string) => void;
+  onReactivate: (id: string) => void;
   /** Borrado permanente (limpia `tokko_users` y directorio local). */
   onDelete?: (id: string) => Promise<{ ok: boolean; message?: string }>;
   /** Tras enviar un mensaje desde el perfil, abre la pestaña Mensajes con el peer seleccionado. */
@@ -219,6 +221,8 @@ export function AdminUsersManager({
   onUpdateUser,
   onUpdatePassword,
   onUpdatePermissions,
+  onArchive,
+  onReactivate,
   onDelete,
   onSendMessageNavigate,
   focusUser,
@@ -228,6 +232,7 @@ export function AdminUsersManager({
   onEmbeddedClose,
 }: Props) {
   const [managementTab, setManagementTab] = useState<"users" | "groups">("users");
+  const [showArchived, setShowArchived] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
   const [userGroupFilter, setUserGroupFilter] = useState<"all" | string>("all");
@@ -238,6 +243,7 @@ export function AdminUsersManager({
   const [userDetailEditMode, setUserDetailEditMode] = useState(false);
   const [creatingOpen, setCreatingOpen] = useState(false);
   const [passwordModal, setPasswordModal] = useState<User | null>(null);
+  const [archiveCandidate, setArchiveCandidate] = useState<User | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<User | null>(null);
   const [deletingUser, setDeletingUser] = useState(false);
   const [sendMessageOpen, setSendMessageOpen] = useState(false);
@@ -257,7 +263,7 @@ export function AdminUsersManager({
     (userGroupFilter !== "all" || userPermissionFilter !== "all" || userPhoneFilter !== "all");
 
   const filteredUsers = useMemo(() => {
-    let list = users.filter((u) => u.isActive);
+    let list = users.filter((u) => (showArchived ? !u.isActive : u.isActive));
     if (roleFilter !== "all") {
       list = list.filter((u) => u.role === roleFilter);
     }
@@ -307,6 +313,7 @@ export function AdminUsersManager({
     return list;
   }, [
     users,
+    showArchived,
     roleFilter,
     userSearchQuery,
     canManageUsers,
@@ -557,20 +564,29 @@ export function AdminUsersManager({
             </h2>
             <p className="mt-1 text-sm text-slate-600">
               {managementTab === "users"
-                ? "Gestiona usuarios, permisos e historial de actividad."
+                ? "Gestiona usuarios, permisos y consulta historial de usuarios archivados."
                 : "Organiza equipos, líderes y miembros para controlar accesos por grupo."}
             </p>
           </div>
-          {managementTab === "users" && canManageUsers && (
+          {managementTab === "users" && (
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => setCreatingOpen(true)}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-hover"
+                onClick={() => setShowArchived((p) => !p)}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
-                <UserPlus className="h-4 w-4" />
-                Crear usuario
+                {showArchived ? "Ver activos" : "Ver archivados"}
               </button>
+              {canManageUsers && (
+                <button
+                  type="button"
+                  onClick={() => setCreatingOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-hover"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Crear usuario
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -731,7 +747,7 @@ export function AdminUsersManager({
                       }}
                       className="flex items-center gap-3 text-left"
                     >
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-brand-navy text-xs font-semibold text-white shadow-sm ring-1 ring-slate-200">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 text-xs font-semibold text-white shadow-sm ring-1 ring-slate-200 border border-slate-600/20">
                         {user.profile.picture ? (
                           <img src={user.profile.picture} alt="" className="h-full w-full object-cover" />
                         ) : (
@@ -740,7 +756,9 @@ export function AdminUsersManager({
                       </span>
                       <span className="min-w-0">
                         <p className="text-sm font-semibold text-slate-900">{user.name}</p>
-                        <p className="text-xs text-slate-500">Activo</p>
+                        <p className="text-xs text-slate-500">
+                          {user.isActive ? "Activo" : `Archivado ${new Date(user.archivedAt || "").toLocaleDateString()}`}
+                        </p>
                       </span>
                     </button>
                   </td>
@@ -784,6 +802,22 @@ export function AdminUsersManager({
                           <KeyRound className="h-4 w-4" />
                         </button>
                       )}
+                      {canManageUsers && user.id !== currentUser.id && (
+                        user.isActive ? (
+                          <button
+                            type="button"
+                            onClick={() => setArchiveCandidate(user)}
+                            className="rounded-md p-2 text-slate-500 hover:bg-amber-50 hover:text-amber-700"
+                            title="Archivar"
+                          >
+                            <ArchiveRestore className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => onReactivate(user.id)} className="rounded-md p-2 text-slate-500 hover:bg-green-50 hover:text-green-700" title="Reactivar">
+                            <ArchiveRestore className="h-4 w-4" />
+                          </button>
+                        )
+                      )}
                       {canManageUsers && user.id !== currentUser.id && onDelete && (
                         <button
                           type="button"
@@ -823,6 +857,39 @@ export function AdminUsersManager({
         onSubmit={submitCreate}
         onReset={resetCreateForm}
       />
+
+      <Dialog open={!!archiveCandidate} onOpenChange={(open) => !open && setArchiveCandidate(null)}>
+        <DialogContent className="w-full max-w-md border-slate-200 bg-white p-6">
+          {archiveCandidate && (
+            <>
+              <DialogHeader className="text-left">
+                <DialogTitle className="text-lg font-semibold text-slate-900">Archivar usuario</DialogTitle>
+                <DialogDescription className="text-sm text-slate-600">
+                  Esta acción moverá a <span className="font-semibold text-slate-800">{archiveCandidate.name}</span> al historial de usuarios archivados.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="mt-4 rounded-lg border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Puedes reactivarlo después desde “Ver archivados”.
+              </div>
+              <DialogFooter className="mt-5 flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setArchiveCandidate(null)}>
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-primary text-primary-foreground hover:bg-brand-red-hover"
+                  onClick={() => {
+                    onArchive(archiveCandidate.id);
+                    setArchiveCandidate(null);
+                  }}
+                >
+                  Archivar usuario
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!deleteCandidate} onOpenChange={(open) => !open && !deletingUser && setDeleteCandidate(null)}>
         <DialogContent className="w-full max-w-md border-slate-200 bg-white p-6">

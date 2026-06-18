@@ -2,7 +2,7 @@ import { createBrowserRouter, Navigate } from "react-router";
 import type { ComponentType } from "react";
 import { RootLayout } from "./RootLayout";
 import { AdminLayout } from "./pages/admin/AdminLayout";
-import { HomePage } from "./pages/HomePage";
+import { RouteErrorFallback } from "./components/ErrorBoundary";
 
 const lazyPage = (loader: () => Promise<{ [key: string]: unknown }>, exportName: string) => async () => {
   const mod = await loader();
@@ -16,10 +16,11 @@ const lazyPage = (loader: () => Promise<{ [key: string]: unknown }>, exportName:
 export const router = createBrowserRouter([
   {
     element: <RootLayout />,
+    errorElement: <RouteErrorFallback />,
     children: [
       {
         path: "/",
-        element: <HomePage />,
+        lazy: lazyPage(() => import("./pages/HomePage"), "HomePage"),
       },
       {
         path: "/renta",

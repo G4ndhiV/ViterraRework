@@ -11,6 +11,10 @@ import {
   Building2,
   Send,
   ChevronDown,
+  Facebook,
+  Instagram,
+  Globe,
+  Youtube,
   ArrowRight,
   MessageCircle,
 } from "lucide-react";
@@ -21,12 +25,14 @@ import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSect
 import { HeroBackdropMedia } from "../components/HeroBackdropMedia";
 import { Reveal } from "../components/Reveal";
 import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
-import { ContactSocialGlyph } from "../components/ContactSocialGlyph";
 import { cn } from "../components/ui/utils";
+import { getSupabaseClient } from "../lib/supabaseClient";
+import { messageForCatalogLeadRpcError, submitCatalogLeadViaRpc } from "../lib/supabaseLeads";
 import {
   CONTACT_SOCIAL_LABELS,
   DEFAULT_SITE_CONTENT,
   type ContactInfoIcon,
+  type ContactSocialPlatform,
   type SiteContent,
 } from "../../data/siteContent";
 import {
@@ -76,6 +82,31 @@ function normalizeExternalHref(raw: string): string {
   if (/^https?:\/\//i.test(t) || t.startsWith("/") || t.startsWith("#") || t.startsWith("mailto:") || t.startsWith("tel:"))
     return t;
   return `https://${t}`;
+}
+
+function ContactSocialGlyph({
+  platform,
+  className,
+}: {
+  platform: ContactSocialPlatform;
+  className?: string;
+}) {
+  const strokeIcon = cn("h-5 w-5", className);
+  switch (platform) {
+    case "facebook":
+      return <Facebook className={strokeIcon} strokeWidth={1.5} aria-hidden />;
+    case "instagram":
+      return <Instagram className={strokeIcon} strokeWidth={1.5} aria-hidden />;
+    case "youtube":
+      return <Youtube className={strokeIcon} strokeWidth={1.5} aria-hidden />;
+    case "whatsapp":
+      return <MessageCircle className={strokeIcon} strokeWidth={1.5} aria-hidden />;
+    case "tiktok":
+    case "threads":
+    case "website":
+    default:
+      return <Globe className={strokeIcon} strokeWidth={1.5} aria-hidden />;
+  }
 }
 
 function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?: "dark" | "light" }) {
@@ -158,23 +189,41 @@ export function ContactPage() {
     message: "",
   });
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [faqOpen, setFaqOpen] = useState<number | null>(0);
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<{ remove: () => void } | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
-    setTimeout(() => {
-      setFormData({
-        name: "",
-        email: "",
-        phone: "",
-        subject: "",
-        message: "",
+    setSubmitError(null);
+    const client = getSupabaseClient();
+    if (!client) {
+      setSubmitError("No hay conexión al servidor. Configura Supabase o escríbenos por WhatsApp.");
+      return;
+    }
+    const subject = formData.subject.trim();
+    const body = formData.message.trim();
+    const composedMessage = [subject ? `Asunto: ${subject}` : "", body].filter(Boolean).join("\n\n");
+    setSubmitting(true);
+    try {
+      const { error } = await submitCatalogLeadViaRpc(client, {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        message: composedMessage,
       });
-      setSubmitted(false);
-    }, 3000);
+      if (error) {
+        setSubmitError(messageForCatalogLeadRpcError(error.message));
+        return;
+      }
+      setSubmitted(true);
+      setFormData({ name: "", email: "", phone: "", subject: "", message: "" });
+      window.setTimeout(() => setSubmitted(false), 4000);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -201,6 +250,7 @@ export function ContactPage() {
 
       try {
         const L = await import("leaflet");
+        if (cancelled || !mapRef.current) return;
         (window as unknown as { L?: typeof L }).L = L;
         await import("leaflet/dist/leaflet.css");
 
@@ -764,9 +814,16 @@ export function ContactPage() {
                     />
                   </div>
 
+                  {submitError ? (
+                    <p className="text-center text-sm text-red-600" role="alert">
+                      {submitError}
+                    </p>
+                  ) : null}
+
                   <div className="flex justify-center">
                     <motion.button
                       type="submit"
+                      disabled={submitting}
                       whileHover={reduceMotion ? undefined : { y: -2 }}
                       whileTap={reduceMotion ? undefined : { scale: 0.98 }}
                       transition={{ type: "spring", stiffness: 420, damping: 24 }}

@@ -7,7 +7,6 @@ import {
   AboutEditorForm,
   ContactEditorForm,
   DevelopmentsEditorForm,
-  FooterEditorForm,
   HeaderEditorForm,
   HomeEditorForm,
   RentEditorForm,
@@ -34,10 +33,9 @@ const SITE_LABELS: Record<SiteKey, string> = {
   about: "Acerca de",
   developments: "Desarrollos",
   header: "Headder",
-  footer: "Footer",
 };
 
-const ORDER: SiteKey[] = ["home", "rent", "sale", "contact", "services", "about", "developments", "header", "footer"];
+const ORDER: SiteKey[] = ["home", "rent", "sale", "contact", "services", "about", "developments", "header"];
 
 const PREVIEW_PATH: Record<SiteKey, string> = {
   home: "/",
@@ -48,7 +46,6 @@ const PREVIEW_PATH: Record<SiteKey, string> = {
   about: "/nosotros",
   developments: "/desarrollos",
   header: "/",
-  footer: "/",
 };
 
 /**
@@ -289,8 +286,9 @@ export function AdminSiteEditor() {
     const onMsg = (e: MessageEvent) => {
       if (e.source !== iframeRef.current?.contentWindow) return;
       if (!isSameOriginMessage(e.origin)) return;
-      const d = e.data as SitePreviewChildMessage | { type?: string };
-      if (d?.type !== VITERRA_SITE_PREVIEW_CHILD) return;
+      const raw = e.data as { type?: string };
+      if (raw?.type !== VITERRA_SITE_PREVIEW_CHILD) return;
+      const d = raw as SitePreviewChildMessage;
       if (d.action === "setActiveBlock") {
         setActiveBlockId(d.blockId ?? null);
         return;
@@ -403,14 +401,6 @@ export function AdminSiteEditor() {
           draft={draft as SiteContent["header"]}
           activeSectionId={activeBlockId}
           onChange={(next) => setDraft(next)}
-        />
-      )}
-      {tab === "footer" && (
-        <FooterEditorForm
-          draft={draft as SiteContent["footer"]}
-          activeSectionId={activeBlockId}
-          onChange={(next) => setDraft(next)}
-          serviceCards={mergeSiteSection("services", content.services).cards}
         />
       )}
     </>

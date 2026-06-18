@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, ReactNode } from "react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { useLocation } from "react-router";
 import { getSupabaseClient } from "../lib/supabaseClient";
@@ -9,6 +9,7 @@ import {
   fetchAllTokkoUsersForDirectory,
   fetchTokkoUserRow,
   provisionTokkoUser,
+  updateTokkoUserPassword,
   upsertTokkoUserAccess,
 } from "../lib/supabaseTokkoUsers";
 import { AuthContext } from "./authContextInstance";
@@ -38,7 +39,6 @@ export type {
 export { useAuth } from "./authContextInstance";
 
 const USERS_STORAGE_KEY = "viterra_admin_users";
-const PASSWORDS_STORAGE_KEY = "viterra_admin_passwords";
 
 function toStorageSafeUser(u: User): User {
   return {
@@ -109,6 +109,37 @@ const newHistoryEntry = (
 });
 
 const normalizeRole = (role: string | undefined): UserRole => (role === "agente" ? "asesor" : (role as UserRole)) || "asesor";
+
+/**
+ * Cache del último rol CONFIRMADO por `tokko_users` (DB), por usuario. Evita el bug de degradar
+ * al admin a "asesor" cuando el JWT no trae `role` en metadata y la resolución cae al default,
+ * o cuando la lectura de DB falla/expira en un TOKEN_REFRESHED. Solo se escribe con rol real de DB.
+ */
+const CONFIRMED_ROLE_KEY = "viterra_confirmed_role";
+function loadConfirmedRole(userId: string): UserRole | null {
+  try {
+    const raw = localStorage.getItem(CONFIRMED_ROLE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw) as { id?: string; role?: string };
+    return obj.id === userId && typeof obj.role === "string" ? normalizeRole(obj.role) : null;
+  } catch {
+    return null;
+  }
+}
+function saveConfirmedRole(userId: string, role: UserRole): void {
+  try {
+    localStorage.setItem(CONFIRMED_ROLE_KEY, JSON.stringify({ id: userId, role }));
+  } catch {
+    /* ignore */
+  }
+}
+function clearConfirmedRole(): void {
+  try {
+    localStorage.removeItem(CONFIRMED_ROLE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
 
 const ALL_PERMISSIONS: UserPermission[] = ALL_MODULE_PERMISSIONS;
 
@@ -290,23 +321,51 @@ function mergeTokkoRowIntoUser(base: User, row: Record<string, unknown>): User {
 /**
  * Refuerza rol/permisos desde `tokko_users`. Reintenta: la primera lectura tras login o un timeout
  * previo puede devolver vacío y sin esto el JWT (sin `role` en metadata) deja al usuario como asesor.
+ * Limitado a 2 intentos con 400 ms de espera fija para no bloquear `authReady` más de ~500 ms.
  */
-async function loadUserWithTokkoMerge(client: SupabaseClient, session: Session): Promise<User> {
-  let appUser = sessionToAppUser(session);
-  const maxAttempts = 4;
+/**
+ * Si el JWT no trae `role` explícito, evita degradar usando el último rol confirmado por DB
+ * (cache). Así un TOKEN_REFRESHED o una ruta pública no convierten al admin en asesor.
+ */
+function applyConfirmedRole(u: User, su: Session["user"]): User {
+  if (roleStringFromAuthUser(su)) return u; // El JWT trae rol explícito → confiar en él.
+  const cached = loadConfirmedRole(su.id);
+  if (!cached || cached === u.role) return u;
+  return normalizeUser({ ...u, role: cached, permissions: [...defaultPermissionsByRole[cached]] });
+}
+
+async function loadUserWithTokkoMerge(
+  client: SupabaseClient,
+  session: Session,
+): Promise<{ user: User; confirmed: boolean }> {
+  const appUser = sessionToAppUser(session);
+  const maxAttempts = 2;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const { data, error } = await fetchTokkoUserRow(client, session.user.id);
-    if (!error && data) {
-      return mergeTokkoRowIntoUser(appUser, data as Record<string, unknown>);
-    }
-    if (import.meta.env.DEV && error) {
-      console.warn(`[Viterra] fetchTokkoUserRow intento ${attempt + 1}/${maxAttempts}:`, error.message);
+    try {
+      const { data, error } = await withTimeout(
+        fetchTokkoUserRow(client, session.user.id, session.user.email),
+        3500,
+        `fetchTokkoUserRow (intento ${attempt + 1})`
+      );
+      if (!error && data) {
+        const merged = mergeTokkoRowIntoUser(appUser, data as Record<string, unknown>);
+        saveConfirmedRole(session.user.id, merged.role); // rol real de DB → cache
+        return { user: merged, confirmed: true };
+      }
+      if (import.meta.env.DEV && error) {
+        console.warn(`[Viterra] fetchTokkoUserRow intento ${attempt + 1}/${maxAttempts}:`, error.message);
+      }
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn(`[Viterra] fetchTokkoUserRow intento ${attempt + 1}/${maxAttempts} timeout/error:`, e);
+      }
     }
     if (attempt < maxAttempts - 1) {
-      await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+      await new Promise((r) => setTimeout(r, 400));
     }
   }
-  return appUser;
+  // DB no confirmó: no degradar si tenemos un rol confirmado previo para este usuario.
+  return { user: applyConfirmedRole(appUser, session.user), confirmed: false };
 }
 
 /** Fila `tokko_users` → usuario del directorio CRM (misma lógica que el refuerzo por sesión). */
@@ -351,6 +410,13 @@ function tokkoDbNeededForPath(pathname: string): boolean {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
 
+  /**
+   * Tracks the Supabase user ID for which the Tokko directory has already been
+   * loaded. Prevents `loadTokkoProfileAndDirectory` from re-firing on every
+   * tab navigation (pathname change) when the session hasn't changed.
+   */
+  const directoryLoadedForUserIdRef = useRef<string | null>(null);
+
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem(USERS_STORAGE_KEY);
     if (!saved) return [];
@@ -362,18 +428,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   });
 
-  const [passwordByUserId, setPasswordByUserId] = useState<Record<string, string>>(() => {
-    const saved = localStorage.getItem(PASSWORDS_STORAGE_KEY);
-    if (!saved) return {};
-    try {
-      return JSON.parse(saved) as Record<string, string>;
-    } catch {
-      return {};
-    }
-  });
-
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const sessionApplyGenRef = useRef(0);
+
+  useEffect(() => {
+    try {
+      localStorage.removeItem("viterra_admin_passwords");
+    } catch {
+      // noop
+    }
+  }, []);
 
   const TOKKO_DIRECTORY_MS = 6_000;
 
@@ -471,19 +536,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [TOKKO_DIRECTORY_MS, mergeSessionUserIntoDirectory, syncDirectoryAccessToTokkoUsers]
   );
 
-  const loadTokkoProfileAndDirectory = useCallback(async () => {
+  const loadTokkoProfileAndDirectory = useCallback(async (forceReload = false) => {
     if (!tokkoDbNeededForPath(location.pathname)) return;
     const client = getSupabaseClient();
     if (!client) return;
-    const {
-      data: { session },
-    } = await client.auth.getSession();
-    if (!session?.user) return;
+    try {
+      const {
+        data: { session },
+      } = await withTimeout(client.auth.getSession(), 5000, "getSession en directorio");
+      if (!session?.user) return;
 
-    const appUser = await loadUserWithTokkoMerge(client, session);
-    setUser(appUser);
-    void hydrateTokkoDirectory(appUser);
+      // Skip if we already loaded the directory for this exact session user —
+      // avoids a DB round-trip on every tab navigation (pathname change).
+      if (!forceReload && directoryLoadedForUserIdRef.current === session.user.id) return;
+
+      const { user: appUser } = await loadUserWithTokkoMerge(client, session);
+      setUser(appUser);
+      directoryLoadedForUserIdRef.current = session.user.id;
+      void hydrateTokkoDirectory(appUser);
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn("[Viterra] loadTokkoProfileAndDirectory error:", e);
+      }
+    }
   }, [location.pathname, hydrateTokkoDirectory]);
+
+  // Ref para evitar stale closures en applySession sin hacer que el efecto
+  // dependa de location.pathname (lo que causaba re-fetch del rol en cada cambio de módulo).
+  const pathnameRef = useRef(location.pathname);
+  pathnameRef.current = location.pathname;
 
   useEffect(() => {
     const client = getSupabaseClient();
@@ -493,34 +574,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const applySession = async (session: Session | null) => {
+      const gen = ++sessionApplyGenRef.current;
       if (!session?.user) {
-        setUser(null);
+        if (gen === sessionApplyGenRef.current) setUser(null);
         return;
       }
       const c = getSupabaseClient();
       if (c) {
-        /**
-         * Refuerzo con `tokko_users` + reintentos.
-         * OJO: En rutas públicas esto no aporta valor, pero sí puede sumar segundos (queries + backoff).
-         * Solo lo hacemos en `/admin/*` para mejorar la consistencia de carga del sitio.
-         */
-        const appUser = tokkoDbNeededForPath(location.pathname)
-          ? await loadUserWithTokkoMerge(c, session)
-          : sessionToAppUser(session);
+        const appUser = tokkoDbNeededForPath(pathnameRef.current)
+          ? (await loadUserWithTokkoMerge(c, session)).user
+          : applyConfirmedRole(sessionToAppUser(session), session.user);
+        if (gen !== sessionApplyGenRef.current) return;
         setUser(appUser);
       } else {
-        const appUser = sessionToAppUser(session);
+        const appUser = applyConfirmedRole(sessionToAppUser(session), session.user);
+        if (gen !== sessionApplyGenRef.current) return;
         mergeSessionUserIntoDirectory(appUser);
         setUser(appUser);
       }
     };
 
-    void client.auth
-      .getSession()
-      .then(({ data: { session } }) => applySession(session))
-      .finally(() => {
-        setAuthReady(true);
-      });
+    const fetchSession = async () => {
+      try {
+        const { data: { session } } = await withTimeout(
+          client.auth.getSession(),
+          6000,
+          "getSession"
+        );
+        await applySession(session);
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.warn("[Viterra] Error en inicialización de sesión (reintentando):", err);
+        }
+        try {
+          const { data: { session } } = await client.auth.getSession();
+          await applySession(session);
+        } catch (retryErr) {
+          if (import.meta.env.DEV) {
+            console.warn("[Viterra] Reintento de sesión falló:", retryErr);
+          }
+        }
+      }
+    };
+
+    void fetchSession().finally(() => {
+      setAuthReady(true);
+    });
 
     const {
       data: { subscription },
@@ -529,11 +628,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, [location.pathname, mergeSessionUserIntoDirectory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mergeSessionUserIntoDirectory]); // location.pathname eliminado a propósito: el cambio de módulo
+  // NO debe re-ejecutar fetchSession (causaba pérdida de rol admin al navegar).
+  // El segundo useEffect (loadTokkoProfileAndDirectory) ya maneja la recarga de perfil en /admin.
 
   useEffect(() => {
     if (!tokkoDbNeededForPath(location.pathname)) return;
-    void loadTokkoProfileAndDirectory();
+    // `forceReload` is false by default — the ref guard inside will skip
+    // re-fetching unless the session user has changed since last load.
+    void loadTokkoProfileAndDirectory(false);
   }, [location.pathname, loadTokkoProfileAndDirectory]);
 
   const persistUsers = (next: User[]) => {
@@ -543,20 +647,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const refreshed = next.find((u) => u.id === user.id);
       if (!refreshed || !refreshed.isActive) {
         void getSupabaseClient()?.auth.signOut();
+        clearConfirmedRole();
         setUser(null);
       } else {
         setUser(refreshed);
-      }
-    }
-  };
-
-  const persistPasswords = (next: Record<string, string>) => {
-    setPasswordByUserId(next);
-    try {
-      localStorage.setItem(PASSWORDS_STORAGE_KEY, JSON.stringify(next));
-    } catch (e) {
-      if (import.meta.env.DEV) {
-        console.warn("[Viterra] No se pudo persistir contraseñas locales por cuota:", e);
       }
     }
   };
@@ -572,49 +666,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!client) {
       return { ok: false, message: "Supabase no está configurado (variables VITE_SUPABASE_*)." };
     }
-    const { error } = await client.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-    if (error) {
-      return { ok: false, message: error.message };
-    }
-    const {
-      data: { session },
-    } = await client.auth.getSession();
-    const uid = session?.user?.id;
-    if (!uid || !session?.user) {
-      return { ok: true, mustChangePassword: false };
-    }
-    let flagRow: { must_change_password?: unknown } | null = null;
-    const byId = await client.from("tokko_users").select("must_change_password").eq("id", uid).maybeSingle();
-    if (!byId.error && byId.data) {
-      flagRow = byId.data as { must_change_password?: unknown };
-    } else if (session.user.email?.trim()) {
-      const byEmail = await client
-        .from("tokko_users")
-        .select("must_change_password")
-        .ilike("email", session.user.email.trim())
-        .maybeSingle();
-      if (!byEmail.error && byEmail.data) {
-        flagRow = byEmail.data as { must_change_password?: unknown };
+    try {
+      const { error } = await withTimeout(
+        client.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        }),
+        8000,
+        "signInWithPassword"
+      );
+      if (error) {
+        return { ok: false, message: error.message };
       }
-    }
-    const appUser = await loadUserWithTokkoMerge(client, session);
-    setUser(appUser);
+      
+      const {
+        data: { session },
+      } = await withTimeout(client.auth.getSession(), 5000, "getSession login");
+      const uid = session?.user?.id;
+      if (!uid || !session?.user) {
+        return { ok: true, mustChangePassword: false };
+      }
 
-    if (!flagRow) {
-      return { ok: true, mustChangePassword: false };
+      let flagRow: { must_change_password?: unknown } | null = null;
+      try {
+        const byId = await withTimeout(
+          client.from("tokko_users").select("must_change_password").eq("id", uid).maybeSingle() as unknown as Promise<any>,
+          4000,
+          "check mustChangePassword by id"
+        );
+        if (!byId.error && byId.data) {
+          flagRow = byId.data as { must_change_password?: unknown };
+        } else if (session.user.email?.trim()) {
+          const byEmail = await withTimeout(
+            client
+              .from("tokko_users")
+              .select("must_change_password")
+              .ilike("email", session.user.email.trim())
+              .maybeSingle() as unknown as Promise<any>,
+            4000,
+            "check mustChangePassword by email"
+          );
+          if (!byEmail.error && byEmail.data) {
+            flagRow = byEmail.data as { must_change_password?: unknown };
+          }
+        }
+      } catch (e) {
+        if (import.meta.env.DEV) {
+          console.warn("[Viterra] login check mustChangePassword timeout/error:", e);
+        }
+      }
+
+      const { user: appUser } = await loadUserWithTokkoMerge(client, session);
+      setUser(appUser);
+
+      if (!flagRow) {
+        return { ok: true, mustChangePassword: false };
+      }
+      const v = flagRow.must_change_password;
+      const mustChangePassword =
+        v === true || v === "true" || v === "t" || v === 1;
+      return { ok: true, mustChangePassword };
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) };
     }
-    const v = flagRow.must_change_password;
-    const mustChangePassword =
-      v === true || v === "true" || v === "t" || v === 1;
-    return { ok: true, mustChangePassword };
   };
 
   const logout: AuthContextType["logout"] = async () => {
     const client = getSupabaseClient();
     await client?.auth.signOut();
+    clearConfirmedRole();
     setUser(null);
   };
 
@@ -679,9 +799,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       history: [newHistoryEntry("created", "Usuario creado", actorName)],
     });
     persistUsers([...users, created]);
-    if (input.password) {
-      persistPasswords({ ...passwordByUserId, [newId]: input.password });
-    }
     return { ok: true };
   };
 
@@ -699,15 +816,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const updateUserPassword: AuthContextType["updateUserPassword"] = (id, newPassword, actorName = "Admin") => {
-    persistPasswords({ ...passwordByUserId, [id]: newPassword });
+  const updateUserPassword: AuthContextType["updateUserPassword"] = async (
+    id,
+    newPassword,
+    actorName = "Admin",
+  ) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: "Supabase no está configurado." };
+    }
+    const remote = await updateTokkoUserPassword(client, { userId: id, password: newPassword });
+    if (!remote.ok) {
+      return { ok: false, message: remote.message ?? "No se pudo actualizar la contraseña." };
+    }
     persistUsers(
       users.map((item) =>
         item.id === id
           ? appendHistory(item, newHistoryEntry("password_changed", "Contraseña actualizada", actorName))
-          : item
-      )
+          : item,
+      ),
     );
+    return { ok: true };
   };
 
   const updateUserPermissions: AuthContextType["updateUserPermissions"] = (id, role, permissions, actorName = "Admin") => {
@@ -771,39 +900,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const client = getSupabaseClient();
     if (client) {
-      const res = await client.from("tokko_users").delete().eq("id", id);
-      if (res.error) {
-        if (import.meta.env.DEV) {
-          console.warn("[Viterra] No se pudo borrar en tokko_users:", res.error.message);
+      try {
+        const res = await withTimeout(
+          client.from("tokko_users").delete().eq("id", id) as unknown as Promise<any>,
+          5000,
+          "delete user from tokko_users"
+        );
+        if (res.error) {
+          if (import.meta.env.DEV) {
+            console.warn("[Viterra] No se pudo borrar en tokko_users:", res.error.message);
+          }
+          return {
+            ok: false,
+            message: "No se pudo eliminar el usuario en la base de datos (RLS o permisos).",
+          };
         }
+      } catch (e) {
         return {
           ok: false,
-          message: "No se pudo eliminar el usuario en la base de datos (RLS o permisos).",
+          message: e instanceof Error ? e.message : "Tiempo de espera agotado al eliminar el usuario.",
         };
       }
     }
 
     persistUsers(users.filter((item) => item.id !== id));
-    if (passwordByUserId[id]) {
-      const { [id]: _omit, ...rest } = passwordByUserId;
-      persistPasswords(rest);
-    }
     return { ok: true };
   };
 
   const refreshUser = useCallback(async () => {
     const client = getSupabaseClient();
     if (!client) return;
-    const {
-      data: { session },
-    } = await client.auth.getSession();
-    if (!session?.user) {
-      setUser(null);
-      return;
+    try {
+      const {
+        data: { session },
+      } = await withTimeout(client.auth.getSession(), 5000, "getSession en refreshUser");
+      if (!session?.user) {
+        setUser(null);
+        return;
+      }
+      const { user: appUser } = await loadUserWithTokkoMerge(client, session);
+      setUser(appUser);
+      mergeSessionUserIntoDirectory(appUser);
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn("[Viterra] refreshUser error:", e);
+      }
     }
-    const appUser = await loadUserWithTokkoMerge(client, session);
-    setUser(appUser);
-    mergeSessionUserIntoDirectory(appUser);
   }, [mergeSessionUserIntoDirectory]);
 
   const value = useMemo(

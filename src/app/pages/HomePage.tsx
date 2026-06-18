@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
+import { PropertyCard } from "../components/PropertyCard";
 import { SearchBar, SearchFilters } from "../components/SearchBar";
-import { ViterraPageLoader } from "../components/ViterraPageLoader";
 import { useFeaturedHomeProperties } from "../hooks/useFeaturedHomeProperties";
 import { useCatalogPriceSlices } from "../hooks/useCatalogPriceSlices";
 import { ArrowRight, ChevronLeft, ChevronRight, Bed, Bath, Square } from "lucide-react";
@@ -36,7 +36,7 @@ function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?
 export function HomePage() {
   const pl = usePreviewLayout();
   const reduceMotion = useReducedMotion();
-  const { content, loading: siteContentLoading } = useSiteContent();
+  const { content } = useSiteContent();
   const { posts: igPosts } = useInstagramFeed(3);
   const h = content.home;
   const experienceMediaOnRight = h.experienceMediaPosition === "right";
@@ -99,12 +99,6 @@ export function HomePage() {
       transition: { duration: reduceMotion ? 0 : 0.52, ease: [0.22, 1, 0.36, 1] as const },
     },
   } as const;
-
-  const homeDataLoading = siteContentLoading || featuredLoading;
-
-  if (!pl.preview && homeDataLoading) {
-    return <ViterraPageLoader />;
-  }
 
   return (
     <div className="viterra-page min-h-screen flex flex-col bg-white">
@@ -346,7 +340,11 @@ export function HomePage() {
           </Reveal>
 
           <div className="mx-auto max-w-6xl">
-            {featuredProperties.length === 0 ? (
+            {featuredLoading ? (
+              <p className="text-center text-sm text-brand-navy/60" style={{ fontWeight: 500 }}>
+                Cargando propiedades…
+              </p>
+            ) : featuredProperties.length === 0 ? (
               <div className="space-y-3 text-center">
                 <p className="text-sm text-brand-navy/60" style={{ fontWeight: 500 }}>
                   {featuredError

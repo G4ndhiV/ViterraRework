@@ -13,6 +13,8 @@ type LeadPayloadShape = {
   relatedDevelopmentId?: string;
   /** Seteado solo al archivar desde el CRM (`softDeleteLead`); no usar `deleted_at` de Tokko como descartado. */
   crmSoftDeletedAt?: string;
+  /** Orden manual dentro de su columna del Kanban (menor = más arriba). */
+  sortOrder?: number;
 };
 
 function parsePayload(raw: unknown): LeadPayloadShape {
@@ -65,6 +67,7 @@ export function rowToLead(row: Record<string, unknown>): Lead {
       typeof payload.crmSoftDeletedAt === "string" && payload.crmSoftDeletedAt.trim()
         ? payload.crmSoftDeletedAt
         : undefined,
+    sortOrder: typeof payload.sortOrder === "number" ? payload.sortOrder : undefined,
   } as Partial<Lead> & Record<string, unknown>);
 }
 
@@ -78,6 +81,9 @@ function leadPayloadForDb(lead: Lead): Record<string, unknown> {
   };
   if (lead.crmSoftDeletedAt != null && String(lead.crmSoftDeletedAt).trim() !== "") {
     out.crmSoftDeletedAt = lead.crmSoftDeletedAt;
+  }
+  if (typeof lead.sortOrder === "number" && Number.isFinite(lead.sortOrder)) {
+    out.sortOrder = lead.sortOrder;
   }
   return out;
 }
@@ -174,7 +180,10 @@ export function messageForCatalogLeadRpcError(raw: string): string {
   if (k.includes("invalid_email")) return "Revisa que el correo electrónico sea válido.";
   if (k.includes("invalid_phone")) return "Indica un teléfono válido (8–40 caracteres).";
   if (k.includes("invalid_message")) return "El mensaje es demasiado largo.";
-  if (k.includes("exactly_one_catalog_target")) return "Error interno al vincular la consulta. Recarga la página.";
+  if (k.includes("rate_limit")) return "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.";
+  if (k.includes("exactly_one_catalog_target") || k.includes("at_most_one_catalog_target")) {
+    return "Error interno al vincular la consulta. Recarga la página.";
+  }
   if (k.includes("property_not_found") || k.includes("development_not_found")) {
     return "Esta publicación ya no está disponible. Vuelve al listado e inténtalo de nuevo.";
   }
@@ -202,6 +211,17 @@ export async function updateLead(client: SupabaseClient, lead: Lead) {
     updated_at: ts,
   };
   return client.from("leads").update(row).eq("id", lead.id);
+}
+
+/**
+ * Persiste solo el orden manual del lead (`payload.sortOrder`) sin tocar `updated_at` ni el estado.
+ * Se usa al reordenar tarjetas dentro de una columna del Kanban.
+ */
+export async function updateLeadOrder(client: SupabaseClient, lead: Lead) {
+  return client
+    .from("leads")
+    .update({ payload: leadPayloadForDb(lead) as Record<string, unknown>, synced_at: nowIso() })
+    .eq("id", lead.id);
 }
 
 /** Archiva el lead en panel: `deleted_at` + `payload.crmSoftDeletedAt` (fusiona con payload existente). */

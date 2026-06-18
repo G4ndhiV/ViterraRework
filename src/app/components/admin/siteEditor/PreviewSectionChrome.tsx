@@ -13,14 +13,11 @@ export function PreviewSectionChrome({
   children,
   /** Nodos pequeños (grafo servicios): sin franja izquierda ni etiqueta que tape el nodo. */
   compact = false,
-  /** Sin cartel de texto (p. ej. pie de página estrecho); se mantiene la franja de selección. */
-  hideLabel = false,
 }: {
   blockId: string;
   label: string;
   children: ReactNode;
   compact?: boolean;
-  hideLabel?: boolean;
 }) {
   const v = useVisualSiteEditorOptional();
   const [flashHighlight, setFlashHighlight] = useState(false);
@@ -55,7 +52,7 @@ export function PreviewSectionChrome({
         compact ? "scroll-mt-20" : "scroll-mt-32 md:scroll-mt-36",
       )}
     >
-      {selected && !compact && !hideLabel ? (
+      {selected && !compact ? (
         <span
           className="pointer-events-none absolute left-6 top-2 z-[20] max-w-[min(100%,12rem)] truncate rounded bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm"
           aria-hidden
@@ -63,7 +60,7 @@ export function PreviewSectionChrome({
           {label}
         </span>
       ) : null}
-      {selected && compact && !hideLabel ? (
+      {selected && compact ? (
         <span
           className="pointer-events-none absolute -left-0.5 -top-6 z-[20] max-w-[10rem] truncate rounded bg-primary px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-white shadow-sm"
           aria-hidden
