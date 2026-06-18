@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { messageForCatalogLeadRpcError } from "../../../app/lib/supabaseLeads";
+import { messageForCatalogLeadRpcError } from "../../app/lib/supabaseLeads";
 
 describe("admin-update-password (integración documentada)", () => {
   it("documenta que la función está desplegada en Supabase", () => {

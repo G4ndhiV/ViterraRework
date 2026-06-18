@@ -581,6 +581,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const c = getSupabaseClient();
       if (c) {
+        /**
+         * Refuerzo con `tokko_users` + reintentos.
+         * Usamos pathnameRef.current para leer la ruta actual sin que location.pathname
+         * sea una dependencia del efecto: evita re-ejecutar fetchSession (y potencialmente
+         * perder el rol de admin) en cada navegación de módulo dentro del CRM.
+         * En rutas sin DB usamos applyConfirmedRole para NO degradar al admin a asesor
+         * cuando el JWT no trae `role` (causa del bug de cambio espontáneo de rol).
+         */
         const appUser = tokkoDbNeededForPath(pathnameRef.current)
           ? (await loadUserWithTokkoMerge(c, session)).user
           : applyConfirmedRole(sessionToAppUser(session), session.user);

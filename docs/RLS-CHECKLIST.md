@@ -59,7 +59,7 @@ Si el script aborta con "Este usuario es admin", crea o usa una cuenta con `role
 Manual en consola:
 
 ```js
-const c = window.__supabase;
+const c = window.__supabase ?? supabase;
 // 1) ¿Puede un asesor reescribir un lead que NO es suyo? → debe FALLAR (403/0 filas)
 await c.from('leads').update({ priority_stars: 6 }).eq('id', '<lead_de_otro>');
 // 2) ¿Puede elevar su propio rol? → debe FALLAR
