@@ -16,7 +16,8 @@ import { HeroBackdropMedia } from "../components/HeroBackdropMedia";
 import { DEFAULT_SITE_CONTENT } from "../../data/siteContent";
 import { Reveal } from "../components/Reveal";
 import { cn } from "../components/ui/utils";
-import { useInstagramFeed } from "../hooks/useInstagramFeed";
+import { useInstagramFeed, type InstagramPost } from "../hooks/useInstagramFeed";
+
 function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?: "dark" | "light" }) {
   return (
     <div className="text-center">
@@ -32,6 +33,155 @@ function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?
     </div>
   );
 }
+
+function LazyInstagramCard({ post }: { post: InstagramPost }) {
+  const { shortcode, type, videoUrl, thumbnail, caption } = post;
+  const [inView, setInView] = useState(false);
+  const [useIframeFallback, setUseIframeFallback] = useState(false);
+  const containerRef = useRef<HTMLAnchorElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      {
+        rootMargin: "300px", // Carga un poco antes de entrar en vista
+        threshold: 0.01,
+      }
+    );
+
+    const el = containerRef.current;
+    if (el) {
+      observer.observe(el);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  const hasMedia = thumbnail || videoUrl;
+
+  return (
+    <a
+      href={`https://www.instagram.com/${type === "reel" ? "reel" : "p"}/${shortcode}/`}
+      target="_blank"
+      rel="noopener noreferrer"
+      ref={containerRef}
+      className="group block overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+    >
+      {/* Área de media */}
+      <div className="relative overflow-hidden bg-slate-100" style={{ height: 320 }}>
+        {!inView ? (
+          // Placeholder loading card
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-slate-50 animate-pulse">
+            {thumbnail ? (
+              <img
+                src={thumbnail}
+                alt={caption || "Publicación de Instagram"}
+                className="absolute inset-0 h-full w-full object-cover opacity-30 blur-[2px]"
+                loading="lazy"
+              />
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-tr from-slate-100 to-slate-200" />
+            )}
+            <div className="relative z-10 flex flex-col items-center gap-3">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/95 text-slate-400 shadow-sm">
+                <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                  <rect x="2" y="2" width="20" height="20" rx="5" />
+                  <circle cx="12" cy="12" r="5" />
+                  <circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none" />
+                </svg>
+              </span>
+              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Instagram</span>
+            </div>
+          </div>
+        ) : (
+          useIframeFallback || !hasMedia ? (
+            /* Post / carrusel: iframe con clip del header si falla la carga directa */
+            <iframe
+              src={`https://www.instagram.com/${type}/${shortcode}/embed/captioned`}
+              scrolling="no"
+              allow="encrypted-media; clipboard-write; picture-in-picture"
+              title={`Publicación de Instagram ${shortcode}`}
+              style={{
+                display: "block",
+                width: "100%",
+                height: 700,
+                border: "none",
+                marginTop: -68,
+              }}
+            />
+          ) : (
+            type === "reel" && videoUrl ? (
+              /* Reel: video nativo con autoplay real */
+              <div className="relative h-full w-full">
+                <video
+                  src={videoUrl}
+                  poster={thumbnail ?? undefined}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  className="h-full w-full object-cover"
+                  onError={() => setUseIframeFallback(true)}
+                />
+                <div className="absolute top-3 right-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm">
+                  <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
+                    <polygon points="5 3 19 12 5 21 5 3" />
+                  </svg>
+                </div>
+              </div>
+            ) : (
+              /* Post / Imagen: renderizada de forma nativa e instantánea */
+              <div className="relative h-full w-full">
+                <img
+                  src={thumbnail ?? ""}
+                  alt={caption || "Publicación de Instagram"}
+                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  onError={() => setUseIframeFallback(true)}
+                />
+                <div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/10" />
+              </div>
+            )
+          )
+        )}
+      </div>
+
+      {/* Caption y descripción (solo si cargó nativo, ya que el iframe embed ya incluye la descripción) */}
+      {!(useIframeFallback || !hasMedia) && (
+        <div className="p-4 border-t border-slate-100 min-h-[92px] flex flex-col justify-between">
+          <p className="line-clamp-2 text-[13px] leading-relaxed text-slate-700 font-light">
+            {caption || "Descubre más detalles en nuestra publicación de Instagram."}
+          </p>
+          <p className="mt-2 text-[10px] text-primary font-medium tracking-wide">
+            Ver detalles →
+          </p>
+        </div>
+      )}
+
+      {/* Footer — link a Instagram */}
+      <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 bg-slate-50/50">
+        <div className="flex items-center gap-2">
+          <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+            <rect x="2" y="2" width="20" height="20" rx="5" />
+            <circle cx="12" cy="12" r="5" />
+            <circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none" />
+          </svg>
+          <span className="text-xs text-slate-500">@viterrainmobiliaria</span>
+        </div>
+        <span className="text-xs font-medium text-primary transition-colors group-hover:text-primary/70" style={{ fontWeight: 500 }}>
+          Ver en Instagram →
+        </span>
+      </div>
+    </a>
+  );
+}
+
 
 export function HomePage() {
   const pl = usePreviewLayout();
@@ -260,12 +410,12 @@ export function HomePage() {
           <Reveal className={cn("mb-3 shrink-0", pl.preview ? "mb-8 sm:mb-10" : "md:mb-4")} y={28}>
             <div>
               <SectionKicker tone="light">
-                <PreviewFieldPulse blockId="home-search" fieldKey="home-search-kicker" className="inline-block">
+                <PreviewFieldPulse blockId="home-search" fieldKey="home-search-kicker" layout="inline" className="inline-block">
                   {h.searchKicker}
                 </PreviewFieldPulse>
               </SectionKicker>
               <h2 className="font-heading font-light mt-4 text-center text-2xl leading-tight tracking-tight text-white [text-shadow:0_2px_28px_rgb(0_0_0/0.55),0_1px_2px_rgb(0_0_0/0.4)] sm:text-3xl md:text-4xl lg:text-[2.2rem]">
-                <PreviewFieldPulse blockId="home-search" fieldKey="home-search-title" className="inline-block">
+                <PreviewFieldPulse blockId="home-search" fieldKey="home-search-title" layout="inline" className="inline-block">
                   {h.searchTitle}
                 </PreviewFieldPulse>
               </h2>
@@ -309,13 +459,13 @@ export function HomePage() {
           >
             <div className={cn(!pl.preview && "lg:max-w-[65%]")}>
               <p className="mb-4 text-[10px] font-normal uppercase tracking-[0.32em] text-brand-navy/55">
-                <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-kicker" className="inline-block">
+                <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-kicker" layout="inline" className="inline-block">
                   {h.selectionKicker}
                 </PreviewFieldPulse>
               </p>
               <span className="mb-6 block h-px w-10 bg-primary" aria-hidden />
               <h2 className="font-heading text-3xl font-light leading-[1.12] tracking-tight text-brand-navy sm:text-4xl md:text-5xl lg:text-[3.25rem]">
-                <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-title" className="inline-block">
+                <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-title" layout="inline" className="inline-block">
                   {h.selectionTitle}
                 </PreviewFieldPulse>
               </h2>
@@ -468,7 +618,7 @@ export function HomePage() {
       </section>
       </PreviewSectionChrome>
 
-      {/* Redes sociales — posts recientes */}
+      {/* Redes sociales — feed dinámico optimizado con Lazy Load */}
       <section className="relative bg-brand-canvas py-20 md:py-28 border-t border-brand-navy/10">
         <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Reveal className="mb-14 text-center" y={24}>
@@ -484,61 +634,11 @@ export function HomePage() {
             </p>
           </Reveal>
 
+          {/* Tarjetas de redes — carga lazy según scroll */}
           <div className={cn("mx-auto grid max-w-5xl gap-6", pl.gridCols("grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"))}>
-            {igPosts.map(({ shortcode, type, videoUrl, thumbnail }) => (
-              <Reveal key={shortcode} y={20} delay={0.04}>
-                <div className="group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
-                  {/* Área de media */}
-                  <div className="relative overflow-hidden bg-slate-100" style={{ height: 320 }}>
-                    {type === "reel" && videoUrl ? (
-                      /* Reel: video nativo con autoplay real */
-                      <video
-                        src={videoUrl}
-                        poster={thumbnail ?? undefined}
-                        autoPlay
-                        muted
-                        loop
-                        playsInline
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      /* Post / carrusel: iframe con clip del header */
-                      <iframe
-                        src={`https://www.instagram.com/${type}/${shortcode}/embed/captioned`}
-                        scrolling="no"
-                        loading="lazy"
-                        allow="encrypted-media; clipboard-write; picture-in-picture"
-                        title={`Publicación de Instagram ${shortcode}`}
-                        style={{
-                          display: "block",
-                          width: "100%",
-                          height: 700,
-                          border: "none",
-                          marginTop: -68,
-                        }}
-                      />
-                    )}
-                  </div>
-                  {/* Footer — link a Instagram */}
-                  <a
-                    href={`https://www.instagram.com/${type}/${shortcode}/`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between border-t border-slate-100 px-4 py-3"
-                  >
-                    <div className="flex items-center gap-2">
-                      <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                        <rect x="2" y="2" width="20" height="20" rx="5" />
-                        <circle cx="12" cy="12" r="5" />
-                        <circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none" />
-                      </svg>
-                      <span className="text-xs text-slate-500">@viterrainmobiliaria</span>
-                    </div>
-                    <span className="text-xs font-medium text-primary transition-colors group-hover:text-primary/70" style={{ fontWeight: 500 }}>
-                      Ver en Instagram →
-                    </span>
-                  </a>
-                </div>
+            {igPosts.map((post) => (
+              <Reveal key={post.shortcode} y={20} delay={0.04}>
+                <LazyInstagramCard post={post} />
               </Reveal>
             ))}
           </div>
@@ -618,13 +718,13 @@ export function HomePage() {
           <Reveal y={22} delay={0.04}>
             <div>
               <p className="text-[10px] uppercase tracking-[0.32em] text-white/45 font-normal mb-5">
-                <PreviewFieldPulse blockId="home-experience" fieldKey="home-experience-kicker" className="inline-block">
+                <PreviewFieldPulse blockId="home-experience" fieldKey="home-experience-kicker" layout="inline" className="inline-block">
                   {h.experienceKicker}
                 </PreviewFieldPulse>
               </p>
               <span className="block h-px w-10 bg-primary mb-8" aria-hidden />
               <h3 className="font-heading font-light text-3xl md:text-4xl lg:text-[2.65rem] tracking-tight leading-[1.15] mb-6">
-                <PreviewFieldPulse blockId="home-experience" fieldKey="home-experience-title" className="inline-block">
+                <PreviewFieldPulse blockId="home-experience" fieldKey="home-experience-title" layout="inline" className="inline-block">
                   {h.experienceTitle}
                 </PreviewFieldPulse>
               </h3>
@@ -661,12 +761,12 @@ export function HomePage() {
         <Reveal className="mx-auto max-w-3xl px-4 text-center sm:px-6" y={26}>
           <div>
             <SectionKicker>
-              <PreviewFieldPulse blockId="home-closing" fieldKey="home-closing-kicker" className="inline-block">
+              <PreviewFieldPulse blockId="home-closing" fieldKey="home-closing-kicker" layout="inline" className="inline-block">
                 {h.closingKicker}
               </PreviewFieldPulse>
             </SectionKicker>
             <h2 className="font-heading font-light text-3xl md:text-4xl lg:text-[2.65rem] text-brand-navy tracking-tight mt-8 mb-5 leading-tight">
-              <PreviewFieldPulse blockId="home-closing" fieldKey="home-closing-title" className="inline-block">
+              <PreviewFieldPulse blockId="home-closing" fieldKey="home-closing-title" layout="inline" className="inline-block">
                 {h.closingTitle}
               </PreviewFieldPulse>
             </h2>

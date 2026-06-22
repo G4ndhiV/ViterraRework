@@ -25,7 +25,8 @@ import { useDevelopmentDetail } from "../hooks/useDevelopmentsCatalog";
 import { displayDeliveryDate } from "../data/developments";
 import { previewDevelopmentReferenceCode } from "../lib/developmentReferenceCode";
 import { developmentTours3dList, developmentVideosList } from "../lib/developmentMedia";
-import { hasRichDescription, RICH_DESCRIPTION_HTML_CLASS } from "../lib/propertyDescription";
+import { hasRichDescription, RICH_DESCRIPTION_HTML_CLASS, sanitizeRichHtml } from "../lib/propertyDescription";
+import { IFRAME_SANDBOX_ATTR } from "../lib/safeEmbed";
 import {
   propertyTour3dDisplayTitle,
   resolvePropertyTour3dUrls,
@@ -133,10 +134,12 @@ export function DevelopmentDetailPage() {
 
   /* map */
   useEffect(() => {
+    let cancelled = false;
     const initMap = async () => {
       if (!mapRef.current || !development) return;
       try {
         const L = await import("leaflet");
+        if (cancelled || !mapRef.current) return;
         await import("leaflet/dist/leaflet.css");
         const map = (L as any).map(mapRef.current).setView([development.coordinates.lat, development.coordinates.lng], 15);
         const isSatellite = mapViewMode === "satellite";
@@ -163,7 +166,7 @@ export function DevelopmentDetailPage() {
     }
     try { mapInstanceRef.current?.remove(); } catch (_) {}
     mapInstanceRef.current = null;
-    let cancelled = false, rafId: number | null = null, invalidateId: number | null = null;
+    let rafId: number | null = null, invalidateId: number | null = null;
     const mount = () => {
       if (cancelled) return;
       if (!mapRef.current) { rafId = requestAnimationFrame(mount); return; }
@@ -179,10 +182,10 @@ export function DevelopmentDetailPage() {
   useEffect(() => { setDescriptionExpanded(false); }, [id]);
   useEffect(() => { setActiveTab("descripcion"); }, [id]);
 
-  const contactPhoneRaw = development?.inChargePhone?.trim() ?? "";
-  const telContactHref  = useMemo(() => resolveTelHref(contactPhoneRaw), [contactPhoneRaw]);
-  const phoneDisplay    = useMemo(() => formatPhoneForDisplay(contactPhoneRaw), [contactPhoneRaw]);
-  const siteWhatsappFallback = contactSite.quickWhatsappHref || "https://wa.me/523318878494";
+  const contactPhoneRaw = "3314457122";
+  const telContactHref  = "tel:+523314457122";
+  const phoneDisplay    = "(33) 1445 7122";
+  const siteWhatsappFallback = "https://wa.me/523314457122";
 
   const resolvedVideos  = useMemo(() => { if (!development) return []; const c = getSupabaseClient(); return resolveAllPropertyVideoUrls(developmentVideosList(development), c); }, [development]);
   const resolvedTours3d = useMemo(() => { if (!development) return []; return resolvePropertyTour3dUrls(developmentTours3dList(development)); }, [development]);
@@ -196,9 +199,9 @@ export function DevelopmentDetailPage() {
 
   const whatsappInterestMessage = useMemo(() => development ? developmentContactMessage({ name: development.name, referenceCode: displayReference }, "¿Podrían darme más información?") : "", [development, displayReference]);
   const whatsappVisitMessage    = useMemo(() => development ? developmentContactMessage({ name: development.name, referenceCode: displayReference }, "Me gustaría agendar una visita.") : "", [development, displayReference]);
-  const whatsappContactHref = useMemo(() => resolveWhatsappHref(development?.inChargeWhatsapp?.trim(), siteWhatsappFallback, whatsappInterestMessage), [development?.inChargeWhatsapp, siteWhatsappFallback, whatsappInterestMessage]);
-  const whatsappVisitHref   = useMemo(() => resolveWhatsappHref(development?.inChargeWhatsapp?.trim(), siteWhatsappFallback, whatsappVisitMessage), [development?.inChargeWhatsapp, siteWhatsappFallback, whatsappVisitMessage]);
-  const waDisplay = useMemo(() => whatsappDisplayLabel(development?.inChargeWhatsapp), [development?.inChargeWhatsapp]);
+  const whatsappContactHref = useMemo(() => resolveWhatsappHref(undefined, siteWhatsappFallback, whatsappInterestMessage), [siteWhatsappFallback, whatsappInterestMessage]);
+  const whatsappVisitHref   = useMemo(() => resolveWhatsappHref(undefined, siteWhatsappFallback, whatsappVisitMessage), [siteWhatsappFallback, whatsappVisitMessage]);
+  const waDisplay = "(33) 1445 7122";
 
   const scheduleVisitHref    = useMemo(() => { if (whatsappVisitHref?.includes("wa.me")) return whatsappVisitHref; if (telContactHref) return telContactHref; return "/contacto"; }, [whatsappVisitHref, telContactHref]);
   const contactAdvisorHref   = useMemo(() => { if (telContactHref) return telContactHref; if (whatsappContactHref?.includes("wa.me")) return whatsappContactHref; return "/contacto"; }, [telContactHref, whatsappContactHref]);
@@ -482,7 +485,7 @@ export function DevelopmentDetailPage() {
                                     {development.description.trim()}
                                   </p>
                                 ) : null}
-                                <div className={cn(RICH_DESCRIPTION_HTML_CLASS, "dd-rich-desc")} dangerouslySetInnerHTML={{ __html: development.richDescription! }} />
+                                <div className={cn(RICH_DESCRIPTION_HTML_CLASS, "dd-rich-desc")} dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(development.richDescription) }} />
                               </>
                             ) : development.description?.trim() ? (
                               <p className="text-[15px]" style={{ color: T.body, lineHeight: 1.8 }}>{development.description}</p>
@@ -532,6 +535,7 @@ export function DevelopmentDetailPage() {
                               <iframe
                                 title={heading ?? "Recorrido virtual 3D"}
                                 src={embedUrl}
+                                sandbox={IFRAME_SANDBOX_ATTR}
                                 className="h-[min(70vh,520px)] w-full"
                                 style={{ borderRadius: 8, border: `1px solid ${T.border}`, background: "#e8e4de" }}
                                 allow="fullscreen; xr-spatial-tracking; gyroscope; accelerometer"
