@@ -544,6 +544,11 @@ function normalizeServiceCards(rawCards: unknown[], fallback: ServiceCardContent
 
     const detailBlocks = primaryListingHref ? [] : normalizeDetailBlocks(row.detailBlocks);
 
+    const showInFooter =
+      typeof row.showInFooter === "boolean"
+        ? row.showInFooter
+        : fallback[i]?.showInFooter;
+
     const base: ServiceCardContent = {
       title,
       description,
@@ -554,6 +559,7 @@ function normalizeServiceCards(rawCards: unknown[], fallback: ServiceCardContent
       iconKey,
       contactLinks: normalizeServiceCardContactLinks(row.contactLinks, fallback[i]),
       detailBlocks,
+      ...(showInFooter === false ? { showInFooter: false } : {}),
     };
     if (primaryListingHref) {
       base.primaryListingHref = primaryListingHref;

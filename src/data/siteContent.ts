@@ -116,6 +116,8 @@ export interface ServiceCardContent {
   slug: string;
   /** Si se define, el CTA del grafo/panel enlaza a este listado en lugar de `/servicios/d/:slug`. */
   primaryListingHref?: ServicePrimaryListingHref;
+  /** Controla si la tarjeta aparece en la columna de servicios del pie de página. Por defecto: true. */
+  showInFooter?: boolean;
   /** Etiqueta corta en el panel del grafo (p. ej. «ADQUISICIÓN»). */
   tag?: string;
   iconKey: ServiceIconKey;
@@ -377,6 +379,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
       { label: "Desarrollos", href: "/desarrollos" },
       { label: "Nosotros", href: "/nosotros" },
       { label: "Contacto", href: "/contacto" },
+      { label: "Aviso de Privacidad", href: "/aviso-de-privacidad" },
     ],
     servicesTitle: "Servicios",
     contactTitle: "Contacto",
@@ -532,6 +535,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
         bullets: ["Revisión de contratos", "Trámites notariales", "Escrituración segura"],
         linkLabel: "Conocer más",
         slug: "asesoria-legal",
+        showInFooter: false,
         tag: "JURÍDICO",
         iconKey: "scale",
         contactLinks: cloneDefaultServiceCardContactLinks(),
