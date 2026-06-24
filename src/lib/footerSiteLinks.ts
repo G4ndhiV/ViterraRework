@@ -31,6 +31,7 @@ export function footerQuickLinkSelectValue(href: string): string {
 export function footerServiceLinksFromCards(cards: ServiceCardContent[]): FooterNavLink[] {
   const out: FooterNavLink[] = [];
   for (const card of cards) {
+    if (card.showInFooter === false) continue;
     const href = resolveServiceCardPrimaryHref(card);
     if (!href) continue;
     const label = card.title.trim();
