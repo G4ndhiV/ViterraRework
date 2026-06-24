@@ -47,6 +47,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { FeatureSection } from "../components/FeatureSectionBlocks";
 import { getSupabaseClient } from "../lib/supabaseClient";
 import { messageForCatalogLeadRpcError, submitCatalogLeadViaRpc } from "../lib/supabaseLeads";
+import { toast } from "sonner";
 
 /* ─── Design tokens (matches PropertyDetailPage) ─────────────────────────── */
 const T = {
@@ -178,7 +179,7 @@ export function DevelopmentDetailPage() {
   }, [activeTab, development, mapViewMode]);
 
   useEffect(() => () => { try { mapInstanceRef.current?.remove(); } catch (_) {} mapInstanceRef.current = null; }, []);
-  useEffect(() => { if (!isImageZoomOpen) return; const fn = (e: KeyboardEvent) => { if (e.key === "Escape") setIsImageZoomOpen(false); }; window.addEventListener("keydown", fn); return () => window.removeEventListener("keydown", fn); }, [isImageZoomOpen]);
+  useEffect(() => { if (!isImageZoomOpen) return; const fn = (e: KeyboardEvent) => { if (e.key === "Escape") setIsImageZoomOpen(false); else if (e.key === "ArrowRight") nextImage(); else if (e.key === "ArrowLeft") prevImage(); }; window.addEventListener("keydown", fn); return () => window.removeEventListener("keydown", fn); }, [isImageZoomOpen]);
   useEffect(() => { setDescriptionExpanded(false); }, [id]);
   useEffect(() => { setActiveTab("descripcion"); }, [id]);
 
@@ -243,6 +244,16 @@ export function DevelopmentDetailPage() {
   const nextImage = () => setCurrentImageIndex((p) => p === development!.images.length - 1 ? 0 : p + 1);
   const prevImage = () => setCurrentImageIndex((p) => p === 0 ? development!.images.length - 1 : p - 1);
 
+  /* Copiar enlace de la publicación al portapapeles */
+  const handleShare = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast.success("Enlace copiado");
+    } catch {
+      toast.error("No se pudo copiar el enlace");
+    }
+  };
+
   /* ── Loading / error ─────────────────────────────────────────────────── */
   if (loading) {
     return (
@@ -285,7 +296,7 @@ export function DevelopmentDetailPage() {
         .dd-tab-btn::after {
           content: "";
           position: absolute;
-          bottom: -1px; left: 16px; right: 16px;
+          bottom: 0; left: 16px; right: 16px;
           height: 2px;
           background: ${T.gold};
           border-radius: 99px;
@@ -360,17 +371,18 @@ export function DevelopmentDetailPage() {
 
       {/* ── Main grid ────────────────────────────────────────────────────── */}
       <div data-reveal className="mx-auto max-w-7xl w-full px-3 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-        <div className="grid gap-6 lg:grid-cols-3 lg:gap-8">
+        <div className="flex flex-col gap-6 lg:grid lg:grid-cols-3 lg:gap-8">
 
-          {/* ════════════ LEFT COLUMN ════════════════════════════════════ */}
-          <div className="min-w-0 space-y-5 lg:col-span-2">
+          {/* ═══════════ GALERÍA (móvil: orden 1) ═══════════ */}
+          <div className="order-1 min-w-0 lg:col-span-2 lg:row-start-1">
 
             {/* Gallery */}
             <div style={{ borderRadius: 12, overflow: "hidden", boxShadow: "0 2px 24px rgba(20,28,46,0.10)" }}>
 
-              {/* Hero image */}
+              {/* Hero image — clic/touch abre el lightbox con carrusel */}
               <div
-                className="relative group"
+                className="relative group cursor-zoom-in"
+                onClick={() => setIsImageZoomOpen(true)}
                 style={{ height: "clamp(220px, 44vw, 510px)", background: "#e8e4de" }}
               >
                 <img
@@ -384,13 +396,13 @@ export function DevelopmentDetailPage() {
                 {/* Arrows */}
                 {development.images.length > 1 && (
                   <>
-                    <button onClick={prevImage} aria-label="Imagen anterior"
-                      className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200"
+                    <button onClick={(e) => { e.stopPropagation(); prevImage(); }} aria-label="Imagen anterior"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all duration-200"
                       style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(255,255,255,0.92)", backdropFilter: "blur(6px)", border: `1px solid ${T.border}`, boxShadow: "0 2px 8px rgba(20,28,46,0.15)" }}>
                       <ChevronLeft className="w-4 h-4" style={{ color: T.navy }} strokeWidth={2} />
                     </button>
-                    <button onClick={nextImage} aria-label="Imagen siguiente"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200"
+                    <button onClick={(e) => { e.stopPropagation(); nextImage(); }} aria-label="Imagen siguiente"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all duration-200"
                       style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(255,255,255,0.92)", backdropFilter: "blur(6px)", border: `1px solid ${T.border}`, boxShadow: "0 2px 8px rgba(20,28,46,0.15)" }}>
                       <ChevronRight className="w-4 h-4" style={{ color: T.navy }} strokeWidth={2} />
                     </button>
@@ -409,11 +421,11 @@ export function DevelopmentDetailPage() {
 
                 {/* Action buttons */}
                 <div className="absolute top-4 right-4 flex gap-2">
-                  <button onClick={() => setIsImageZoomOpen(true)} aria-label="Ampliar imagen"
+                  <button type="button" onClick={(e) => { e.stopPropagation(); setIsImageZoomOpen(true); }} aria-label="Ampliar imagen"
                     style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,0.92)", backdropFilter: "blur(6px)", border: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <Maximize2 className="w-3.5 h-3.5" style={{ color: T.navy }} strokeWidth={1.5} />
                   </button>
-                  <button aria-label="Compartir"
+                  <button type="button" onClick={(e) => { e.stopPropagation(); void handleShare(); }} aria-label="Copiar enlace de la publicación"
                     style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,0.92)", backdropFilter: "blur(6px)", border: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <Share2 className="w-3.5 h-3.5" style={{ color: T.navy }} strokeWidth={1.5} />
                   </button>
@@ -441,11 +453,16 @@ export function DevelopmentDetailPage() {
               )}
             </div>
 
+          </div>
+
+          {/* ═══════════ CONTENIDO BAJO LA GALERÍA — tabs (móvil: orden 3) ═══════════ */}
+          <div className="order-3 min-w-0 space-y-5 lg:order-none lg:col-span-2 lg:col-start-1 lg:row-start-2">
+
             {/* ── Tabs panel ───────────────────────────────────────────── */}
             <div style={{ borderRadius: 12, background: T.white, boxShadow: "0 2px 16px rgba(20,28,46,0.07)", overflow: "hidden" }}>
 
               {/* Tab nav */}
-              <div style={{ borderBottom: `1px solid ${T.border}` }} className="flex overflow-x-auto">
+              <div style={{ borderBottom: `1px solid ${T.border}` }} className="flex overflow-x-auto overflow-y-hidden">
                 {detailTabs.map((tab) => {
                   const isActive = activeTab === tab.id;
                   return (
@@ -743,8 +760,8 @@ export function DevelopmentDetailPage() {
             </div>
           </div>
 
-          {/* ════════════ RIGHT COLUMN — sticky ══════════════════════════ */}
-          <div className="min-w-0 lg:col-span-1">
+          {/* ════════════ RIGHT COLUMN — sticky (móvil: orden 2) ══════════════════════════ */}
+          <div className="order-2 min-w-0 lg:order-none lg:col-start-3 lg:row-start-1 lg:row-span-2">
             <div className="space-y-4 lg:sticky lg:top-24">
 
               {/* ── Title + price card ─────────────────────────────────── */}
@@ -929,6 +946,32 @@ export function DevelopmentDetailPage() {
               <X className="w-3.5 h-3.5" strokeWidth={2} />
               Cerrar
             </button>
+            {development.images.length > 1 && (
+              <>
+                <button
+                  onClick={prevImage}
+                  aria-label="Imagen anterior"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center"
+                  style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(255,255,255,0.92)", border: `1px solid ${T.border}` }}
+                >
+                  <ChevronLeft className="h-5 w-5" style={{ color: T.navy }} strokeWidth={2} />
+                </button>
+                <button
+                  onClick={nextImage}
+                  aria-label="Imagen siguiente"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center"
+                  style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(255,255,255,0.92)", border: `1px solid ${T.border}` }}
+                >
+                  <ChevronRight className="h-5 w-5" style={{ color: T.navy }} strokeWidth={2} />
+                </button>
+                <div
+                  className="absolute bottom-3 left-1/2 -translate-x-1/2"
+                  style={{ padding: "3px 12px", borderRadius: 4, background: "rgba(20,28,46,0.7)", color: "rgba(255,255,255,0.9)", fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.7rem", letterSpacing: "0.08em" }}
+                >
+                  {String(currentImageIndex + 1).padStart(2, "0")} / {String(development.images.length).padStart(2, "0")}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
