@@ -28,6 +28,7 @@ import {
   viterraHeroSubtitleClass,
 } from "../config/heroLayout";
 import { displayDeliveryDate } from "../data/developments";
+import { optimizedImageUrl } from "../lib/supabaseImageUrl";
 
 function FeaturedRowSkeleton({
   gridClass,
@@ -312,7 +313,7 @@ export function DevelopmentsPage() {
                       aria-label={`Ver desarrollo: ${dev.name}`}
                     >
                       <img
-                        src={dev.image}
+                        src={optimizedImageUrl(dev.image, { width: 900 })}
                         alt=""
                         loading="lazy"
                         decoding="async"
@@ -412,7 +413,7 @@ export function DevelopmentsPage() {
                       aria-label={`Ver desarrollo: ${dev.name}`}
                     >
                       <img
-                        src={dev.image}
+                        src={optimizedImageUrl(dev.image, { width: 480 })}
                         alt=""
                         loading="lazy"
                         decoding="async"

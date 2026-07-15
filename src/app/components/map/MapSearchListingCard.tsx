@@ -43,6 +43,7 @@ export function MapSearchListingCard({ property, selected, onSelect }: Props) {
           src={property.image}
           alt=""
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+          optimizeWidth={320}
         />
         <span className="absolute left-2 top-2 border border-slate-200 bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-slate-900 shadow-sm">
           Destacado

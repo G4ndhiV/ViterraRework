@@ -490,6 +490,9 @@ export function PropertyDetailPage() {
                       src={propertyImages[currentImageIndex] ?? property.image}
                       alt={displayTitle}
                       className="w-full h-full object-cover"
+                      loading="eager"
+                      fetchPriority="high"
+                      optimizeWidth={1400}
                     />
                     {/* Bottom vignette for badges legibility */}
                     <div style={{
@@ -590,7 +593,7 @@ export function PropertyDetailPage() {
                         className={cn("pd-film-thumb flex-shrink-0 overflow-hidden", idx === currentImageIndex ? "active" : "")}
                         style={{ width: 52, height: 40, borderRadius: 5, border: `1.5px solid ${idx === currentImageIndex ? T.gold : T.border}` }}
                       >
-                        <ImageWithFallback src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" />
+                        <ImageWithFallback src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" optimizeWidth={104} />
                       </button>
                     ))}
                   </div>
@@ -1090,6 +1093,8 @@ export function PropertyDetailPage() {
               src={propertyImages[currentImageIndex] ?? property.image}
               alt={displayTitle}
               className="max-h-[85vh] w-full rounded-lg object-contain"
+              loading="eager"
+              optimizeWidth={1600}
             />
             {propertyImages.length > 1 && (
               <>

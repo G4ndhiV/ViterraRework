@@ -2,6 +2,7 @@ import type { ImgHTMLAttributes } from "react";
 import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
 import { isHeroBackgroundVideoUrl } from "@/lib/heroBackgroundMedia";
+import { optimizedImageUrl } from "@/app/lib/supabaseImageUrl";
 
 const motionBackdropProps = (reduceMotion: boolean) =>
   ({
@@ -51,7 +52,7 @@ function HeroBackdropVideo({
         muted
         loop
         playsInline
-        preload="auto"
+        preload="metadata"
         controls={false}
         disablePictureInPicture
       />
@@ -81,6 +82,13 @@ export function HeroBackdropMedia({
   }
 
   return (
-    <motion.img key={url} src={url} alt="" className={className} {...motionProps} {...imageProps} />
+    <motion.img
+      key={url}
+      src={optimizedImageUrl(url, { width: 1920 })}
+      alt=""
+      className={className}
+      {...motionProps}
+      {...imageProps}
+    />
   );
 }

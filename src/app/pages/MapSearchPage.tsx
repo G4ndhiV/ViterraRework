@@ -1076,6 +1076,7 @@ export function MapSearchPage() {
                       src={selectedProperty.image}
                       alt=""
                       className="h-full w-full object-cover"
+                      optimizeWidth={320}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
                     <button

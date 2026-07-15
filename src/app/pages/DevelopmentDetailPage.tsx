@@ -48,6 +48,7 @@ import { FeatureSection } from "../components/FeatureSectionBlocks";
 import { getSupabaseClient } from "../lib/supabaseClient";
 import { messageForCatalogLeadRpcError, submitCatalogLeadViaRpc } from "../lib/supabaseLeads";
 import { toast } from "sonner";
+import { optimizedImageUrl } from "../lib/supabaseImageUrl";
 
 /* ─── Design tokens (matches PropertyDetailPage) ─────────────────────────── */
 const T = {
@@ -386,9 +387,12 @@ export function DevelopmentDetailPage() {
                 style={{ height: "clamp(220px, 44vw, 510px)", background: "#e8e4de" }}
               >
                 <img
-                  src={development.images[currentImageIndex]}
+                  src={optimizedImageUrl(development.images[currentImageIndex], { width: 1400 })}
                   alt={development.name}
                   className="w-full h-full object-cover"
+                  loading="eager"
+                  fetchPriority="high"
+                  decoding="async"
                 />
                 {/* Bottom vignette */}
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(20,28,46,0.45) 0%, transparent 40%)", pointerEvents: "none" }} />
@@ -445,7 +449,12 @@ export function DevelopmentDetailPage() {
                       <button key={idx} onClick={() => setCurrentImageIndex(idx)} aria-label={`Ver imagen ${idx + 1}`}
                         className={cn("dd-film-thumb flex-shrink-0 overflow-hidden", idx === currentImageIndex ? "active" : "")}
                         style={{ width: 52, height: 40, borderRadius: 5, border: `1.5px solid ${idx === currentImageIndex ? T.gold : T.border}` }}>
-                        <img src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" />
+                        <img
+                          src={optimizedImageUrl(img, { width: 104 })}
+                          alt={`Vista ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
                       </button>
                     ))}
                   </div>
@@ -933,9 +942,10 @@ export function DevelopmentDetailPage() {
         >
           <div className="relative w-full max-w-6xl" onClick={(e) => e.stopPropagation()}>
             <img
-              src={development.images[currentImageIndex]}
+              src={optimizedImageUrl(development.images[currentImageIndex], { width: 1600 })}
               alt={development.name}
               className="max-h-[85vh] w-full rounded-lg object-contain"
+              loading="eager"
             />
             <button
               type="button"

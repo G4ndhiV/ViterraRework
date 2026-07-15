@@ -1,0 +1,15 @@
+# Viterra Grupo Inmobiliario
+
+> Tu socio de confianza en bienes raíces en Guadalajara, Jalisco. Más de 15 años ayudando a personas a encontrar su hogar ideal en renta, venta y desarrollos.
+
+Viterra es una inmobiliaria mexicana que ofrece un catálogo de propiedades en renta y venta, desarrollos inmobiliarios y servicios de asesoría inmobiliaria.
+
+## Páginas principales
+
+- [Inicio](https://www.viterrainmobiliaria.com/): Página principal, búsqueda y propiedades destacadas.
+- [Rentar](https://www.viterrainmobiliaria.com/renta): Catálogo de propiedades en renta.
+- [Comprar](https://www.viterrainmobiliaria.com/venta): Catálogo de propiedades en venta.
+- [Desarrollos](https://www.viterrainmobiliaria.com/desarrollos): Proyectos y desarrollos inmobiliarios.
+- [Servicios](https://www.viterrainmobiliaria.com/servicios): Servicios inmobiliarios que ofrece Viterra.
+- [Nosotros](https://www.viterrainmobiliaria.com/nosotros): Historia y equipo de Viterra.
+- [Contacto](https://www.viterrainmobiliaria.com/contacto): Formulario e información de contacto.
