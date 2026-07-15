@@ -17,6 +17,7 @@ import { DEFAULT_SITE_CONTENT } from "../../data/siteContent";
 import { Reveal } from "../components/Reveal";
 import { cn } from "../components/ui/utils";
 import { useInstagramFeed, type InstagramPost } from "../hooks/useInstagramFeed";
+import { optimizedImageUrl } from "../lib/supabaseImageUrl";
 
 function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?: "dark" | "light" }) {
   return (
@@ -429,7 +430,7 @@ export function HomePage() {
         <div className="absolute inset-0 z-0 overflow-hidden">
           <PreviewFieldPulse blockId="home-search" fieldKey="home-search-image" layout="cover">
             <img
-              src={h.searchImage}
+              src={optimizedImageUrl(h.searchImage, { width: 1600 })}
               alt=""
               className="w-full h-full object-cover scale-105"
               loading="lazy"
@@ -589,9 +590,10 @@ export function HomePage() {
                         className="group relative h-[420px] w-[280px] sm:h-[480px] sm:w-[320px] md:h-[560px] md:w-[380px] shrink-0 snap-center sm:snap-start overflow-hidden rounded-[2rem] bg-slate-900 shadow-xl transition-shadow duration-500 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.6)]"
                       >
                         <img
-                          src={property.image}
+                          src={optimizedImageUrl(property.image, { width: 760 })}
                           alt={property.title}
                           className="absolute inset-0 h-full w-full object-cover"
+                          loading="lazy"
                         />
                         
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80 pointer-events-none" />

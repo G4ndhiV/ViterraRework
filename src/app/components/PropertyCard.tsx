@@ -227,6 +227,7 @@ export function PropertyCard({
               "w-full h-full object-cover transition-transform duration-700",
               ed ? "group-hover:scale-[1.03]" : "group-hover:scale-110"
             )}
+            optimizeWidth={480}
           />
           <div className="absolute top-0 left-0 right-0 h-28 bg-gradient-to-b from-black/40 via-black/10 to-transparent pointer-events-none" />
           <div className={cn("absolute flex flex-wrap gap-1.5", ed ? "top-3 left-3" : "top-4 left-4")}>
@@ -394,7 +395,7 @@ export function PropertyCard({
         <DialogContent className="max-h-[min(92dvh,600px)] w-[calc(100%-1.5rem)] max-w-[400px] gap-0 overflow-hidden rounded-sm border-0 bg-transparent p-0 shadow-none sm:w-full [&>button]:hidden">
           <div className="flex max-h-[inherit] flex-col overflow-hidden rounded-sm border border-slate-300 bg-white shadow-[0_20px_50px_rgba(20,28,46,0.28)]">
             <div className="relative h-[min(38vh,188px)] min-h-[160px] shrink-0 overflow-hidden bg-brand-navy sm:h-[188px]">
-              <ImageWithFallback src={property.image} alt="" className="h-full w-full object-cover" />
+              <ImageWithFallback src={property.image} alt="" className="h-full w-full object-cover" optimizeWidth={400} />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
               <button
                 type="button"
