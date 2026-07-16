@@ -6,6 +6,17 @@
  * - SYNC_HTTP_SECRET       — caller must send header x-sync-secret: <value>
  *   (Supabase requiere Authorization: Bearer <anon_key> en la misma petición.)
  *
+ * Autorización: además del secreto de arriba (para cron/curl externos), esta función
+ * acepta el JWT de un usuario del panel (Authorization: Bearer <user_access_token>,
+ * como lo manda automáticamente `supabase.functions.invoke` desde el frontend). Se valida
+ * que el usuario exista y que su fila en `tokko_users` tenga role='admin' — estricto,
+ * no basta con el permiso 'manage_properties'/'manage_developments'. Usado por los botones
+ * "Importar de Tokko" del panel admin (ver
+ * src/app/components/admin/PropertyImportDialog.tsx y LeadImportDialog.tsx) con
+ * `insertOnlyNew: true` para traer solo propiedades/leads nuevos de Tokko sin tocar ni
+ * borrar los existentes (leads: resources "contact"/"web_contact", dedupe por
+ * `lead_kind,tokko_id`).
+ *
  * Optional env:
  * - TOKKO_API_BASE_URL     — default https://api.tokkobroker.com/api/v1 (API directa; `www` pasa por Cloudflare y suele dar 403 “Just a moment…” desde Edge/datacenter)
  * - TOKKO_LANG             — default es_ar
@@ -241,6 +252,60 @@ async function fetchTokkoAllItems(pathSegment: string): Promise<Record<string, u
   }
 
   return out;
+}
+
+/**
+ * Como fetchTokkoAllItems (modo offset) pero acotado por tiempo y reanudable: empieza en
+ * `startOffset` y deja de pedir más páginas a Tokko al llegar a `deadlineMs` (epoch ms),
+ * devolviendo `nextOffset` para continuar en una invocación siguiente. Usado solo por
+ * contact/web_contact bajo insertOnlyNew: esos datasets (~15k contactos) exceden el límite
+ * de tiempo del worker (~150s) si se traen completos en una sola invocación.
+ */
+async function fetchTokkoItemsSince(
+  pathSegment: string,
+  startOffset: number,
+  deadlineMs: number,
+): Promise<{ items: Record<string, unknown>[]; nextOffset: number | null }> {
+  const limit = Math.min(Math.max(Number(getEnv("TOKKO_LIMIT") ?? "2000") || 2000, 1), 10000);
+  const offsetParam = getEnv("TOKKO_OFFSET_PARAM") ?? "offset";
+  const maxBatches = Number(getEnv("TOKKO_MAX_BATCHES") ?? "600") || 600;
+
+  const out: Record<string, unknown>[] = [];
+  let offset = startOffset;
+  let batches = 0;
+
+  while (batches < maxBatches) {
+    if (Date.now() >= deadlineMs) {
+      return { items: out, nextOffset: offset };
+    }
+    batches++;
+    const payload = await fetchTokkoPage(pathSegment, {
+      limit: String(limit),
+      [offsetParam]: String(offset),
+    });
+    const items = extractItems(payload);
+    if (items.length === 0) return { items: out, nextOffset: null };
+    out.push(...items);
+
+    const meta = extractTokkoListMeta(payload);
+    const newOffset = offset + items.length;
+
+    if (meta.total_count != null && newOffset >= meta.total_count) {
+      return { items: out, nextOffset: null };
+    }
+
+    const next = meta.next;
+    const hasNext = next != null && next !== "" && next !== "null";
+    const pageCap = meta.limit ?? limit;
+    if (!hasNext && items.length < pageCap) {
+      return { items: out, nextOffset: null };
+    }
+
+    offset = newOffset;
+  }
+
+  // Se acabaron los lotes permitidos en esta invocación sin confirmar el fin: continuar la próxima vez.
+  return { items: out, nextOffset: offset };
 }
 
 function firstOperationRecord(item: Record<string, unknown>): Record<string, unknown> | null {
@@ -921,11 +986,37 @@ function mapLeadRow(item: Record<string, unknown>, lead_kind: "contact" | "web_c
   };
 }
 
-function assertSecret(req: Request): void {
-  const expected = requireEnv("SYNC_HTTP_SECRET");
+function hasValidSyncSecret(req: Request): boolean {
+  const expected = getEnv("SYNC_HTTP_SECRET");
+  if (!expected) return false;
   const fromHeader = (req.headers.get("x-sync-secret") ?? "").trim();
   const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
-  if (fromHeader === expected || bearer === expected) return;
+  return fromHeader === expected || bearer === expected;
+}
+
+/** true solo si el usuario del JWT tiene role='admin' en tokko_users (estricto: no basta con manage_properties/manage_developments). */
+async function isAuthorizedAdminJwt(req: Request, admin: SupabaseAdmin): Promise<boolean> {
+  const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+  if (!bearer) return false;
+
+  const { data: userData, error: userErr } = await admin.auth.getUser(bearer);
+  if (userErr || !userData?.user) return false;
+
+  const { data: row, error: rowErr } = await admin
+    .from("tokko_users")
+    .select("role")
+    .eq("id", userData.user.id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (rowErr || !row) return false;
+
+  return (row as { role?: string }).role === "admin";
+}
+
+/** Autoriza por secreto de sync (cron/curl) o, si no viene, por JWT de un admin del panel (role='admin' estricto). */
+async function assertAuthorized(req: Request, admin: SupabaseAdmin): Promise<void> {
+  if (hasValidSyncSecret(req)) return;
+  if (await isAuthorizedAdminJwt(req, admin)) return;
   throw new Error("Unauthorized");
 }
 
@@ -939,11 +1030,22 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: "Method not allowed" }, 405);
     }
 
-    assertSecret(req);
+    const supabaseUrl = requireEnv("SUPABASE_URL");
+    const serviceKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+    const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
+
+    await assertAuthorized(req, supabase);
 
     const body = (await req.json().catch(() => ({}))) as {
       resources?: ResourceKey[];
       dryRun?: boolean;
+      /** Inserta únicamente registros nuevos (tokko_id / lead_kind+tokko_id no vistos), sin
+       *  actualizar existentes ni borrar obsoletos. Usado por los botones "Importar" del panel. */
+      insertOnlyNew?: boolean;
+      /** Para retomar contact/web_contact entre invocaciones cuando el dataset es grande
+       *  (ver fetchTokkoItemsSince) — el frontend reenvía el `nextOffset` recibido hasta
+       *  que `hasMore` sea false. */
+      offsets?: Partial<Record<"contact" | "web_contact", number>>;
     };
 
     const resources: ResourceKey[] = body.resources?.length
@@ -951,12 +1053,15 @@ Deno.serve(async (req: Request) => {
       : ["development_types", "developments", "property_tags", "property_types", "properties", "users", "contact"];
 
     const dryRun = Boolean(body.dryRun);
+    const insertOnlyNew = Boolean(body.insertOnlyNew);
+    // Margen bajo el límite (~150s) del worker de Edge Functions: deja tiempo para mapear/insertar
+    // lo ya traído antes de que la plataforma corte la invocación.
+    const syncDeadline = Date.now() + 90_000;
 
-    const supabaseUrl = requireEnv("SUPABASE_URL");
-    const serviceKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
-    const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
-
-    const summary: Record<string, { upserted: number; errors: string[] }> = {};
+    const summary: Record<
+      string,
+      { upserted: number; skippedExisting?: number; hasMore?: boolean; nextOffset?: number; errors: string[] }
+    > = {};
 
     const pathProps = getEnv("TOKKO_PATH_PROPERTIES") ?? "property";
     const pathDevs = getEnv("TOKKO_PATH_DEVELOPMENTS") ?? "development";
@@ -1136,7 +1241,30 @@ Deno.serve(async (req: Request) => {
       try {
         const errors: string[] = [];
         let upserted = 0;
-        const items = await fetchTokkoAllItems(pathProps);
+        let skippedExisting = 0;
+        let items = await fetchTokkoAllItems(pathProps);
+
+        if (insertOnlyNew && items.length > 0) {
+          const fetchedIds = items.map((item) => String(pickTokkoId(item))).filter(Boolean);
+          const existingIds = new Set<string>();
+          const lookupBatch = 300;
+          for (let i = 0; i < fetchedIds.length; i += lookupBatch) {
+            const slice = fetchedIds.slice(i, i + lookupBatch);
+            const { data: existingRows, error: lookupErr } = await supabase
+              .from("properties")
+              .select("tokko_id")
+              .in("tokko_id", slice);
+            if (lookupErr) {
+              errors.push(`Error al revisar existentes: ${lookupErr.message}`);
+              continue;
+            }
+            for (const r of existingRows ?? []) existingIds.add(String((r as { tokko_id: string }).tokko_id));
+          }
+          const beforeCount = items.length;
+          items = items.filter((item) => !existingIds.has(String(pickTokkoId(item))));
+          skippedExisting = beforeCount - items.length;
+        }
+
         if (dryRun) {
           summary.properties = { upserted: items.length, errors: [] };
         } else {
@@ -1186,28 +1314,31 @@ Deno.serve(async (req: Request) => {
             }
             await syncPropertyTagLinksForBatch(supabase, pairs, byTokko, errors);
           }
-          // Clean up obsolete properties (not in Tokko Broker responses and not manual)
-          const fetchedTokkoIds = items.map((item) => String(pickTokkoId(item))).filter(Boolean);
-          if (fetchedTokkoIds.length > 0 && errors.length === 0) {
-            const { data: dbProps, error: fetchErr } = await supabase
-              .from("properties")
-              .select("tokko_id");
-            if (!fetchErr && dbProps) {
-              const idsToDelete = dbProps
-                .map((p) => String(p.tokko_id))
-                .filter((tokkoId) => !fetchedTokkoIds.includes(tokkoId) && !isManualTokkoId(tokkoId));
-              if (idsToDelete.length > 0) {
-                const { error: delErr } = await supabase
-                  .from("properties")
-                  .delete()
-                  .in("tokko_id", idsToDelete);
-                if (delErr) {
-                  errors.push(`Error al limpiar propiedades obsoletas: ${delErr.message}`);
+          // insertOnlyNew: solo agregar, nunca actualizar existentes ni borrar obsoletas.
+          if (!insertOnlyNew) {
+            // Clean up obsolete properties (not in Tokko Broker responses and not manual)
+            const fetchedTokkoIds = items.map((item) => String(pickTokkoId(item))).filter(Boolean);
+            if (fetchedTokkoIds.length > 0 && errors.length === 0) {
+              const { data: dbProps, error: fetchErr } = await supabase
+                .from("properties")
+                .select("tokko_id");
+              if (!fetchErr && dbProps) {
+                const idsToDelete = dbProps
+                  .map((p) => String(p.tokko_id))
+                  .filter((tokkoId) => !fetchedTokkoIds.includes(tokkoId) && !isManualTokkoId(tokkoId));
+                if (idsToDelete.length > 0) {
+                  const { error: delErr } = await supabase
+                    .from("properties")
+                    .delete()
+                    .in("tokko_id", idsToDelete);
+                  if (delErr) {
+                    errors.push(`Error al limpiar propiedades obsoletas: ${delErr.message}`);
+                  }
                 }
               }
             }
           }
-          summary.properties = { upserted, errors };
+          summary.properties = insertOnlyNew ? { upserted, skippedExisting, errors } : { upserted, errors };
         }
       } catch (e) {
         summary.properties = {
@@ -1259,15 +1390,58 @@ Deno.serve(async (req: Request) => {
       try {
         const errors: string[] = [];
         let upserted = 0;
-        const items = await fetchTokkoAllItems(path);
+        let skippedExisting = 0;
+        let nextOffset: number | null = null;
+
+        let items: Record<string, unknown>[];
+        if (insertOnlyNew) {
+          // Datasets grandes (~15k contactos): fetch acotado por tiempo y reanudable por offset.
+          const startOffset = Math.max(0, Math.trunc(Number(body.offsets?.[kind] ?? 0)) || 0);
+          const fetched = await fetchTokkoItemsSince(path, startOffset, syncDeadline);
+          items = fetched.items;
+          nextOffset = fetched.nextOffset;
+        } else {
+          items = await fetchTokkoAllItems(path);
+        }
+
         let skipped_lead_status = 0;
-        const kept: Record<string, unknown>[] = [];
+        let kept: Record<string, unknown>[] = [];
         for (const item of items) {
           if (shouldSkipLeadFromTokkoSync(item, skipLeadLabels)) skipped_lead_status++;
           else kept.push(item);
         }
+
+        if (insertOnlyNew && kept.length > 0) {
+          const fetchedIds = kept.map((item) => String(pickTokkoId(item))).filter(Boolean);
+          const existingIds = new Set<string>();
+          const lookupBatch = 300;
+          for (let i = 0; i < fetchedIds.length; i += lookupBatch) {
+            const slice = fetchedIds.slice(i, i + lookupBatch);
+            const { data: existingRows, error: lookupErr } = await supabase
+              .from("leads")
+              .select("tokko_id")
+              .eq("lead_kind", kind)
+              .in("tokko_id", slice);
+            if (lookupErr) {
+              errors.push(`Error al revisar existentes (${kind}): ${lookupErr.message}`);
+              continue;
+            }
+            for (const r of existingRows ?? []) existingIds.add(String((r as { tokko_id: string }).tokko_id));
+          }
+          const beforeCount = kept.length;
+          kept = kept.filter((item) => !existingIds.has(String(pickTokkoId(item))));
+          skippedExisting = beforeCount - kept.length;
+        }
+
         if (dryRun) {
-          summary[kind] = { upserted: kept.length, skipped_lead_status, fetched: items.length, errors: [] };
+          summary[kind] = {
+            upserted: kept.length,
+            skipped_lead_status,
+            fetched: items.length,
+            errors: [],
+            hasMore: nextOffset !== null,
+            nextOffset: nextOffset ?? undefined,
+          };
         } else {
           const rows = kept.map((item) => {
             try {
@@ -1285,7 +1459,17 @@ Deno.serve(async (req: Request) => {
             if (error) errors.push(error.message);
             else upserted += slice.length;
           }
-          summary[kind] = { upserted, skipped_lead_status, fetched: items.length, errors };
+          summary[kind] = insertOnlyNew
+            ? {
+                upserted,
+                skippedExisting,
+                skipped_lead_status,
+                fetched: items.length,
+                errors,
+                hasMore: nextOffset !== null,
+                nextOffset: nextOffset ?? undefined,
+              }
+            : { upserted, skipped_lead_status, fetched: items.length, errors };
         }
       } catch (e) {
         summary[kind] = {

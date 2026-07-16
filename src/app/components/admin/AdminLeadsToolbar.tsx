@@ -1,4 +1,4 @@
-import { ChevronDown, Filter, LayoutGrid, Plus, Search, Table2, TextSearch } from "lucide-react";
+import { ChevronDown, Cloud, Filter, LayoutGrid, Plus, Search, Table2, TextSearch } from "lucide-react";
 import type { LeadsFiltersState } from "../../pages/admin/useLeadsFilters";
 
 type Props = {
@@ -9,6 +9,9 @@ type Props = {
   allowedPipelineGroupIds: string[];
   pipelineGroupLabel: (id: string) => string;
   statusSelectOptions: { value: string; label: string }[];
+  /** El botón "Importar de Tokko" solo se muestra a role='admin'. */
+  isAdmin: boolean;
+  onImport?: () => void;
 };
 
 /** Cabecera de la pestana Leads: titulo, toggle Kanban/tabla, "Nuevo Lead", busqueda y filtros. */
@@ -20,6 +23,8 @@ export function AdminLeadsToolbar({
   allowedPipelineGroupIds,
   pipelineGroupLabel,
   statusSelectOptions,
+  isAdmin,
+  onImport,
 }: Props) {
   const {
     searchQuery,
@@ -84,6 +89,16 @@ export function AdminLeadsToolbar({
                       <Plus className="h-4 w-4" strokeWidth={1.5} />
                       Nuevo Lead
                     </button>
+                    {isAdmin && onImport && (
+                      <button
+                        type="button"
+                        onClick={onImport}
+                        className="flex w-full items-center justify-center gap-2 rounded border border-slate-300 bg-white px-5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 sm:w-auto"
+                      >
+                        <Cloud className="h-4 w-4" strokeWidth={1.5} />
+                        Importar de Tokko
+                      </button>
+                    )}
                   </div>
                 </div>
 

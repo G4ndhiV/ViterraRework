@@ -26,7 +26,7 @@ describe("AdminPropertyStatsCards", () => {
     expect(screen.getByText("42")).toBeInTheDocument();
     expect(screen.getByText("En venta")).toBeInTheDocument();
     expect(screen.getByText("30")).toBeInTheDocument();
-    expect(screen.getByText("En alquiler")).toBeInTheDocument();
+    expect(screen.getByText("En renta")).toBeInTheDocument();
     expect(screen.getByText("12")).toBeInTheDocument();
     // Valor promedio redondeado y con separadores de miles (es-MX).
     expect(screen.getByText(`$${(1234568).toLocaleString("es-MX")}`)).toBeInTheDocument();

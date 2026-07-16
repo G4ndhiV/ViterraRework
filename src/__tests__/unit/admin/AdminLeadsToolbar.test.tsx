@@ -50,6 +50,7 @@ function makeProps(filtersOverrides: Partial<LeadsFiltersState> = {}, overrides:
       { value: "nuevo", label: "Nuevo" },
       { value: "cerrado", label: "Cerrado" },
     ],
+    isAdmin: false,
     ...overrides,
   };
 }

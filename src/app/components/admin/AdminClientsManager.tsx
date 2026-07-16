@@ -1322,7 +1322,7 @@ export function AdminClientsManager({
                                           <p className="text-sm font-semibold text-brand-navy">{p.title}</p>
                                           <p className="mt-0.5 text-xs text-slate-500">{p.location || "Ubicación no definida"}</p>
                                           <p className="mt-1 text-xs text-slate-600">
-                                            {p.status === "alquiler" ? "Alquiler" : "Venta"} · {p.type || "Tipo no definido"}
+                                            {p.status === "alquiler" ? "Renta" : "Venta"} · {p.type || "Tipo no definido"}
                                           </p>
                                           <p className="mt-1.5 text-sm font-semibold text-primary">
                                             ${Number(p.price || 0).toLocaleString("es-MX")}

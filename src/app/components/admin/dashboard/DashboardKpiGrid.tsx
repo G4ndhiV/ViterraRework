@@ -83,7 +83,7 @@ export function DashboardKpiGrid({ targets, animate = true }: Props) {
       <StatCard
         label="Propiedades"
         value={Math.round(disp.totalProperties).toLocaleString("es-MX")}
-        hint={`${targets.propertiesForSale} venta · ${targets.propertiesForRent} alquiler`}
+        hint={`${targets.propertiesForSale} venta · ${targets.propertiesForRent} renta`}
       />
       <StatCard
         label="Valor promedio"

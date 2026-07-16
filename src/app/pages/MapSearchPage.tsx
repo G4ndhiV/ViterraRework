@@ -779,9 +779,9 @@ export function MapSearchPage() {
             className="w-full rounded-none border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm text-slate-900 shadow-inner focus:border-primary focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/25"
             style={{ fontWeight: 500 }}
           >
-            <option value="">Venta y alquiler</option>
+            <option value="">Venta y renta</option>
             <option value="venta">Solo venta</option>
-            <option value="alquiler">Solo alquiler</option>
+            <option value="alquiler">Solo renta</option>
           </select>
         </div>
       </div>
@@ -1089,7 +1089,7 @@ export function MapSearchPage() {
                     </button>
                     <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-2.5rem)] flex-wrap gap-1">
                       <span className="bg-primary px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-white">
-                        {selectedProperty.status === "venta" ? "En venta" : "En alquiler"}
+                        {selectedProperty.status === "venta" ? "En venta" : "En renta"}
                       </span>
                       <span className="border border-white/60 bg-white px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.1em] text-brand-navy">
                         {selectedProperty.type}

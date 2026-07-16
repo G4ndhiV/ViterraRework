@@ -449,7 +449,7 @@ export function PropertyDetailPage() {
       <div style={{ background: T.white, borderBottom: `1px solid ${T.border}` }}>
         <div className="mx-auto max-w-7xl px-4 py-3.5 sm:px-6 lg:px-8">
           <Link
-            to={property.status === "venta" ? "/venta" : "/renta"}
+            to={property.status === "alquiler" ? "/renta" : "/venta"}
             className="inline-flex items-center gap-2 text-xs transition-colors"
             style={{ color: T.muted, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600 }}
             onMouseEnter={(e) => (e.currentTarget.style.color = T.navy)}
@@ -463,10 +463,23 @@ export function PropertyDetailPage() {
 
       {/* ── Main grid ───────────────────────────────────────────────────── */}
       <div data-reveal className="mx-auto max-w-7xl w-full px-3 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-        <div className="flex flex-col gap-6 lg:grid lg:grid-cols-3 lg:gap-8">
+        {/*
+          lg: flex-row (no grid) a propósito: con grid + row-span-2 en la barra lateral,
+          la fila 1 (galería) se estiraba para igualar la altura de la barra lateral
+          completa, dejando un hueco enorme entre galería y tabs. Con flex, la columna
+          izquierda (envoltorio "contents" más abajo) se dimensiona por su propio
+          contenido, sin acoplarse a la altura de la barra lateral.
+        */}
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+
+          {/* Envoltorio galería+tabs: en móvil es "contents" (invisible para el layout,
+              así order-1/order-3 siguen posicionando cada bloque como hijos directos del
+              flex del padre, con la barra lateral order-2 intercalada). En lg+ es una
+              columna real que agrupa ambos bloques con un gap chico entre sí. */}
+          <div className="contents lg:flex lg:min-w-0 lg:flex-[2_2_0%] lg:flex-col lg:gap-4">
 
           {/* ═══════════ GALERÍA (móvil: orden 1) ═══════════ */}
-          <div className="order-1 min-w-0 lg:col-span-2 lg:row-start-1">
+          <div className="order-1 min-w-0">
 
             {/* Gallery */}
             <div style={{ borderRadius: 12, overflow: "hidden", boxShadow: "0 2px 24px rgba(20,28,46,0.10)" }}>
@@ -534,7 +547,7 @@ export function PropertyDetailPage() {
                     fontSize: "0.62rem", letterSpacing: "0.14em", fontWeight: 700,
                     color: T.gold, textTransform: "uppercase",
                   }}>
-                    {property.status === "venta" ? "En venta" : "En alquiler"}
+                    {property.status === "venta" ? "En venta" : "En renta"}
                   </span>
                   <span style={{
                     padding: "4px 11px", borderRadius: 4,
@@ -593,7 +606,9 @@ export function PropertyDetailPage() {
                         className={cn("pd-film-thumb flex-shrink-0 overflow-hidden", idx === currentImageIndex ? "active" : "")}
                         style={{ width: 52, height: 40, borderRadius: 5, border: `1.5px solid ${idx === currentImageIndex ? T.gold : T.border}` }}
                       >
-                        <ImageWithFallback src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" optimizeWidth={104} />
+                        {/* Sin optimizeWidth: a 52x40px no se nota la diferencia y así no se consume
+                            cupo de Storage Image Transformations por cada foto de cada galería vista. */}
+                        <ImageWithFallback src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" />
                       </button>
                     ))}
                   </div>
@@ -604,7 +619,7 @@ export function PropertyDetailPage() {
           </div>
 
           {/* ═══════════ CONTENIDO BAJO LA GALERÍA — tabs (móvil: orden 3) ═══════════ */}
-          <div className="order-3 min-w-0 space-y-5 lg:order-none lg:col-span-2 lg:col-start-1 lg:row-start-2">
+          <div className="order-3 min-w-0 space-y-5">
 
             {/* ── Tabs panel ───────────────────────────────────────────── */}
             <div style={{ borderRadius: 12, background: T.white, boxShadow: "0 2px 16px rgba(20,28,46,0.07)", overflow: "hidden" }}>
@@ -874,8 +889,11 @@ export function PropertyDetailPage() {
             </div>
           </div>
 
+          </div>
+          {/* ── fin envoltorio galería+tabs ── */}
+
           {/* ════════════════ RIGHT COLUMN — sticky (móvil: orden 2) ══════════════════════ */}
-          <div className="order-2 min-w-0 lg:order-none lg:col-start-3 lg:row-start-1 lg:row-span-2">
+          <div className="order-2 min-w-0 lg:order-none lg:flex-[1_1_0%]">
             <div className="space-y-4 lg:sticky lg:top-24">
 
               {/* ── Title + price ──────────────────────────────────────── */}
@@ -909,24 +927,45 @@ export function PropertyDetailPage() {
                 <GoldRule className="mb-4" />
 
                 {/* Price */}
-                <div className="mb-5">
-                  <EyebrowLabel>{property.status === "venta" ? "Precio" : "Renta mensual"}</EyebrowLabel>
-                  <p
-                    className="mt-1"
-                    style={{
-                      fontFamily: "'Poppins', sans-serif",
-                      fontSize: "clamp(1.7rem, 3.4vw, 2.4rem)",
-                      fontWeight: 700,
-                      color: T.navy,
-                      lineHeight: 1.1, letterSpacing: "-0.02em",
-                    }}
-                  >
-                    ${property.price.toLocaleString()}
-                  </p>
+                <div className="mb-5 space-y-3">
+                  {(property.status === "venta" || property.status === "venta_y_alquiler") && (
+                    <div>
+                      <EyebrowLabel>{property.status === "venta_y_alquiler" ? "Precio de Venta" : "Precio"}</EyebrowLabel>
+                      <p
+                        className="mt-1"
+                        style={{
+                          fontFamily: "'Poppins', sans-serif",
+                          fontSize: property.status === "venta_y_alquiler" ? "clamp(1.3rem, 2.4vw, 1.8rem)" : "clamp(1.7rem, 3.4vw, 2.4rem)",
+                          fontWeight: 700,
+                          color: T.navy,
+                          lineHeight: 1.1, letterSpacing: "-0.02em",
+                        }}
+                      >
+                        ${property.price.toLocaleString()}
+                      </p>
+                    </div>
+                  )}
+                  {(property.status === "alquiler" || property.status === "venta_y_alquiler") && (
+                    <div>
+                      <EyebrowLabel>{property.status === "venta_y_alquiler" ? "Precio de Renta" : "Renta mensual"}</EyebrowLabel>
+                      <p
+                        className="mt-1"
+                        style={{
+                          fontFamily: "'Poppins', sans-serif",
+                          fontSize: property.status === "venta_y_alquiler" ? "clamp(1.3rem, 2.4vw, 1.8rem)" : "clamp(1.7rem, 3.4vw, 2.4rem)",
+                          fontWeight: 700,
+                          color: T.navy,
+                          lineHeight: 1.1, letterSpacing: "-0.02em",
+                        }}
+                      >
+                        ${(property.rentalPrice ?? property.price).toLocaleString()}
+                      </p>
+                    </div>
+                  )}
                   {property.expenses != null && property.expenses > 0 ? (
                     <p className="mt-1 text-xs" style={{ color: T.muted }}>
                       + ${property.expenses.toLocaleString()}{" "}
-                      {property.status === "alquiler" ? "mantenimiento" : "expensas"}
+                      {property.status === "alquiler" || property.status === "venta_y_alquiler" ? "mantenimiento" : "expensas"}
                     </p>
                   ) : null}
                 </div>
@@ -983,7 +1022,7 @@ export function PropertyDetailPage() {
                     </>
                   ) : null}
                   <div style={{ height: 1, background: T.border }} />
-                  <DetailRow label="Estado">{property.status === "venta" ? "En venta" : "En alquiler"}</DetailRow>
+                  <DetailRow label="Estado">{property.status === "venta" ? "En venta" : property.status === "venta_y_alquiler" ? "Venta y Renta" : "En renta"}</DetailRow>
                   <div style={{ height: 1, background: T.border }} />
                   <DetailRow label="Actualizado">
                     <span className="inline-flex items-center gap-1.5">

@@ -788,7 +788,7 @@ export function ContactPage() {
                           <option value="">Selecciona un asunto</option>
                           <option value="compra">Compra de propiedad</option>
                           <option value="venta">Venta de propiedad</option>
-                          <option value="alquiler">Alquiler</option>
+                          <option value="alquiler">Renta</option>
                           <option value="asesoria">Asesoría</option>
                           <option value="otro">Otro</option>
                         </select>

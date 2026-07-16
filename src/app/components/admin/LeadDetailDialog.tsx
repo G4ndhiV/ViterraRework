@@ -934,7 +934,7 @@ export function LeadDetailDialog({
                                 {selectedProperty.location || "Ubicación no definida"}
                               </p>
                               <p className="mt-1 text-xs text-[#6f6750]">
-                                {selectedProperty.status === "alquiler" ? "Alquiler" : "Venta"} ·{" "}
+                                {selectedProperty.status === "alquiler" ? "Renta" : "Venta"} ·{" "}
                                 {selectedProperty.type || "Tipo no definido"}
                               </p>
                               <p className="mt-3 text-xl font-bold tabular-nums tracking-tight text-[#7f1d1d]">

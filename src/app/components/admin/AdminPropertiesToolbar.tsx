@@ -1,4 +1,4 @@
-import { ChevronDown, Filter, LayoutGrid, Map as MapIcon, Plus, Search, Table2 } from "lucide-react";
+import { ChevronDown, Cloud, Filter, LayoutGrid, Map as MapIcon, Plus, Search, Table2 } from "lucide-react";
 import { MAX_FEATURED_PROPERTIES } from "../../lib/supabaseProperties";
 import { CATALOG_PROPERTY_SORT_OPTIONS, type CatalogPropertySortKey } from "../../lib/catalogPropertySort";
 import type { PropertiesFiltersState } from "../../pages/admin/usePropertiesFilters";
@@ -9,7 +9,10 @@ type Props = {
   propertyLocationOptions: string[];
   propertyFeaturedCount: number;
   canManageInventory: boolean;
+  /** El botón "Importar de Tokko" solo se muestra a role='admin' (independiente de canManageInventory). */
+  isAdmin: boolean;
   onNew: () => void;
+  onImport?: () => void;
 };
 
 /** Cabecera de la pestaña Propiedades: título, toggle de vista, "Nueva Propiedad", búsqueda y filtros. */
@@ -19,7 +22,9 @@ export function AdminPropertiesToolbar({
   propertyLocationOptions,
   propertyFeaturedCount,
   canManageInventory,
+  isAdmin,
   onNew,
+  onImport,
 }: Props) {
   const {
     propertyInventoryView,
@@ -93,14 +98,26 @@ export function AdminPropertiesToolbar({
                       </button>
                     </div>
                     {canManageInventory && (
-                      <button
-                        type="button"
-                        onClick={onNew}
-                        className="flex w-full items-center justify-center gap-2 rounded bg-slate-900 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-black sm:w-auto"
-                      >
-                        <Plus className="h-4 w-4" strokeWidth={1.5} />
-                        Nueva Propiedad
-                      </button>
+                      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                        <button
+                          type="button"
+                          onClick={onNew}
+                          className="flex items-center justify-center gap-2 rounded bg-slate-900 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-black"
+                        >
+                          <Plus className="h-4 w-4" strokeWidth={1.5} />
+                          Nueva Propiedad
+                        </button>
+                        {isAdmin && onImport && (
+                          <button
+                            type="button"
+                            onClick={onImport}
+                            className="flex items-center justify-center gap-2 rounded border border-slate-300 bg-white px-5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                          >
+                            <Cloud className="h-4 w-4" strokeWidth={1.5} />
+                            Importar de Tokko
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -174,7 +191,8 @@ export function AdminPropertiesToolbar({
                       >
                         <option value="all">Operación</option>
                         <option value="venta">Venta</option>
-                        <option value="alquiler">Alquiler</option>
+                        <option value="alquiler">Renta</option>
+                        <option value="venta_y_alquiler">Venta y Renta</option>
                       </select>
                       <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
                     </div>

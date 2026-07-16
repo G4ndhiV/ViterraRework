@@ -25,7 +25,7 @@ interface SearchBarProps {
   hidePropertyAdvancedFilters?: boolean;
   /** Precios del catálogo (MXN). Vacío si usas `catalogPriceSlices`. */
   catalogPrices?: number[];
-  /** Precios por operación: si ambos tienen datos, se muestra toggle Venta / Alquiler para el dominio del slider. */
+  /** Precios por operación: si ambos tienen datos, se muestra toggle Venta / Renta para el dominio del slider. */
   catalogPriceSlices?: { venta: number[]; alquiler: number[] };
   /** Tipos personalizados del catálogo (p. ej. «Otro») además de `tokko_property_types`. */
   extraPropertyTypes?: string[];
@@ -294,7 +294,7 @@ export function SearchBar({
                       : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                Alquiler
+                Renta
               </button>
             </div>
           </div>
@@ -336,7 +336,7 @@ export function SearchBar({
             >
               <option value="">Todos</option>
               <option value="venta">Venta</option>
-              <option value="alquiler">Alquiler</option>
+              <option value="alquiler">Renta</option>
             </select>
           </div>
         ) : null}

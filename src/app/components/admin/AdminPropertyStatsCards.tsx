@@ -34,7 +34,7 @@ export function AdminPropertyStatsCards({
 
       <div className="flex flex-col border border-slate-200 bg-white p-6">
         <div className="mb-4 flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">En alquiler</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">En renta</p>
           <Briefcase className="h-4 w-4 text-slate-400" strokeWidth={1.5} />
         </div>
         <p className="text-3xl font-light text-slate-900">{propertiesForRent}</p>

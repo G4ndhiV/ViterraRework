@@ -153,10 +153,21 @@ export function AdminPropertiesViews({
 
                         <div className="mt-auto flex items-end justify-between">
                           <div>
-                            <p className="mb-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">Precio</p>
-                            <p className="text-xl font-light tracking-tight text-slate-900">
-                              ${property.price.toLocaleString()}
+                            <p className="mb-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                              {property.status === "alquiler" ? "Renta" : property.status === "venta_y_alquiler" ? "Venta / Renta" : "Precio"}
                             </p>
+                            <div className="space-y-1">
+                              {(property.status === "venta" || property.status === "venta_y_alquiler") && (
+                                <p className="text-lg font-light tracking-tight text-slate-900">
+                                  ${property.price.toLocaleString()}
+                                </p>
+                              )}
+                              {(property.status === "alquiler" || property.status === "venta_y_alquiler") && (
+                                <p className={property.status === "venta_y_alquiler" ? "text-sm text-slate-600" : "text-lg font-light tracking-tight text-slate-900"}>
+                                  {property.rentalPrice ? `$${property.rentalPrice.toLocaleString()}/mes` : "—"}
+                                </p>
+                              )}
+                            </div>
                           </div>
                           <div className="flex items-center gap-1">
                             <button
@@ -291,11 +302,22 @@ export function AdminPropertiesViews({
                                   }`}
                                 style={{ fontWeight: 600 }}
                               >
-                                {property.status === "venta" ? "Venta" : "Alquiler"}
+                                {property.status === "venta" ? "Venta" : "Renta"}
                               </span>
                             </td>
-                            <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-slate-900 sm:px-6 sm:py-4" style={{ fontWeight: 700 }}>
-                              ${property.price.toLocaleString()}
+                            <td className="whitespace-nowrap px-4 py-3 text-right sm:px-6 sm:py-4">
+                              <div className="text-right">
+                                {(property.status === "venta" || property.status === "venta_y_alquiler") && (
+                                  <p className="text-sm font-semibold text-slate-900" style={{ fontWeight: 700 }}>
+                                    ${property.price.toLocaleString()}
+                                  </p>
+                                )}
+                                {(property.status === "alquiler" || property.status === "venta_y_alquiler") && (
+                                  <p className="text-sm text-slate-600">
+                                    {property.rentalPrice ? `$${property.rentalPrice.toLocaleString()}/mes` : "—"}
+                                  </p>
+                                )}
+                              </div>
                             </td>
                             <td className="whitespace-nowrap px-4 py-3 text-center sm:px-6 sm:py-4">
                               <button

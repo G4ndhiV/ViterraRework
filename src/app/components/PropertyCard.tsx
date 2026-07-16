@@ -32,7 +32,9 @@ export interface Property {
   area: number;
   image: string;
   type: string;
-  status: "venta" | "alquiler";
+  status: "venta" | "alquiler" | "venta_y_alquiler";
+  /** Precio de alquiler (cuando status es "alquiler" o "venta_y_alquiler"). */
+  rentalPrice?: number;
   /** Destacada en inicio (columna `properties.featured`; máx. 4 en admin). */
   featured?: boolean;
   coordinates?: {
@@ -240,7 +242,7 @@ export function PropertyCard({
               )}
               style={!ed ? { backgroundColor: "rgba(200, 16, 46, 0.9)", borderColor: "var(--primary)" } : undefined}
             >
-              {property.status === "venta" ? "En venta" : "En alquiler"}
+              {property.status === "venta" ? "En venta" : property.status === "venta_y_alquiler" ? "Venta y Renta" : "En renta"}
             </span>
             <span
               className={cn(
@@ -296,13 +298,13 @@ export function PropertyCard({
             <div className="flex items-center gap-1.5">
               <Bed className={cn(ed ? "h-3.5 w-3.5" : "w-4 h-4")} strokeWidth={1.5} />
               <span className={cn("tabular-nums", ed ? "text-[11px] font-normal uppercase tracking-[0.12em]" : "text-sm font-light")}>
-                {property.bedrooms} Beds
+                {property.bedrooms} Recámaras
               </span>
             </div>
             <div className="flex items-center gap-1.5">
               <Bath className={cn(ed ? "h-3.5 w-3.5" : "w-4 h-4")} strokeWidth={1.5} />
               <span className={cn("tabular-nums", ed ? "text-[11px] font-normal uppercase tracking-[0.12em]" : "text-sm font-light")}>
-                {property.bathrooms} Baths
+                {property.bathrooms} Baños
               </span>
             </div>
           </div>
@@ -316,22 +318,35 @@ export function PropertyCard({
             )}
           >
             <div className={ed ? "min-w-0 space-y-0.5" : undefined}>
-              <p
-                className={cn(
-                  "text-slate-900 tabular-nums",
-                  ed
-                    ? "font-tertiary text-3xl font-light leading-none tracking-tight text-brand-navy sm:text-4xl"
-                    : "text-2xl font-semibold"
-                )}
-                style={!ed ? { fontWeight: 700 } : undefined}
-              >
-                ${property.price.toLocaleString()}
-                {property.status === "alquiler" && (
+              {(property.status === "venta" || property.status === "venta_y_alquiler") && (
+                <p
+                  className={cn(
+                    "text-slate-900 tabular-nums",
+                    ed
+                      ? "font-tertiary text-3xl font-light leading-none tracking-tight text-brand-navy sm:text-4xl"
+                      : "text-2xl font-semibold"
+                  )}
+                  style={!ed ? { fontWeight: 700 } : undefined}
+                >
+                  ${property.price.toLocaleString()}
+                </p>
+              )}
+              {(property.status === "alquiler" || property.status === "venta_y_alquiler") && (
+                <p
+                  className={cn(
+                    "text-slate-900 tabular-nums",
+                    ed
+                      ? property.status === "venta_y_alquiler" ? "font-tertiary text-lg leading-none tracking-tight text-brand-navy/60" : "font-tertiary text-3xl font-light leading-none tracking-tight text-brand-navy sm:text-4xl"
+                      : property.status === "venta_y_alquiler" ? "text-lg text-slate-600" : "text-2xl font-semibold"
+                  )}
+                  style={!ed && property.status !== "venta_y_alquiler" ? { fontWeight: 700 } : undefined}
+                >
+                  ${property.rentalPrice?.toLocaleString() || property.price.toLocaleString()}
                   <span className={cn("ml-1 text-xs font-medium not-italic", ed ? "font-heading text-brand-navy/45" : "text-slate-500")} style={!ed ? { fontWeight: 500 } : undefined}>
                     / mes
                   </span>
-                )}
-              </p>
+                </p>
+              )}
             </div>
             {ed ? (
               <Link
@@ -407,7 +422,7 @@ export function PropertyCard({
               </button>
               <div className="absolute bottom-2.5 left-2.5 flex max-w-[calc(100%-2.75rem)] flex-wrap gap-1.5">
                 <span className="rounded-sm bg-primary px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-white">
-                  {property.status === "venta" ? "En venta" : "En alquiler"}
+                  {property.status === "venta" ? "En venta" : property.status === "venta_y_alquiler" ? "Venta y Renta" : "En renta"}
                 </span>
                 <span className="rounded-sm border border-white/60 bg-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-brand-navy">
                   {property.type}
@@ -441,14 +456,28 @@ export function PropertyCard({
                 </div>
               </div>
 
-              <div className="mt-3 border border-slate-200 bg-white px-3 py-2.5">
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Precio</p>
-                <p className="font-heading mt-1 text-xl font-semibold tabular-nums text-brand-navy sm:text-2xl">
-                  ${property.price.toLocaleString()}
-                  {property.status === "alquiler" && (
-                    <span className="ml-1.5 font-heading text-sm font-normal not-italic text-slate-600">/ mes</span>
-                  )}
-                </p>
+              <div className="mt-3 border border-slate-200 bg-white px-3 py-2.5 space-y-2">
+                {(property.status === "venta" || property.status === "venta_y_alquiler") && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                      {property.status === "venta_y_alquiler" ? "Precio de Venta" : "Precio"}
+                    </p>
+                    <p className="font-heading mt-1 text-xl font-semibold tabular-nums text-brand-navy sm:text-2xl">
+                      ${property.price.toLocaleString()}
+                    </p>
+                  </div>
+                )}
+                {(property.status === "alquiler" || property.status === "venta_y_alquiler") && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                      {property.status === "venta_y_alquiler" ? "Precio de Renta" : "Precio"}
+                    </p>
+                    <p className="font-heading mt-1 text-xl font-semibold tabular-nums text-brand-navy sm:text-2xl">
+                      ${property.rentalPrice?.toLocaleString() || property.price.toLocaleString()}
+                      <span className="ml-1.5 font-heading text-sm font-normal not-italic text-slate-600">/ mes</span>
+                    </p>
+                  </div>
+                )}
               </div>
 
               <DialogFooter className="mt-4 flex w-full flex-col gap-2 p-0 sm:mt-4">

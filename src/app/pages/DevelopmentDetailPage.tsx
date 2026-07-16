@@ -372,10 +372,23 @@ export function DevelopmentDetailPage() {
 
       {/* ── Main grid ────────────────────────────────────────────────────── */}
       <div data-reveal className="mx-auto max-w-7xl w-full px-3 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-        <div className="flex flex-col gap-6 lg:grid lg:grid-cols-3 lg:gap-8">
+        {/*
+          lg: flex-row (no grid) a propósito: con grid + row-span-2 en la barra lateral,
+          la fila 1 (galería) se estiraba para igualar la altura de la barra lateral
+          completa, dejando un hueco enorme entre galería y tabs. Con flex, la columna
+          izquierda (envoltorio "contents" más abajo) se dimensiona por su propio
+          contenido, sin acoplarse a la altura de la barra lateral.
+        */}
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+
+          {/* Envoltorio galería+tabs: en móvil es "contents" (invisible para el layout,
+              así order-1/order-3 siguen posicionando cada bloque como hijos directos del
+              flex del padre, con la barra lateral order-2 intercalada). En lg+ es una
+              columna real que agrupa ambos bloques con un gap chico entre sí. */}
+          <div className="contents lg:flex lg:min-w-0 lg:flex-[2_2_0%] lg:flex-col lg:gap-4">
 
           {/* ═══════════ GALERÍA (móvil: orden 1) ═══════════ */}
-          <div className="order-1 min-w-0 lg:col-span-2 lg:row-start-1">
+          <div className="order-1 min-w-0">
 
             {/* Gallery */}
             <div style={{ borderRadius: 12, overflow: "hidden", boxShadow: "0 2px 24px rgba(20,28,46,0.10)" }}>
@@ -449,8 +462,10 @@ export function DevelopmentDetailPage() {
                       <button key={idx} onClick={() => setCurrentImageIndex(idx)} aria-label={`Ver imagen ${idx + 1}`}
                         className={cn("dd-film-thumb flex-shrink-0 overflow-hidden", idx === currentImageIndex ? "active" : "")}
                         style={{ width: 52, height: 40, borderRadius: 5, border: `1.5px solid ${idx === currentImageIndex ? T.gold : T.border}` }}>
+                        {/* Sin optimizedImageUrl: a 52x40px no se nota la diferencia y así no se consume
+                            cupo de Storage Image Transformations por cada foto de cada galería vista. */}
                         <img
-                          src={optimizedImageUrl(img, { width: 104 })}
+                          src={img}
                           alt={`Vista ${idx + 1}`}
                           className="w-full h-full object-cover"
                           loading="lazy"
@@ -465,7 +480,7 @@ export function DevelopmentDetailPage() {
           </div>
 
           {/* ═══════════ CONTENIDO BAJO LA GALERÍA — tabs (móvil: orden 3) ═══════════ */}
-          <div className="order-3 min-w-0 space-y-5 lg:order-none lg:col-span-2 lg:col-start-1 lg:row-start-2">
+          <div className="order-3 min-w-0 space-y-5">
 
             {/* ── Tabs panel ───────────────────────────────────────────── */}
             <div style={{ borderRadius: 12, background: T.white, boxShadow: "0 2px 16px rgba(20,28,46,0.07)", overflow: "hidden" }}>
@@ -769,8 +784,11 @@ export function DevelopmentDetailPage() {
             </div>
           </div>
 
+          </div>
+          {/* ── fin envoltorio galería+tabs ── */}
+
           {/* ════════════ RIGHT COLUMN — sticky (móvil: orden 2) ══════════════════════════ */}
-          <div className="order-2 min-w-0 lg:order-none lg:col-start-3 lg:row-start-1 lg:row-span-2">
+          <div className="order-2 min-w-0 lg:order-none lg:flex-[1_1_0%]">
             <div className="space-y-4 lg:sticky lg:top-24">
 
               {/* ── Title + price card ─────────────────────────────────── */}

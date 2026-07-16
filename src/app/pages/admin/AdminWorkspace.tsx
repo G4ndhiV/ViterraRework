@@ -238,6 +238,12 @@ const PdfDownloadDropdown = lazy(() =>
 const PropertyFormDialog = lazy(() =>
   import("../../components/admin/PropertyFormDialog").then((m) => ({ default: m.PropertyFormDialog }))
 );
+const PropertyImportDialog = lazy(() =>
+  import("../../components/admin/PropertyImportDialog").then((m) => ({ default: m.PropertyImportDialog }))
+);
+const LeadImportDialog = lazy(() =>
+  import("../../components/admin/LeadImportDialog").then((m) => ({ default: m.LeadImportDialog }))
+);
 const AdminUserProfilePanel = lazy(() =>
   import("../../components/admin/AdminUserProfilePanel").then((m) => ({ default: m.AdminUserProfilePanel }))
 );
@@ -478,6 +484,8 @@ export function AdminWorkspace() {
     null
   );
   const [deletePropertyId, setDeletePropertyId] = useState<string | null>(null);
+  const [propertyImportOpen, setPropertyImportOpen] = useState(false);
+  const [leadImportOpen, setLeadImportOpen] = useState(false);
   const { appointments, setAppointments } = useAdminAppointments(activeTab);
 
   const canAccessDashboard = useMemo(() => canAccessDashboardModule(effectiveUser), [effectiveUser]);
@@ -3280,6 +3288,8 @@ export function AdminWorkspace() {
                 allowedPipelineGroupIds={allowedPipelineGroupIds}
                 pipelineGroupLabel={pipelineGroupLabel}
                 statusSelectOptions={statusSelectOptions}
+                isAdmin={isAdmin}
+                onImport={() => setLeadImportOpen(true)}
               />
 
               <AddLeadDialog
@@ -3295,6 +3305,14 @@ export function AdminWorkspace() {
                 properties={properties}
                 developments={developments}
               />
+
+              <Suspense fallback={null}>
+                <LeadImportDialog
+                  open={leadImportOpen}
+                  onOpenChange={setLeadImportOpen}
+                  onImportComplete={() => void reloadLeads()}
+                />
+              </Suspense>
 
               {leadsError && (
                 <div
@@ -3496,10 +3514,12 @@ export function AdminWorkspace() {
                 propertyLocationOptions={propertyLocationOptions}
                 propertyFeaturedCount={propertyFeaturedCount}
                 canManageInventory={canManageInventory}
+                isAdmin={isAdmin}
                 onNew={() => {
                   setNewPropertyDraftId(crypto.randomUUID());
                   setPropertyForm({ mode: "create", property: null });
                 }}
+                onImport={() => setPropertyImportOpen(true)}
               />
 
               <AdminPropertyStatsCards
@@ -3873,6 +3893,11 @@ export function AdminWorkspace() {
               developments={developments}
               developmentsLoading={developmentsLoading}
               catalogProperties={properties}
+            />
+            <PropertyImportDialog
+              open={propertyImportOpen}
+              onOpenChange={setPropertyImportOpen}
+              onImportComplete={() => void reloadProperties()}
             />
           </Suspense>
         )}

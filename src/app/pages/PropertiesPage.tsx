@@ -64,12 +64,22 @@ export function PropertiesPage() {
       filtered = filtered.filter((property) => property.status === filters.status);
     }
 
-    // Filter by price range
+    // Filter by price range (considers both sale and rental prices)
     if (filters.minPrice) {
-      filtered = filtered.filter((property) => property.price >= Number(filters.minPrice));
+      const minPrice = Number(filters.minPrice);
+      filtered = filtered.filter((property) => {
+        const salePrice = property.status !== "alquiler" ? property.price : Infinity;
+        const rentalPrice = property.status !== "venta" ? (property.rentalPrice ?? property.price) : Infinity;
+        return Math.min(salePrice, rentalPrice) >= minPrice;
+      });
     }
     if (filters.maxPrice) {
-      filtered = filtered.filter((property) => property.price <= Number(filters.maxPrice));
+      const maxPrice = Number(filters.maxPrice);
+      filtered = filtered.filter((property) => {
+        const salePrice = property.status !== "alquiler" ? property.price : -Infinity;
+        const rentalPrice = property.status !== "venta" ? (property.rentalPrice ?? property.price) : -Infinity;
+        return Math.max(salePrice, rentalPrice) <= maxPrice;
+      });
     }
 
     filtered = applyAdvancedPropertyFilters(filtered, filters);

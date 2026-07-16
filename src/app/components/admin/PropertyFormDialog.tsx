@@ -402,8 +402,21 @@ export function PropertyFormDialog({
                             >
                               <option value="venta">Venta</option>
                               <option value="alquiler">Renta</option>
+                              <option value="venta_y_alquiler">Venta y Renta</option>
                             </select>
                           </PropertyField>
+                          {(draft.status === "alquiler" || draft.status === "venta_y_alquiler") && (
+                            <PropertyField label="Precio de Renta (MXN/mes)">
+                              <input
+                                type="number"
+                                min={0}
+                                className={propertyFieldClass}
+                                value={draft.rentalPrice || ""}
+                                onChange={(e) => patchDraft({ rentalPrice: Number(e.target.value) || undefined })}
+                                placeholder="Opcional"
+                              />
+                            </PropertyField>
+                          )}
                           <PropertyField
                             label="ID"
                             hint={

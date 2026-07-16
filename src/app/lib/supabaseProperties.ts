@@ -25,14 +25,17 @@ const nowIso = () => new Date().toISOString();
 /** Máximo de propiedades destacadas en la portada (inicio). */
 export const MAX_FEATURED_PROPERTIES = 50;
 
-function appStatusFromDb(s: string): "venta" | "alquiler" {
+function appStatusFromDb(s: string): "venta" | "alquiler" | "venta_y_alquiler" {
   const t = s.trim().toLowerCase();
+  if (t === "venta_y_alquiler") return "venta_y_alquiler";
   if (t.includes("alquiler") || t.includes("rent") || t === "renta") return "alquiler";
   return "venta";
 }
 
 function dbStatusFromApp(s: Property["status"]): string {
-  return s === "alquiler" ? "alquiler" : "venta";
+  if (s === "venta_y_alquiler") return "venta_y_alquiler";
+  if (s === "alquiler") return "alquiler";
+  return "venta";
 }
 
 /** Interpreta el estado operativo desde el texto en BD (antes de colapsar a venta/alquiler). */
@@ -91,6 +94,7 @@ export type PropertyRow = {
   tokko_id: string;
   title: string;
   price: number | null;
+  rental_price?: number | null;
   location: string | null;
   bedrooms: number | null;
   bathrooms: number | null;
@@ -166,6 +170,7 @@ export function rowToProperty(row: PropertyRow): Property {
     id: row.id,
     title: row.title,
     price: Number(row.price ?? 0),
+    rentalPrice: optionalPositiveNum(row.rental_price),
     location: row.location ?? "",
     bedrooms: nonNegInt(row.bedrooms),
     bathrooms: nonNegInt(row.bathrooms),
@@ -296,6 +301,7 @@ export function propertyToRow(
   return {
     title: p.title,
     price: p.price,
+    rental_price: p.rentalPrice ?? null,
     location: p.location || null,
     bedrooms: p.bedrooms,
     bathrooms: p.bathrooms,

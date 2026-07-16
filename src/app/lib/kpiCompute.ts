@@ -307,7 +307,7 @@ export function computeOperationDistribution(properties: Property[]): SourceBuck
   const total = venta + alquiler || 1;
   return [
     { name: "Venta", count: venta, share: venta / total },
-    { name: "Alquiler", count: alquiler, share: alquiler / total },
+    { name: "Renta", count: alquiler, share: alquiler / total },
   ];
 }
 

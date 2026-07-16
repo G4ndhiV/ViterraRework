@@ -61,7 +61,7 @@ export function KpiInventoryBlock({ propertyTypes, operations, staleProperties, 
       </section>
 
       <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
-        <SectionHeader title="Operación" description="Venta vs alquiler." />
+        <SectionHeader title="Operación" description="Venta vs renta." />
         {bar(operations, "#1e293b")}
       </section>
 

@@ -150,7 +150,7 @@ const historyTypeBadgeLabel: Record<UserHistoryEntry["type"], string> = {
 const interestLabel: Record<Lead["interest"], string> = {
   compra: "Compra",
   venta: "Venta",
-  alquiler: "Alquiler",
+  alquiler: "Renta",
   asesoria: "Asesoría",
 };
 

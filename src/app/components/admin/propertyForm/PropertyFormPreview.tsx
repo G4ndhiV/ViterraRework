@@ -78,7 +78,7 @@ export function PropertyFormPreview({ draft, developments = [], className }: Pro
           <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/45 via-black/15 to-transparent" />
           <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
             <span className="border border-primary/20 bg-primary/95 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary-foreground shadow-sm backdrop-blur-sm">
-              {draft.status === "alquiler" ? "En alquiler" : "En venta"}
+              {draft.status === "alquiler" ? "En renta" : "En venta"}
             </span>
             {draft.type?.trim() ? (
               <span className="border border-brand-navy/10 bg-white/92 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-navy/90 backdrop-blur-sm">
