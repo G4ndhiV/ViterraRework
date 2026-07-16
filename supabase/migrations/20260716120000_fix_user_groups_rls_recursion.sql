@@ -6,32 +6,28 @@
 -- consulta `user_groups` en crudo de vuelta. Postgres detecta el ciclo A -> B -> A entre las
 -- políticas de ambas tablas y aborta con "infinite recursion detected in policy for relation X".
 --
--- Se intentó envolver las consultas cruzadas en funciones security definer manteniendo FORCE
--- ROW LEVEL SECURITY (como en 20260619130000_force_row_level_security.sql) y NO alcanza: se
--- verificó empíricamente (Postgres 17, tabla con FORCE ROW LEVEL SECURITY + función security
--- definer propiedad del mismo dueño de la tabla) que Postgres sigue aplicando la política del
--- lado de adentro de la función — con FORCE activo, ni siquiera `set local row_security = off`
--- está permitido para el dueño (error: "query would be affected by row-level security policy...
--- To disable the policy for the table's owner, use ALTER TABLE NO FORCE ROW LEVEL SECURITY").
--- Es decir, dentro de una función security definer, tocar una tabla con FORCE sigue
--- reevaluando su política — si esa política vuelve a llamar a la misma función, el ciclo
--- persiste igual, ahora escondido dentro de la función.
+-- Fix: envolver cada consulta cruzada en una función security definer de una sola tabla —
+-- el mismo patrón que ya usan viterra_is_admin()/viterra_has_permission() para consultar
+-- `tokko_users` (que también tiene FORCE ROW LEVEL SECURITY, ver
+-- 20260619130000_force_row_level_security.sql) sin recursión, porque el rol dueño de las
+-- funciones (el rol de las migraciones) tiene el atributo BYPASSRLS: eso hace que, dentro de
+-- la función, la tabla se lea sin volver a evaluar su política — independientemente de FORCE
+-- ROW LEVEL SECURITY, que solo quita la excepción por defecto del dueño, no el bypass de un
+-- rol con BYPASSRLS. Verificado empíricamente (Postgres 17, tabla con FORCE ROW LEVEL
+-- SECURITY + rol dueño con BYPASSRLS): funciona igual que tokko_users, para los 4 escenarios
+-- (admin, líder, miembro no-líder, usuario sin relación). No hace falta ni conviene tocar
+-- FORCE ROW LEVEL SECURITY en estas tablas.
 --
--- Fix real (verificado end-to-end con 4 escenarios: admin, líder, miembro no-líder, usuario
--- sin relación — los 4 dan el resultado esperado sin error):
--- 1) Quitar FORCE ROW LEVEL SECURITY de estas dos tablas puntuales. RLS sigue activa para los
---    roles `anon`/`authenticated` (que es la superficie real que protege de usuarios finales);
---    FORCE solo afecta al rol dueño de la tabla (p. ej. el rol de las migraciones) — un acceso
---    ya de por sí confiable (Dashboard/SQL editor de Supabase, `service_role` de las Edge
---    Functions, que además ya bypassea RLS de por sí). No son tablas con PII sensible de
---    clientes como `leads`/`properties`; son equipos/membresías internas del CRM.
--- 2) Con FORCE fuera, las funciones security definer (mismo patrón que viterra_is_admin() con
---    tokko_users) sí bypasean RLS de verdad al ejecutar, cortando el ciclo A -> B -> A.
+-- Parámetros/comparaciones en texto (`::text`) a propósito: el esquema real de
+-- `user_group_members.group_id` no coincide con el tipo `uuid` que declara
+-- 20260618100000_user_groups.sql (hay drift entre esa migración y la tabla real — el intento
+-- anterior de este archivo, con parámetros `uuid`, falló en el SQL Editor con
+-- "operator does not exist: text = uuid"). Mismo patrón defensivo que ya usa
+-- viterra_is_leader_for_assigned_user() en 20260619120000_lider_grupo_lead_scope.sql
+-- (castea m.user_id::text), así funciona sin importar si las columnas terminan siendo
+-- uuid o text.
 
-alter table public.user_groups no force row level security;
-alter table public.user_group_members no force row level security;
-
-create or replace function public.viterra_is_group_member(p_group_id uuid)
+create or replace function public.viterra_is_group_member(p_group_id text)
 returns boolean
 language sql
 stable
@@ -41,31 +37,31 @@ as $$
   select exists (
     select 1
     from public.user_group_members m
-    join public.user_groups g on g.id = m.group_id
-    where m.group_id = p_group_id
-      and m.user_id = auth.uid()
+    join public.user_groups g on g.id::text = m.group_id::text
+    where m.group_id::text = p_group_id
+      and m.user_id::text = auth.uid()::text
       and g.deleted_at is null
   );
 $$;
 
-create or replace function public.viterra_group_leader_id(p_group_id uuid)
-returns uuid
+create or replace function public.viterra_group_leader_id(p_group_id text)
+returns text
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  select g.leader_id
+  select g.leader_id::text
   from public.user_groups g
-  where g.id = p_group_id
+  where g.id::text = p_group_id
     and g.deleted_at is null
   limit 1;
 $$;
 
-revoke all on function public.viterra_is_group_member(uuid) from public;
-revoke all on function public.viterra_group_leader_id(uuid) from public;
-grant execute on function public.viterra_is_group_member(uuid) to authenticated;
-grant execute on function public.viterra_group_leader_id(uuid) to authenticated;
+revoke all on function public.viterra_is_group_member(text) from public;
+revoke all on function public.viterra_group_leader_id(text) from public;
+grant execute on function public.viterra_is_group_member(text) to authenticated;
+grant execute on function public.viterra_group_leader_id(text) to authenticated;
 
 -- user_groups: ya no consulta user_group_members en crudo (pasa por la función bypass).
 drop policy if exists user_groups_select_scoped on public.user_groups;
@@ -79,7 +75,7 @@ create policy user_groups_select_scoped
       public.viterra_is_admin()
       or public.viterra_has_permission('manage_users')
       or leader_id = auth.uid()
-      or public.viterra_is_group_member(id)
+      or public.viterra_is_group_member(id::text)
     )
   );
 
@@ -92,8 +88,8 @@ create policy user_group_members_select_scoped
   using (
     public.viterra_is_admin()
     or public.viterra_has_permission('manage_users')
-    or public.viterra_group_leader_id(group_id) = auth.uid()
-    or public.viterra_is_group_member(group_id)
+    or public.viterra_group_leader_id(group_id::text) = auth.uid()::text
+    or public.viterra_is_group_member(group_id::text)
   );
 
 drop policy if exists user_group_members_write_admin on public.user_group_members;
@@ -104,10 +100,10 @@ create policy user_group_members_write_admin
   using (
     public.viterra_is_admin()
     or public.viterra_has_permission('manage_users')
-    or public.viterra_group_leader_id(group_id) = auth.uid()
+    or public.viterra_group_leader_id(group_id::text) = auth.uid()::text
   )
   with check (
     public.viterra_is_admin()
     or public.viterra_has_permission('manage_users')
-    or public.viterra_group_leader_id(group_id) = auth.uid()
+    or public.viterra_group_leader_id(group_id::text) = auth.uid()::text
   );
