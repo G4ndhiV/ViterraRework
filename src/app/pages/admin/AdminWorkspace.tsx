@@ -3289,7 +3289,7 @@ export function AdminWorkspace() {
                 pipelineGroupLabel={pipelineGroupLabel}
                 statusSelectOptions={statusSelectOptions}
                 isAdmin={isAdmin}
-                onImport={() => setLeadImportOpen(true)}
+                // onImport oculto por el momento (botón "Importar de Tokko" en Leads).
               />
 
               <AddLeadDialog
