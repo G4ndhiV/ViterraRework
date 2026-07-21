@@ -12,10 +12,14 @@
  * que el usuario exista y que su fila en `tokko_users` tenga role='admin' — estricto,
  * no basta con el permiso 'manage_properties'/'manage_developments'. Usado por los botones
  * "Importar de Tokko" del panel admin (ver
- * src/app/components/admin/PropertyImportDialog.tsx y LeadImportDialog.tsx) con
- * `insertOnlyNew: true` para traer solo propiedades/leads nuevos de Tokko sin tocar ni
- * borrar los existentes (leads: resources "contact"/"web_contact", dedupe por
- * `lead_kind,tokko_id`).
+ * src/app/components/admin/PropertyImportDialog.tsx y LeadImportDialog.tsx).
+ *
+ * Modos de "properties" desde el panel (body.propertiesMode): "new_only" solo inserta
+ * tokko_id nuevos, "update_only" solo actualiza existentes con lo que traiga Tokko,
+ * "sync_all" hace ambas. Ninguno borra propiedades obsoletas — eso queda reservado al
+ * modo completo (cron/curl sin propertiesMode ni insertOnlyNew). Leads del panel:
+ * `insertOnlyNew: true` con resources "contact"/"web_contact" (dedupe `lead_kind,tokko_id`),
+ * solo inserta nuevos.
  *
  * Optional env:
  * - TOKKO_API_BASE_URL     — default https://api.tokkobroker.com/api/v1 (API directa; `www` pasa por Cloudflare y suele dar 403 “Just a moment…” desde Edge/datacenter)
@@ -1042,6 +1046,13 @@ Deno.serve(async (req: Request) => {
       /** Inserta únicamente registros nuevos (tokko_id / lead_kind+tokko_id no vistos), sin
        *  actualizar existentes ni borrar obsoletos. Usado por los botones "Importar" del panel. */
       insertOnlyNew?: boolean;
+      /** Modo del recurso "properties" para el botón del panel: "new_only" solo inserta
+       *  tokko_id nuevos; "update_only" solo actualiza existentes; "sync_all" inserta y
+       *  actualiza. Ninguno de los tres borra propiedades obsoletas (eso queda reservado
+       *  al modo completo del cron/curl, que no envía propertiesMode ni insertOnlyNew).
+       *  Tiene precedencia sobre insertOnlyNew para properties; insertOnlyNew se mantiene
+       *  por compatibilidad (frontend viejo, o función vieja que ignore este campo). */
+      propertiesMode?: "new_only" | "update_only" | "sync_all";
       /** Para retomar contact/web_contact entre invocaciones cuando el dataset es grande
        *  (ver fetchTokkoItemsSince) — el frontend reenvía el `nextOffset` recibido hasta
        *  que `hasMore` sea false. */
@@ -1054,13 +1065,31 @@ Deno.serve(async (req: Request) => {
 
     const dryRun = Boolean(body.dryRun);
     const insertOnlyNew = Boolean(body.insertOnlyNew);
+    /** "full" = modo legado del cron/curl: upsert de todo + borrado de obsoletas. */
+    const propertiesMode: "new_only" | "update_only" | "sync_all" | "full" =
+      body.propertiesMode === "new_only" ||
+      body.propertiesMode === "update_only" ||
+      body.propertiesMode === "sync_all"
+        ? body.propertiesMode
+        : insertOnlyNew
+          ? "new_only"
+          : "full";
     // Margen bajo el límite (~150s) del worker de Edge Functions: deja tiempo para mapear/insertar
     // lo ya traído antes de que la plataforma corte la invocación.
     const syncDeadline = Date.now() + 90_000;
 
     const summary: Record<
       string,
-      { upserted: number; skippedExisting?: number; hasMore?: boolean; nextOffset?: number; errors: string[] }
+      {
+        upserted: number;
+        created?: number;
+        updated?: number;
+        skippedExisting?: number;
+        skippedNew?: number;
+        hasMore?: boolean;
+        nextOffset?: number;
+        errors: string[];
+      }
     > = {};
 
     const pathProps = getEnv("TOKKO_PATH_PROPERTIES") ?? "property";
@@ -1241,12 +1270,17 @@ Deno.serve(async (req: Request) => {
       try {
         const errors: string[] = [];
         let upserted = 0;
+        let created = 0;
+        let updated = 0;
         let skippedExisting = 0;
+        let skippedNew = 0;
         let items = await fetchTokkoAllItems(pathProps);
 
-        if (insertOnlyNew && items.length > 0) {
+        // Modos del panel: hace falta saber qué tokko_id ya existen, tanto para filtrar
+        // (new_only/update_only) como para reportar creadas vs actualizadas (sync_all).
+        const existingIds = new Set<string>();
+        if (propertiesMode !== "full" && items.length > 0) {
           const fetchedIds = items.map((item) => String(pickTokkoId(item))).filter(Boolean);
-          const existingIds = new Set<string>();
           const lookupBatch = 300;
           for (let i = 0; i < fetchedIds.length; i += lookupBatch) {
             const slice = fetchedIds.slice(i, i + lookupBatch);
@@ -1261,12 +1295,29 @@ Deno.serve(async (req: Request) => {
             for (const r of existingRows ?? []) existingIds.add(String((r as { tokko_id: string }).tokko_id));
           }
           const beforeCount = items.length;
-          items = items.filter((item) => !existingIds.has(String(pickTokkoId(item))));
-          skippedExisting = beforeCount - items.length;
+          if (propertiesMode === "new_only") {
+            items = items.filter((item) => !existingIds.has(String(pickTokkoId(item))));
+            skippedExisting = beforeCount - items.length;
+          } else if (propertiesMode === "update_only") {
+            items = items.filter((item) => existingIds.has(String(pickTokkoId(item))));
+            skippedNew = beforeCount - items.length;
+          }
+          // sync_all: se procesan todas; created/updated se cuentan al escribir.
         }
 
+        /** Clasifica una fila escrita como creada o actualizada (solo modos del panel). */
+        const countWrittenRow = (tokkoId: string) => {
+          if (propertiesMode === "full") return;
+          if (existingIds.has(tokkoId)) updated++;
+          else created++;
+        };
+
         if (dryRun) {
-          summary.properties = { upserted: items.length, errors: [] };
+          for (const item of items) countWrittenRow(String(pickTokkoId(item)));
+          summary.properties =
+            propertiesMode === "full"
+              ? { upserted: items.length, errors: [] }
+              : { upserted: items.length, created, updated, skippedExisting, skippedNew, errors: [] };
         } else {
           const batch = 80;
           for (let i = 0; i < items.length; i += batch) {
@@ -1306,6 +1357,7 @@ Deno.serve(async (req: Request) => {
 
             const byTokko = new Map(idRows.map((r) => [String(r.tokko_id), r.id as string]));
             upserted += batchRows.length;
+            for (const r of batchRows) countWrittenRow(String(r.tokko_id));
 
             for (const { row } of pairs) {
               if (!byTokko.get(String(row.tokko_id))) {
@@ -1314,8 +1366,9 @@ Deno.serve(async (req: Request) => {
             }
             await syncPropertyTagLinksForBatch(supabase, pairs, byTokko, errors);
           }
-          // insertOnlyNew: solo agregar, nunca actualizar existentes ni borrar obsoletas.
-          if (!insertOnlyNew) {
+          // El borrado de obsoletas queda reservado al modo completo del cron/curl; los
+          // modos del panel (new_only/update_only/sync_all) solo insertan/actualizan.
+          if (propertiesMode === "full") {
             // Clean up obsolete properties (not in Tokko Broker responses and not manual)
             const fetchedTokkoIds = items.map((item) => String(pickTokkoId(item))).filter(Boolean);
             if (fetchedTokkoIds.length > 0 && errors.length === 0) {
@@ -1338,7 +1391,10 @@ Deno.serve(async (req: Request) => {
               }
             }
           }
-          summary.properties = insertOnlyNew ? { upserted, skippedExisting, errors } : { upserted, errors };
+          summary.properties =
+            propertiesMode === "full"
+              ? { upserted, errors }
+              : { upserted, created, updated, skippedExisting, skippedNew, errors };
         }
       } catch (e) {
         summary.properties = {

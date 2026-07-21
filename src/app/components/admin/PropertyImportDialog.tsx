@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertCircle, CheckCircle2, Cloud, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, Cloud, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,9 +14,36 @@ import { getSupabaseClient } from "../../lib/supabaseClient";
 
 type SyncStep = "idle" | "syncing" | "done" | "error";
 
+/** Modos del recurso "properties" en tokko-sync (ninguno borra propiedades). */
+type ImportMode = "new_only" | "update_only" | "sync_all";
+
+const MODE_OPTIONS: Array<{ value: ImportMode; label: string; description: string }> = [
+  {
+    value: "new_only",
+    label: "Solo propiedades nuevas",
+    description:
+      "Trae únicamente las propiedades que aún no existen en el sitio. Las ya publicadas o editadas manualmente no se tocan.",
+  },
+  {
+    value: "update_only",
+    label: "Solo actualizar existentes",
+    description:
+      "Actualiza las propiedades que ya están en el sitio con los datos actuales de Tokko (precio, fotos, título, descripción…). Los cambios hechos solo en el CRM y no en Tokko se sobrescriben. No agrega nuevas.",
+  },
+  {
+    value: "sync_all",
+    label: "Importar nuevas y actualizar todo",
+    description:
+      "Agrega las propiedades nuevas y además actualiza las existentes con los datos actuales de Tokko. Los cambios hechos solo en el CRM y no en Tokko se sobrescriben.",
+  },
+];
+
 type TokkoPropertiesSummary = {
   upserted: number;
+  created?: number;
+  updated?: number;
   skippedExisting?: number;
+  skippedNew?: number;
   errors: string[];
 };
 
@@ -60,11 +87,14 @@ async function messageFromFunctionsError(error: { message: string; context?: unk
   return error.message;
 }
 
-/** Importa propiedades nuevas directamente desde Tokko Broker (sin tocar ni borrar las existentes). */
+/** Importa propiedades desde Tokko Broker: solo nuevas, solo actualizar existentes, o ambas. */
 export function PropertyImportDialog({ open, onOpenChange, onImportComplete }: Props) {
   const [step, setStep] = useState<SyncStep>("idle");
+  const [mode, setMode] = useState<ImportMode>("new_only");
   const [summary, setSummary] = useState<TokkoPropertiesSummary | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const selectedOption = MODE_OPTIONS.find((o) => o.value === mode) ?? MODE_OPTIONS[0];
 
   const handleImport = async () => {
     const client = getSupabaseClient();
@@ -77,7 +107,10 @@ export function PropertyImportDialog({ open, onOpenChange, onImportComplete }: P
     setErrorMessage(null);
 
     const { data, error } = await client.functions.invoke<TokkoSyncResponse>("tokko-sync", {
-      body: { resources: ["properties"], insertOnlyNew: true, dryRun: false },
+      // insertOnlyNew acompaña a propertiesMode a propósito: si la Edge Function desplegada
+      // fuera una versión vieja que ignora propertiesMode, caería al modo "solo nuevas"
+      // (seguro, sin sobrescribir ni borrar) en lugar del modo completo con borrado.
+      body: { resources: ["properties"], propertiesMode: mode, insertOnlyNew: true, dryRun: false },
     });
 
     if (error) {
@@ -99,14 +132,20 @@ export function PropertyImportDialog({ open, onOpenChange, onImportComplete }: P
     setSummary(propsSummary);
     setStep("done");
 
+    const createdCount = propsSummary.created ?? propsSummary.upserted;
+    const updatedCount = propsSummary.updated ?? 0;
     if (propsSummary.errors.length === 0) {
-      toast.success(
-        propsSummary.upserted > 0
-          ? `${propsSummary.upserted} propiedades nuevas importadas de Tokko`
-          : "No hay propiedades nuevas en Tokko"
-      );
+      if (createdCount === 0 && updatedCount === 0) {
+        toast.success("No hay cambios que importar de Tokko");
+      } else {
+        const parts = [
+          createdCount > 0 ? `${createdCount} nuevas` : null,
+          updatedCount > 0 ? `${updatedCount} actualizadas` : null,
+        ].filter(Boolean);
+        toast.success(`Importación de Tokko: ${parts.join(" · ")}`);
+      }
     } else {
-      toast.warning(`${propsSummary.upserted} importadas, ${propsSummary.errors.length} con errores`);
+      toast.warning(`${propsSummary.upserted} procesadas, ${propsSummary.errors.length} con errores`);
     }
 
     onImportComplete();
@@ -117,10 +156,18 @@ export function PropertyImportDialog({ open, onOpenChange, onImportComplete }: P
     // Deja el resultado visible un momento tras cerrar; se resetea la próxima vez que se abra vacío.
     setTimeout(() => {
       setStep("idle");
+      setMode("new_only");
       setSummary(null);
       setErrorMessage(null);
     }, 200);
   };
+
+  const primaryLabel =
+    mode === "new_only"
+      ? "Buscar propiedades nuevas"
+      : mode === "update_only"
+        ? "Actualizar existentes"
+        : "Importar y actualizar todo";
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -128,7 +175,7 @@ export function PropertyImportDialog({ open, onOpenChange, onImportComplete }: P
         <DialogHeader>
           <DialogTitle>Importar de Tokko Broker</DialogTitle>
           <DialogDescription>
-            {step === "idle" && "Trae las propiedades nuevas de tu cuenta de Tokko Broker al sitio."}
+            {step === "idle" && "Sincroniza las propiedades de tu cuenta de Tokko Broker con el sitio."}
             {step === "syncing" && "Sincronizando con Tokko Broker..."}
             {step === "done" && "Importación completada."}
             {step === "error" && "Ocurrió un error al importar."}
@@ -136,15 +183,51 @@ export function PropertyImportDialog({ open, onOpenChange, onImportComplete }: P
         </DialogHeader>
 
         {step === "idle" && (
-          <div className="flex flex-col items-center gap-4 rounded-lg border border-slate-200 bg-slate-50/50 p-6 text-center">
-            <div className="rounded-full bg-slate-200 p-3">
-              <Cloud className="h-6 w-6 text-slate-600" strokeWidth={1.5} />
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label
+                htmlFor="tokko-import-mode"
+                className="text-xs font-semibold uppercase tracking-widest text-slate-500"
+              >
+                Qué importar
+              </label>
+              <div className="relative">
+                <select
+                  id="tokko-import-mode"
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value as ImportMode)}
+                  className="w-full cursor-pointer appearance-none rounded-lg border border-slate-300 bg-white py-2.5 pl-3 pr-9 text-sm font-medium text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-0"
+                >
+                  {MODE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  strokeWidth={2}
+                />
+              </div>
             </div>
-            <p className="text-sm text-slate-600">
-              Se conectará a tu cuenta de <strong>Tokko Broker</strong> y traerá únicamente las
-              propiedades que aún no existen en el sitio. Las propiedades ya publicadas o editadas
-              manualmente no se modifican ni se eliminan.
-            </p>
+
+            <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50/50 p-4">
+              <div className="rounded-full bg-slate-200 p-2">
+                <Cloud className="h-4 w-4 text-slate-600" strokeWidth={1.5} />
+              </div>
+              <p className="text-sm text-slate-600">{selectedOption.description}</p>
+            </div>
+
+            {mode !== "new_only" && (
+              <div className="flex items-start gap-2 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2.5 text-xs text-yellow-900">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+                <p>
+                  Al actualizar, los datos de Tokko sobrescriben los del CRM (título incluido).
+                  Si corregiste algo solo en el CRM, primero refléjalo en Tokko para no perderlo.
+                  Nunca se eliminan propiedades.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -179,12 +262,26 @@ export function PropertyImportDialog({ open, onOpenChange, onImportComplete }: P
                       summary.errors.length > 0 ? "text-yellow-900" : "text-green-900"
                     }`}
                   >
-                    {summary.upserted} propiedad{summary.upserted === 1 ? "" : "es"} nueva
-                    {summary.upserted === 1 ? "" : "s"} importada{summary.upserted === 1 ? "" : "s"}
+                    {(() => {
+                      const created = summary.created ?? summary.upserted;
+                      const updated = summary.updated ?? 0;
+                      if (created === 0 && updated === 0) return "Sin cambios: todo estaba al día";
+                      const parts = [
+                        created > 0 ? `${created} nueva${created === 1 ? "" : "s"}` : null,
+                        updated > 0 ? `${updated} actualizada${updated === 1 ? "" : "s"}` : null,
+                      ].filter(Boolean);
+                      return `Propiedades: ${parts.join(" · ")}`;
+                    })()}
                   </p>
                   {typeof summary.skippedExisting === "number" && summary.skippedExisting > 0 && (
                     <p className="mt-1 text-sm text-slate-600">
-                      {summary.skippedExisting} ya existían en el sitio y no se modificaron.
+                      {summary.skippedExisting} ya existían y no se modificaron.
+                    </p>
+                  )}
+                  {typeof summary.skippedNew === "number" && summary.skippedNew > 0 && (
+                    <p className="mt-1 text-sm text-slate-600">
+                      {summary.skippedNew} son nuevas en Tokko y no se agregaron (elige otra opción
+                      para importarlas).
                     </p>
                   )}
                 </div>
@@ -221,8 +318,8 @@ export function PropertyImportDialog({ open, onOpenChange, onImportComplete }: P
               onClick={handleImport}
               className="bg-slate-900 text-white hover:bg-black"
             >
-              {step === "idle" && "Buscar propiedades nuevas"}
-              {step === "done" && "Buscar de nuevo"}
+              {step === "idle" && primaryLabel}
+              {step === "done" && "Ejecutar de nuevo"}
               {step === "error" && "Reintentar"}
             </Button>
           )}
