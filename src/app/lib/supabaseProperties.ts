@@ -372,26 +372,54 @@ const ADMIN_CATALOG_PROPERTY_COLUMNS_MEDIA =
 
 const ADMIN_CATALOG_PROPERTY_COLUMNS = `${ADMIN_CATALOG_PROPERTY_COLUMNS_CORE},${ADMIN_CATALOG_PROPERTY_COLUMNS_MEDIA}`;
 
-function isMissingColumnError(err: { message?: string; code?: string } | null): boolean {
+type WriteError = { message?: string; code?: string } | null;
+
+function isMissingColumnError(err: WriteError): boolean {
   if (!err) return false;
-  if (err.code === "42703") return true;
-  return /column .* does not exist/i.test(err.message ?? "");
+  // 42703 = Postgres undefined_column (lecturas). PGRST204 = PostgREST no encuentra la columna
+  // en su schema cache al escribir (p. ej. una migración sin aplicar en la BD).
+  if (err.code === "42703" || err.code === "PGRST204") return true;
+  const msg = err.message ?? "";
+  return /column .* does not exist/i.test(msg) || /find the '[^']+' column/i.test(msg);
 }
 
-const MEDIA_ROW_KEYS = [
-  "contact_phone",
-  "contact_whatsapp",
-  "video_url",
-  "video_storage_path",
-  "property_videos",
-  "tour_3d_url",
-  "property_tours_3d",
-] as const;
+/**
+ * Nombre de la columna que falta, extraído del error; null si el error no es de columna
+ * inexistente. Cubre tanto el 42703 de Postgres como el PGRST204 de PostgREST.
+ */
+export function missingColumnName(err: WriteError): string | null {
+  if (!err) return null;
+  const msg = err.message ?? "";
+  // PGRST204: "Could not find the 'rental_price' column of 'properties' in the schema cache"
+  const cacheMiss = msg.match(/find the '([^']+)' column/i);
+  if (cacheMiss) return cacheMiss[1];
+  // 42703: "column properties.rental_price does not exist"
+  if (err.code === "42703" || /column .* does not exist/i.test(msg)) {
+    const m = msg.match(/column\s+["']?(?:[a-z0-9_]+\.)?([a-z0-9_]+)["']?\s+does not exist/i);
+    if (m) return m[1];
+  }
+  return null;
+}
 
-function stripMediaFieldsFromRow(row: Record<string, unknown>): Record<string, unknown> {
-  const out = { ...row };
-  for (const k of MEDIA_ROW_KEYS) delete out[k];
-  return out;
+/**
+ * Ejecuta una escritura y, si la BD la rechaza por una columna inexistente (schema drift entre
+ * el código y la BD, p. ej. una migración pendiente como `rental_price`), quita esa columna de
+ * la fila y reintenta. Acotado para no ciclar. Los errores que no son de columna faltante se
+ * devuelven tal cual (no se enmascaran constraint violations, RLS, etc.).
+ */
+export async function writeWithMissingColumnFallback<R extends { error: WriteError }>(
+  row: Record<string, unknown>,
+  run: (row: Record<string, unknown>) => PromiseLike<R>,
+): Promise<R> {
+  const current = { ...row };
+  let res = await run(current);
+  for (let attempt = 0; attempt < 8 && res.error; attempt++) {
+    const missing = missingColumnName(res.error);
+    if (missing == null || !(missing in current)) break;
+    delete current[missing];
+    res = await run(current);
+  }
+  return res;
 }
 
 export type FetchCatalogPropertiesOpts = {
@@ -462,14 +490,9 @@ export async function insertProperty(client: SupabaseClient, p: Property, explic
     deleted_at: null,
     ...propertyToRow({ ...p, referenceCode }, { ts, tokkoId }),
   };
-  const ins = await client.from("properties").insert(row).select("id,tokko_id,reference_code");
-  if (ins.error && isMissingColumnError(ins.error)) {
-    return client
-      .from("properties")
-      .insert(stripMediaFieldsFromRow(row))
-      .select("id,tokko_id,reference_code");
-  }
-  return ins;
+  return writeWithMissingColumnFallback(row, (r) =>
+    client.from("properties").insert(r).select("id,tokko_id,reference_code"),
+  );
 }
 
 export async function updateProperty(client: SupabaseClient, p: Property) {
@@ -488,15 +511,9 @@ export async function updateProperty(client: SupabaseClient, p: Property) {
       ? ((existing as { payload: Record<string, unknown> }).payload ?? null)
       : null;
   const row = propertyToRow(p, { ts, tokkoId, existingPayload });
-  const upd = await client.from("properties").update(row).eq("id", p.id).select("id");
-  if (upd.error && isMissingColumnError(upd.error)) {
-    return client
-      .from("properties")
-      .update(stripMediaFieldsFromRow(row))
-      .eq("id", p.id)
-      .select("id");
-  }
-  return upd;
+  return writeWithMissingColumnFallback(row, (r) =>
+    client.from("properties").update(r).eq("id", p.id).select("id"),
+  );
 }
 
 export async function updatePropertyFeatured(client: SupabaseClient, id: string, featured: boolean) {

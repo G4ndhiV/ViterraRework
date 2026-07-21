@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import { RootLayout } from "./RootLayout";
 import { AdminLayout } from "./pages/admin/AdminLayout";
 import { RouteErrorFallback } from "./components/ErrorBoundary";
+import { ViterraPageLoader } from "./components/ViterraPageLoader";
 import { SitePreviewFramePage } from "./pages/admin/SitePreviewFramePage";
 
 const lazyPage = (loader: () => Promise<{ [key: string]: unknown }>, exportName: string) => async () => {
@@ -18,6 +19,9 @@ export const router = createBrowserRouter([
   {
     element: <RootLayout />,
     errorElement: <RouteErrorFallback />,
+    // Se muestra mientras el módulo `lazy` de la ruta inicial se carga en la primera
+    // hidratación; sin esto React Router avisa "No HydrateFallback element provided".
+    hydrateFallbackElement: <ViterraPageLoader />,
     children: [
       {
         path: "/",

@@ -3,6 +3,8 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
+  DialogTitle,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { cn } from "../ui/utils";
@@ -260,6 +262,13 @@ export function DevelopmentFormDialog({
           "!fixed !inset-0 !left-0 !top-0 z-50 flex !h-[100dvh] !max-h-[100dvh] !w-full !max-w-none !translate-x-0 !translate-y-0 flex-row gap-0 overflow-hidden rounded-none border-0 bg-stone-100 p-0 shadow-none",
         )}
       >
+        {/* Nombre y descripción accesibles del diálogo (Radix los exige en DialogContent). */}
+        <DialogTitle className="sr-only">
+          {mode === "create" ? "Nuevo desarrollo" : "Editar desarrollo"}
+        </DialogTitle>
+        <DialogDescription className="sr-only">
+          Formulario para {mode === "create" ? "crear" : "editar"} un desarrollo del catálogo.
+        </DialogDescription>
         {!draft ? (
           <div className="flex flex-1 items-center justify-center text-sm text-slate-500">Cargando…</div>
         ) : (

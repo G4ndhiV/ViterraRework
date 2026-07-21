@@ -3,6 +3,8 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
+  DialogTitle,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
@@ -226,6 +228,14 @@ export function PropertyFormDialog({
           "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
         )}
       >
+        {/* Nombre y descripción accesibles del diálogo (Radix los exige en DialogContent).
+            Van fuera del condicional para estar presentes también durante «Cargando…». */}
+        <DialogTitle className="sr-only">
+          {mode === "create" ? "Nueva propiedad" : "Editar propiedad"}
+        </DialogTitle>
+        <DialogDescription className="sr-only">
+          Formulario para {mode === "create" ? "crear" : "editar"} una propiedad del catálogo.
+        </DialogDescription>
         {!draft ? (
           <div className="flex flex-1 items-center justify-center text-sm text-slate-500">Cargando…</div>
         ) : (

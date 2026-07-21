@@ -66,6 +66,9 @@ export function RichDescriptionEditor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [2, 3] },
+        // StarterKit v3 ya trae Link; se desactiva aquí para usar la config propia de abajo
+        // (openOnClick, protocolos, clases) y evitar "Duplicate extension names: ['link']".
+        link: false,
       }),
       Placeholder.configure({ placeholder }),
       Link.configure({
