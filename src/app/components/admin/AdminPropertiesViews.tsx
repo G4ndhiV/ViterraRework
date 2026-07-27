@@ -12,7 +12,7 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
-import type { Property } from "../PropertyCard";
+import { propertyStatusLabel, type Property } from "../PropertyCard";
 
 const PropertyMap = lazy(() =>
   import("../PropertyMap").then((m) => ({ default: m.PropertyMap })),
@@ -89,7 +89,7 @@ export function AdminPropertiesViews({
                             />
                             <div className="absolute top-4 right-4">
                               <span className="bg-white/95 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-900 shadow-sm">
-                                {property.status}
+                                {propertyStatusLabel(property.status)}
                               </span>
                             </div>
                           </button>
@@ -120,7 +120,7 @@ export function AdminPropertiesViews({
                           />
                           <div className="absolute top-4 right-4">
                             <span className="bg-white/95 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-900 shadow-sm">
-                              {property.status}
+                              {propertyStatusLabel(property.status)}
                             </span>
                           </div>
                         </div>
@@ -307,7 +307,7 @@ export function AdminPropertiesViews({
                                   }`}
                                 style={{ fontWeight: 600 }}
                               >
-                                {property.status === "venta" ? "Venta" : "Renta"}
+                                {propertyStatusLabel(property.status)}
                               </span>
                             </td>
                             <td className="whitespace-nowrap px-4 py-3 text-right sm:px-6 sm:py-4">

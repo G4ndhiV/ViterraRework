@@ -30,7 +30,7 @@ import { cn } from "../components/ui/utils";
 import { FeatureSection } from "../components/FeatureSectionBlocks";
 import { WhatsAppGlyph } from "../components/WhatsAppGlyph";
 import { PropertyVideoPlayer } from "../components/PropertyVideoPlayer";
-import { propertyTours3dList, propertyVideosList, type Property } from "../components/PropertyCard";
+import { propertyTours3dList, propertyVideosList, propertyStatusLabel, type Property } from "../components/PropertyCard";
 import { propertyVideoDisplayTitle, resolveAllPropertyVideoUrls } from "../lib/propertyVideos";
 import {
   propertyTour3dDisplayTitle,
@@ -502,7 +502,7 @@ export function PropertyDetailPage() {
                     <ImageWithFallback
                       src={propertyImages[currentImageIndex] ?? property.image}
                       alt={displayTitle}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain"
                       loading="eager"
                       fetchPriority="high"
                       optimizeWidth={1400}
@@ -547,7 +547,7 @@ export function PropertyDetailPage() {
                     fontSize: "0.62rem", letterSpacing: "0.14em", fontWeight: 700,
                     color: T.gold, textTransform: "uppercase",
                   }}>
-                    {property.status === "venta" ? "En venta" : "En renta"}
+                    {propertyStatusLabel(property.status)}
                   </span>
                   <span style={{
                     padding: "4px 11px", borderRadius: 4,
@@ -1022,7 +1022,7 @@ export function PropertyDetailPage() {
                     </>
                   ) : null}
                   <div style={{ height: 1, background: T.border }} />
-                  <DetailRow label="Estado">{property.status === "venta" ? "En venta" : property.status === "venta_y_alquiler" ? "Venta y Renta" : "En renta"}</DetailRow>
+                  <DetailRow label="Estado">{propertyStatusLabel(property.status)}</DetailRow>
                   <div style={{ height: 1, background: T.border }} />
                   <DetailRow label="Actualizado">
                     <span className="inline-flex items-center gap-1.5">
