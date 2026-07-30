@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { Outlet, useLocation } from "react-router";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ScrollToTop } from "./components/ScrollToTop";
+import { trackPageView } from "./lib/googleAnalytics";
 
 /**
  * Sin Motion/AnimatePresence en el shell: en Safari el contenedor absoluto + animación
@@ -11,6 +13,10 @@ import { ScrollToTop } from "./components/ScrollToTop";
 export function RootLayout() {
   const location = useLocation();
   const pageKey = `${location.pathname}${location.search}`;
+
+  useEffect(() => {
+    trackPageView(`${location.pathname}${location.search}`);
+  }, [location.pathname, location.search]);
 
   return (
     <div className="relative isolate min-h-[100dvh] bg-brand-canvas">
