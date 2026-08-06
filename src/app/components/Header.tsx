@@ -16,6 +16,8 @@ const NAVY = { r: 20, g: 28, b: 46 } as const;
 
 /** Opacidad máxima del fondo navy: <1 deja traslucir el fondo bajo el header */
 const BG_ALPHA_MAX = 0.94;
+/** Opacidad mínima del fondo navy (arriba del todo, sin scroll): fondo oscuro en vez de transparente para que el logo destaque. */
+const BG_ALPHA_MIN = 0.55;
 /** Panel del menú hamburguesa (< lg): cristal arriba del todo; con scroll → mismo cuerpo que la barra. */
 const MOBILE_MENU_BG_ALPHA_TOP = 0.48;
 
@@ -197,7 +199,7 @@ export function Header() {
   const gMid = Math.min(0.88, lerp(0.38, 0.14, p) + heroVeilBoost * 0.9);
   const gBot = Math.min(0.78, lerp(0.2, 0.09, p) + heroVeilBoost * 0.72);
 
-  const bgAlpha = lerp(0, BG_ALPHA_MAX, p);
+  const bgAlpha = lerp(BG_ALPHA_MIN, BG_ALPHA_MAX, p);
   const blurPx = lerp(0, 18, p);
   const headerBgAlpha = bgAlpha;
   const shadowY = lerp(0, 14, p);

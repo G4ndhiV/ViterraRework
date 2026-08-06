@@ -38,10 +38,32 @@ function telHref(phoneLines: string) {
   return digits ? `tel:${digits}` : "#";
 }
 
+/** Formatea un teléfono MX de 10 dígitos como "(33) 3629-7122"; deja intacto cualquier otro formato. */
+function formatPhoneLine(line: string): string {
+  const digits = line.replace(/\D/g, "");
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return line;
+}
+
+function formatPhoneDisplay(phoneLines: string): string {
+  return phoneLines
+    .split("\n")
+    .map((line) => formatPhoneLine(line.trim()))
+    .join("\n");
+}
+
 function mailHref(emailLines: string) {
   const line = firstLine(emailLines);
   if (!line) return "#";
   return line.includes("@") ? `mailto:${line}` : "#";
+}
+
+function mapsHref(addressLines: string) {
+  const query = addressLines.replace(/\n+/g, ", ").trim();
+  if (!query) return "#";
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }
 
 function normalizeExternalHref(raw: string): string {
@@ -94,9 +116,13 @@ function FooterContactRow({
 
   const isPhone = icon === "phone";
   const isMail = icon === "mail";
+  const isMap = icon === "map";
   const inner = (
-    <span className="group-hover:text-white transition-colors whitespace-pre-line" style={{ fontWeight: 400 }}>
-      {display}
+    <span
+      className="group-hover:text-white transition-colors whitespace-pre-line leading-relaxed"
+      style={{ fontWeight: 400, letterSpacing: isPhone ? "0.03em" : undefined }}
+    >
+      {isPhone ? formatPhoneDisplay(display) : display}
     </span>
   );
 
@@ -113,6 +139,15 @@ function FooterContactRow({
           </a>
         ) : isMail ? (
           <a href={mailHref(body)} className="hover:text-white transition-colors">
+            {inner}
+          </a>
+        ) : isMap ? (
+          <a
+            href={mapsHref(body)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-white transition-colors"
+          >
             {inner}
           </a>
         ) : (
