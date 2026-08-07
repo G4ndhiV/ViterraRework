@@ -60,16 +60,18 @@ function instagramFeedDev(): Plugin {
             }
           }
 
-          try {
-            const url = new URL(req.url ?? "", "http://localhost");
-            const username = url.searchParams.get("username") ?? "viterrainmobiliaria";
-            if (!/^[a-zA-Z0-9._]{1,30}$/.test(username)) {
-              res.statusCode = 400;
-              res.end(JSON.stringify({ error: "Invalid username", posts: [] }));
-              return;
-            }
-            const count = Math.min(parseInt(url.searchParams.get("count") ?? "3", 10), 9);
+          const url = new URL(req.url ?? "", "http://localhost");
+          const username = url.searchParams.get("username") ?? "viterrainmobiliaria";
+          if (!/^[a-zA-Z0-9._]{1,30}$/.test(username)) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: "Invalid username", posts: [] }));
+            return;
+          }
+          const parsedCount = parseInt(url.searchParams.get("count") ?? "3", 10);
+          const count =
+            Number.isFinite(parsedCount) && parsedCount > 0 ? Math.min(parsedCount, 9) : 3;
 
+          try {
             const fresh = await fetchFreshInstagramPosts(username, count);
             if (fresh.length > 0) {
               memoryCache = { username, posts: fresh };
@@ -86,9 +88,9 @@ function instagramFeedDev(): Plugin {
             res.statusCode = 502;
             res.end(JSON.stringify({ error: "Instagram feed unavailable", posts: [] }));
           } catch {
-            if (memoryCache?.posts?.length) {
+            if (memoryCache && memoryCache.username === username && memoryCache.posts.length > 0) {
               res.setHeader("X-Feed-Stale", "1");
-              res.end(JSON.stringify({ posts: memoryCache.posts, stale: true }));
+              res.end(JSON.stringify({ posts: memoryCache.posts.slice(0, count), stale: true }));
               return;
             }
             res.statusCode = 500;

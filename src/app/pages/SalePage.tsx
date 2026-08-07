@@ -197,13 +197,10 @@ export function SalePage() {
       applyPinFilter(pinSelection, saleProperties);
       return;
     }
-    if (!usingPinSearch && !lastFiltersRef.current.query && !lastFiltersRef.current.type) {
-      const f = lastFiltersRef.current;
-      const hasExtra =
-        f.minPrice || f.maxPrice || f.minBedrooms || f.minBathrooms || f.minArea || f.maxArea;
-      if (!hasExtra) setFilteredProperties(saleProperties);
+    if (!usingPinSearch) {
+      setFilteredProperties(applyNonGeoFilters(lastFiltersRef.current, saleProperties));
     }
-  }, [saleProperties, usingPinSearch, pinSelection, applyPinFilter]);
+  }, [saleProperties, usingPinSearch, pinSelection, applyPinFilter, applyNonGeoFilters]);
 
   useEffect(() => {
     if (usingPinSearchRef.current) return;
@@ -478,7 +475,10 @@ export function SalePage() {
             </motion.div>
           )}
 
-          {!loading && displayedProperties.length === 0 && showPinPanel && (
+          {!loading &&
+            displayedProperties.length === 0 &&
+            showPinPanel &&
+            !usingPinSearch && (
             <p className="px-4 py-4 text-center font-heading text-base font-light not-italic text-brand-navy/65 sm:text-lg">
               No hay resultados en esta área — amplía el rango o mueve el pin
             </p>

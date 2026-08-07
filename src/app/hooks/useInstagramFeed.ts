@@ -164,13 +164,14 @@ export function useInstagramFeed(count = 3) {
   );
 
   useEffect(() => {
-    const ac = new AbortController();
+    let ac = new AbortController();
     void load(ac.signal);
 
     const onVisibility = () => {
-      if (document.visibilityState === "visible") {
-        void load();
-      }
+      if (document.visibilityState !== "visible") return;
+      ac.abort();
+      ac = new AbortController();
+      void load(ac.signal);
     };
     document.addEventListener("visibilitychange", onVisibility);
 

@@ -199,19 +199,16 @@ export function RentPage() {
     [rentProperties, applyPinFilter, dropTextQueryForPinSearch]
   );
 
-  // Catálogo carga/refresca: mantener resultados de pin o sincronizar listado base
+  // Catálogo carga/refresca: mantener pin o reaplicar filtros activos del SearchBar
   useEffect(() => {
     if (usingPinSearch && pinSelection) {
       applyPinFilter(pinSelection, rentProperties);
       return;
     }
-    if (!usingPinSearch && !lastFiltersRef.current.query && !lastFiltersRef.current.type) {
-      const f = lastFiltersRef.current;
-      const hasExtra =
-        f.minPrice || f.maxPrice || f.minBedrooms || f.minBathrooms || f.minArea || f.maxArea;
-      if (!hasExtra) setFilteredProperties(rentProperties);
+    if (!usingPinSearch) {
+      setFilteredProperties(applyNonGeoFilters(lastFiltersRef.current, rentProperties));
     }
-  }, [rentProperties, usingPinSearch, pinSelection, applyPinFilter]);
+  }, [rentProperties, usingPinSearch, pinSelection, applyPinFilter, applyNonGeoFilters]);
 
   useEffect(() => {
     // No pisar la búsqueda por pin si el catálogo hace cambiar la identidad de handleSearch
@@ -487,7 +484,10 @@ export function RentPage() {
             </motion.div>
           )}
 
-          {!loading && displayedProperties.length === 0 && showPinPanel && (
+          {!loading &&
+            displayedProperties.length === 0 &&
+            showPinPanel &&
+            !usingPinSearch && (
             <p className="px-4 py-4 text-center font-heading text-base font-light not-italic text-brand-navy/65 sm:text-lg">
               No hay resultados en esta área — amplía el rango o mueve el pin
             </p>

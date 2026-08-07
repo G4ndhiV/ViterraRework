@@ -114,7 +114,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
   const params = readQuery(req);
   const username = params.get("username") ?? "viterrainmobiliaria";
-  const count = Math.min(parseInt(params.get("count") ?? "3", 10), 9);
+  const parsedCount = parseInt(params.get("count") ?? "3", 10);
+  const count = Number.isFinite(parsedCount) && parsedCount > 0 ? Math.min(parsedCount, 9) : 3;
 
   if (!/^[a-zA-Z0-9._]{1,30}$/.test(username)) {
     sendJson(res, 400, { error: "Invalid username", posts: [] });
