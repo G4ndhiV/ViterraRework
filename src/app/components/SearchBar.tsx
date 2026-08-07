@@ -17,7 +17,7 @@ interface SearchBarProps {
   variant?: "default" | "premium" | "ambient";
   /** Si la URL no define `status`, se usa este valor (p. ej. alquiler en /renta). */
   defaultStatus?: "" | "alquiler" | "venta";
-  /** Enlace a dibujar zona en mapa (`/propiedades/mapa`). */
+  /** Enlace a marcar zona en mapa (`/propiedades/mapa`). */
   showMapZoneLink?: boolean;
   /** Oculta el selector de tipo (p. ej. listado de desarrollos). */
   hideTypeFilter?: boolean;
@@ -29,6 +29,11 @@ interface SearchBarProps {
   catalogPriceSlices?: { venta: number[]; alquiler: number[] };
   /** Tipos personalizados del catálogo (p. ej. «Otro») además de `tokko_property_types`. */
   extraPropertyTypes?: string[];
+  /**
+   * Al incrementar, limpia el campo de ubicación/palabra clave
+   * (p. ej. al pasar a búsqueda por pin en el mapa).
+   */
+  clearQueryNonce?: number;
 }
 
 export interface SearchFilters {
@@ -63,6 +68,7 @@ export function SearchBar({
   catalogPrices,
   catalogPriceSlices,
   extraPropertyTypes = [],
+  clearQueryNonce,
 }: SearchBarProps) {
   const { types: propertyTypeOptions, loading: propertyTypesLoading } =
     useTokkoPropertyTypes(extraPropertyTypes);
@@ -134,6 +140,11 @@ export function SearchBar({
     if (urlFilters.status === "alquiler") setPriceOp("alquiler");
     else if (urlFilters.status === "venta") setPriceOp("venta");
   }, [searchParams, defaultStatus, isCatalogOperationLocked]);
+
+  useEffect(() => {
+    if (clearQueryNonce == null || clearQueryNonce <= 0) return;
+    setFilters((f) => (f.query ? { ...f, query: "" } : f));
+  }, [clearQueryNonce]);
 
   useEffect(() => {
     const hasAdv =

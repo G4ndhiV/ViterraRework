@@ -3,7 +3,7 @@ import path from "path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import https from "node:https";
+import { fetchFreshInstagramPosts, type IgPost } from "./src/lib/instagramFeedFetch";
 
 function figmaAssetResolver() {
   return {
@@ -22,6 +22,7 @@ function instagramFeedDev(): Plugin {
   const rateBuckets = new Map<string, { count: number; resetAt: number }>();
   const RATE_MAX = 30;
   const RATE_WINDOW_MS = 60_000;
+  let memoryCache: { username: string; posts: IgPost[] } | null = null;
 
   return {
     name: "instagram-feed-dev",
@@ -37,6 +38,7 @@ function instagramFeedDev(): Plugin {
           res.setHeader("Access-Control-Allow-Origin", allowed ? (origin || "http://localhost:5173") : "http://localhost:5173");
           res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
           res.setHeader("Content-Type", "application/json");
+          res.setHeader("Cache-Control", "no-store");
 
           if (req.method === "OPTIONS") {
             res.statusCode = 200;
@@ -68,47 +70,27 @@ function instagramFeedDev(): Plugin {
             }
             const count = Math.min(parseInt(url.searchParams.get("count") ?? "3", 10), 9);
 
-            // Use https module instead of fetch — Node.js fetch adds Sec-Fetch-* headers that Instagram blocks
-            const rawBody = await new Promise<string>((resolve, reject) => {
-              const req = https.get(
-                `https://i.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`,
-                {
-                  headers: {
-                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
-                    "x-ig-app-id": "936619743392459",
-                    "Accept": "application/json",
-                    "Accept-Language": "es-MX,es;q=0.9",
-                    "Referer": "https://www.instagram.com/",
-                  },
-                },
-                (igRes) => {
-                  let body = "";
-                  igRes.on("data", (chunk: Buffer) => { body += chunk.toString(); });
-                  igRes.on("end", () => resolve(body));
-                }
-              );
-              req.on("error", reject);
-            });
+            const fresh = await fetchFreshInstagramPosts(username, count);
+            if (fresh.length > 0) {
+              memoryCache = { username, posts: fresh };
+              res.end(JSON.stringify({ posts: fresh.slice(0, count), stale: false }));
+              return;
+            }
 
-            const data = JSON.parse(rawBody) as {
-              data: { user: { edge_owner_to_timeline_media: { edges: { node: Record<string, unknown> }[] } } };
-            };
-            const edges = data?.data?.user?.edge_owner_to_timeline_media?.edges ?? [];
+            if (memoryCache && memoryCache.username === username && memoryCache.posts.length > 0) {
+              res.setHeader("X-Feed-Stale", "1");
+              res.end(JSON.stringify({ posts: memoryCache.posts.slice(0, count), stale: true }));
+              return;
+            }
 
-            const posts = edges.slice(0, count).map(({ node: n }) => {
-              const isVideo = n.__typename === "GraphVideo";
-              const captionEdges = (n.edge_media_to_caption as { edges: { node: { text: string } }[] } | undefined)?.edges ?? [];
-              return {
-                shortcode: n.shortcode,
-                type: isVideo ? "reel" : "p",
-                videoUrl: isVideo ? (n.video_url ?? null) : null,
-                thumbnail: n.thumbnail_src ?? n.display_url ?? null,
-                caption: (captionEdges[0]?.node?.text ?? "").slice(0, 140),
-              };
-            });
-
-            res.end(JSON.stringify({ posts }));
+            res.statusCode = 502;
+            res.end(JSON.stringify({ error: "Instagram feed unavailable", posts: [] }));
           } catch {
+            if (memoryCache?.posts?.length) {
+              res.setHeader("X-Feed-Stale", "1");
+              res.end(JSON.stringify({ posts: memoryCache.posts, stale: true }));
+              return;
+            }
             res.statusCode = 500;
             res.end(JSON.stringify({ error: "Instagram feed unavailable", posts: [] }));
           }

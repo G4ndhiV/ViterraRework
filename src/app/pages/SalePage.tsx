@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router";
 import { motion, useReducedMotion } from "motion/react";
 import { Header } from "../components/Header";
@@ -6,6 +6,10 @@ import { Footer } from "../components/Footer";
 import { SearchBar, SearchFilters } from "../components/SearchBar";
 import { PropertyCard, type Property } from "../components/PropertyCard";
 import { PropertyMap } from "../components/PropertyMap";
+import {
+  NearbyPinSearchPanel,
+  type NearbyPinSelection,
+} from "../components/NearbyPinSearchPanel";
 import { useCatalogProperties } from "../hooks/useCatalogProperties";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
@@ -17,6 +21,7 @@ import {
 } from "../lib/catalogPropertySort";
 import { applyAdvancedPropertyFilters } from "../lib/applyAdvancedPropertyFilters";
 import { propertyMatchesTypeFilter } from "../lib/propertyTypesCatalog";
+import { distanceMeters } from "../../lib/geoSearch";
 import { SlidersHorizontal, Map, LayoutGrid } from "lucide-react";
 import { Reveal } from "../components/Reveal";
 import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
@@ -55,10 +60,10 @@ export function SalePage() {
   const pl = usePreviewLayout();
   const { content } = useSiteContent();
   const hero = mergeSiteSection("sale", content.sale);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { properties, loading } = useCatalogProperties();
   const saleProperties = useMemo(
-    () => properties.filter((p) => p.status === "venta"),
+    () => properties.filter((p) => p.status === "venta" || p.status === "venta_y_alquiler"),
     [properties]
   );
   const catalogPrices = useMemo(() => saleProperties.map((p) => p.price), [saleProperties]);
@@ -69,44 +74,140 @@ export function SalePage() {
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
   const [sortBy, setSortBy] = useState<CatalogPropertySortKey>("newest");
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
+  const [nearbyHint, setNearbyHint] = useState<string | null>(null);
+  const [pinSelection, setPinSelection] = useState<NearbyPinSelection | null>(null);
+  const [usingPinSearch, setUsingPinSearch] = useState(false);
+  const [showPinPanel, setShowPinPanel] = useState(false);
+  const [clearQueryNonce, setClearQueryNonce] = useState(0);
+  const usingPinSearchRef = useRef(false);
+  /** Si true, el usuario está ajustando el pin: no colapsar el mapa al haber resultados. */
+  const keepPinPanelOpenRef = useRef(false);
+  const lastFiltersRef = useRef<SearchFilters>({
+    query: "",
+    type: "",
+    status: "venta",
+    minPrice: "",
+    maxPrice: "",
+    minBedrooms: "",
+    minBathrooms: "",
+    minArea: "",
+    maxArea: "",
+  });
 
   const displayedProperties = useMemo(
     () => sortCatalogProperties(filteredProperties, sortBy),
     [filteredProperties, sortBy]
   );
 
-  useEffect(() => {
-    setFilteredProperties(saleProperties);
-  }, [saleProperties]);
+  const applyNonGeoFilters = useCallback(
+    (filters: SearchFilters, pool: Property[], opts?: { skipQuery?: boolean }) => {
+      let filtered = [...pool];
+      if (!opts?.skipQuery && filters.query) {
+        const q = filters.query.toLowerCase();
+        filtered = filtered.filter(
+          (property) =>
+            property.title.toLowerCase().includes(q) || property.location.toLowerCase().includes(q)
+        );
+      }
+      if (filters.type) {
+        filtered = filtered.filter((property) => propertyMatchesTypeFilter(property.type, filters.type));
+      }
+      if (filters.minPrice) {
+        filtered = filtered.filter((property) => property.price >= Number(filters.minPrice));
+      }
+      if (filters.maxPrice) {
+        filtered = filtered.filter((property) => property.price <= Number(filters.maxPrice));
+      }
+      return applyAdvancedPropertyFilters(filtered, filters);
+    },
+    []
+  );
 
-  const handleSearch = useCallback((filters: SearchFilters) => {
-    let filtered = [...saleProperties];
+  const applyPinFilter = useCallback(
+    (sel: NearbyPinSelection, pool: Property[]) => {
+      const nonTextPool = applyNonGeoFilters(lastFiltersRef.current, pool, { skipQuery: true });
+      const radiusM = sel.km * 1000;
+      const inRadius = nonTextPool.filter(
+        (p) => p.coordinates && distanceMeters(sel, p.coordinates) <= radiusM
+      );
+      setFilteredProperties(inRadius);
+      if (inRadius.length > 0) {
+        setNearbyHint(
+          `${inRadius.length} ${inRadius.length === 1 ? "propiedad" : "propiedades"} en ${sel.km} km alrededor del pin`
+        );
+        if (!keepPinPanelOpenRef.current) {
+          setShowPinPanel(false);
+          window.setTimeout(() => {
+            document.getElementById("venta-catalogo")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }, 60);
+        }
+      } else {
+        setNearbyHint(null);
+        setShowPinPanel(true);
+      }
+    },
+    [applyNonGeoFilters]
+  );
 
-    if (filters.query) {
-      filtered = filtered.filter(
-        (property) =>
-          property.title.toLowerCase().includes(filters.query.toLowerCase()) ||
-          property.location.toLowerCase().includes(filters.query.toLowerCase())
+  const dropTextQueryForPinSearch = useCallback(() => {
+    if (lastFiltersRef.current.query) {
+      lastFiltersRef.current = { ...lastFiltersRef.current, query: "" };
+    }
+    setClearQueryNonce((n) => n + 1);
+    if (searchParams.get("query")) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("query");
+          return next;
+        },
+        { replace: true }
       );
     }
+  }, [searchParams, setSearchParams]);
 
-    if (filters.type) {
-      filtered = filtered.filter((property) => propertyMatchesTypeFilter(property.type, filters.type));
-    }
+  const handleSearch = useCallback(
+    (filters: SearchFilters) => {
+      lastFiltersRef.current = filters;
+      usingPinSearchRef.current = false;
+      keepPinPanelOpenRef.current = false;
+      setNearbyHint(null);
+      setUsingPinSearch(false);
+      setShowPinPanel(false);
+      setPinSelection(null);
+      setFilteredProperties(applyNonGeoFilters(filters, saleProperties));
+    },
+    [saleProperties, applyNonGeoFilters]
+  );
 
-    if (filters.minPrice) {
-      filtered = filtered.filter((property) => property.price >= Number(filters.minPrice));
-    }
-    if (filters.maxPrice) {
-      filtered = filtered.filter((property) => property.price <= Number(filters.maxPrice));
-    }
-
-    filtered = applyAdvancedPropertyFilters(filtered, filters);
-
-    setFilteredProperties(filtered);
-  }, [saleProperties]);
+  const handlePinChange = useCallback(
+    (sel: NearbyPinSelection) => {
+      usingPinSearchRef.current = true;
+      dropTextQueryForPinSearch();
+      setPinSelection(sel);
+      setUsingPinSearch(true);
+      setShowPinPanel(true);
+      applyPinFilter(sel, saleProperties);
+    },
+    [saleProperties, applyPinFilter, dropTextQueryForPinSearch]
+  );
 
   useEffect(() => {
+    if (usingPinSearch && pinSelection) {
+      applyPinFilter(pinSelection, saleProperties);
+      return;
+    }
+    if (!usingPinSearch && !lastFiltersRef.current.query && !lastFiltersRef.current.type) {
+      const f = lastFiltersRef.current;
+      const hasExtra =
+        f.minPrice || f.maxPrice || f.minBedrooms || f.minBathrooms || f.minArea || f.maxArea;
+      if (!hasExtra) setFilteredProperties(saleProperties);
+    }
+  }, [saleProperties, usingPinSearch, pinSelection, applyPinFilter]);
+
+  useEffect(() => {
+    if (usingPinSearchRef.current) return;
+
     const filters: SearchFilters = {
       query: searchParams.get("query") || "",
       type: searchParams.get("type") || "",
@@ -220,6 +321,7 @@ export function SalePage() {
                 defaultStatus="venta"
                 catalogPrices={catalogPrices}
                 extraPropertyTypes={catalogPropertyTypes}
+                clearQueryNonce={clearQueryNonce}
               />
             </motion.div>
           </Reveal>
@@ -307,6 +409,33 @@ export function SalePage() {
             </div>
           </Reveal>
 
+          {!loading && showPinPanel && (
+            <div className="relative z-0 mb-8 isolate">
+              <NearbyPinSearchPanel value={pinSelection} onChange={handlePinChange} />
+              {usingPinSearch && pinSelection && displayedProperties.length === 0 && (
+                <p className="mx-auto mt-4 max-w-4xl text-center text-[13px] text-primary">
+                  Sin propiedades en {pinSelection.km} km. Amplía el rango o mueve el pin.
+                </p>
+              )}
+            </div>
+          )}
+
+          {!loading && usingPinSearch && !showPinPanel && nearbyHint && (
+            <div className="mb-6 flex flex-col items-stretch gap-2 border border-brand-navy/10 bg-brand-canvas px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+              <p className="text-sm text-brand-navy/70">{nearbyHint}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  keepPinPanelOpenRef.current = true;
+                  setShowPinPanel(true);
+                }}
+                className="shrink-0 self-start text-[12px] font-semibold uppercase tracking-[0.08em] text-brand-navy underline-offset-2 hover:underline sm:self-auto"
+              >
+                Ajustar pin y rango
+              </button>
+            </div>
+          )}
+
           {loading ? (
             <PropertyGridSkeleton />
           ) : viewMode === "grid" ? (
@@ -323,17 +452,36 @@ export function SalePage() {
             </Reveal>
           )}
 
-          {!loading && displayedProperties.length === 0 && (
+          {!loading && displayedProperties.length === 0 && !showPinPanel && !usingPinSearch && (
             <motion.div
-              className="py-20 text-center"
+              className="px-4 py-10 text-center"
               initial={reduceMotion ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
             >
               <p className="font-heading text-lg font-light not-italic text-brand-navy/65">
-                No se encontraron propiedades que coincidan con tu búsqueda
+                No encontramos propiedades con tus filtros
               </p>
+              <p className="mx-auto mt-3 max-w-md text-[14px] text-slate-500">
+                ¿Quieres buscar en el mapa colocando un pin y un rango?
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  keepPinPanelOpenRef.current = false;
+                  setShowPinPanel(true);
+                }}
+                className="font-heading mt-6 w-full rounded-none bg-brand-navy px-5 py-2.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-white sm:w-auto"
+              >
+                Sí, buscar en el mapa
+              </button>
             </motion.div>
+          )}
+
+          {!loading && displayedProperties.length === 0 && showPinPanel && (
+            <p className="px-4 py-4 text-center font-heading text-base font-light not-italic text-brand-navy/65 sm:text-lg">
+              No hay resultados en esta área — amplía el rango o mueve el pin
+            </p>
           )}
         </div>
       </section>

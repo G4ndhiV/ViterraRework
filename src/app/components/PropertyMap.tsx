@@ -123,7 +123,13 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
               <a href="/propiedades/${escapeHtml(property.id)}" style="text-decoration:none;color:#141c2e;">
                 <p style="margin:0 0 6px 0;font-size:15px;font-weight:600;line-height:1.3;">${escapeHtml(property.title)}</p>
                 <p style="margin:0 0 6px 0;font-size:12px;color:#64748b;">${escapeHtml(property.location)}</p>
-                <p style="margin:0;font-size:14px;font-weight:700;">$${escapeHtml(property.price.toLocaleString())}</p>
+                <p style="margin:0;font-size:14px;font-weight:700;">$${escapeHtml(property.price.toLocaleString())}${
+                  property.status === "alquiler"
+                    ? ' <span style="font-weight:500;color:#64748b;">/ mes</span>'
+                    : property.status === "venta_y_alquiler"
+                      ? ` <span style="font-weight:500;color:#64748b;">venta</span><br/><span style="font-size:13px;font-weight:600;">$${escapeHtml((property.rentalPrice ?? property.price).toLocaleString())} / mes</span>`
+                      : ""
+                }</p>
               </a>
             </div>
           `,

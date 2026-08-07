@@ -31,6 +31,28 @@ export function propertyStatusLabel(status: PropertyStatus): string {
   return "En renta";
 }
 
+/** Incluye duales (`venta_y_alquiler`) en listados de venta o renta. */
+export function propertyMatchesOperation(
+  status: PropertyStatus,
+  operation: "venta" | "alquiler" | "" | string
+): boolean {
+  if (!operation) return true;
+  if (operation === "venta") return status === "venta" || status === "venta_y_alquiler";
+  if (operation === "alquiler") return status === "alquiler" || status === "venta_y_alquiler";
+  return status === operation;
+}
+
+/** Precio relevante según operación del listado (dual: venta→price, renta→rentalPrice). */
+export function propertyPriceForOperation(
+  property: { status: PropertyStatus; price: number; rentalPrice?: number },
+  operation: "venta" | "alquiler" | "" | string
+): number {
+  if (operation === "alquiler" || property.status === "alquiler") {
+    return property.rentalPrice ?? property.price;
+  }
+  return property.price;
+}
+
 export interface Property {
   id: string;
   title: string;
@@ -323,10 +345,20 @@ export function PropertyCard({
               "flex gap-4 border-t pt-5",
               ed
                 ? "mt-auto flex-col items-stretch border-brand-navy/[0.06]"
-                : "items-center justify-between border-slate-200"
+                : "flex-col items-stretch gap-3 border-slate-200 sm:flex-row sm:items-center sm:justify-between"
             )}
           >
             <div className={ed ? "min-w-0 space-y-0.5" : undefined}>
+              {property.status === "venta_y_alquiler" && (
+                <p
+                  className={cn(
+                    "mb-1 text-[11px] font-medium uppercase tracking-[0.08em]",
+                    ed ? "text-brand-navy/50" : "text-slate-500"
+                  )}
+                >
+                  Se puede comprar o rentar
+                </p>
+              )}
               {(property.status === "venta" || property.status === "venta_y_alquiler") && (
                 <p
                   className={cn(
@@ -338,6 +370,11 @@ export function PropertyCard({
                   style={!ed ? { fontWeight: 700 } : undefined}
                 >
                   ${property.price.toLocaleString()}
+                  {property.status === "venta_y_alquiler" && (
+                    <span className={cn("ml-1.5 text-xs font-medium not-italic", ed ? "font-heading text-brand-navy/45" : "text-slate-500")}>
+                      venta
+                    </span>
+                  )}
                 </p>
               )}
               {(property.status === "alquiler" || property.status === "venta_y_alquiler") && (

@@ -211,7 +211,7 @@ export function HomePage() {
   const pl = usePreviewLayout();
   const reduceMotion = useReducedMotion();
   const { content, loading } = useSiteContent();
-  const { posts: igPosts } = useInstagramFeed(3);
+  const { posts: igPosts, loading: igLoading, error: igError, profileUrl: igProfileUrl } = useInstagramFeed(3);
   const h = content.home;
   const experienceMediaOnRight = h.experienceMediaPosition === "right";
   const {
@@ -682,17 +682,41 @@ export function HomePage() {
           </Reveal>
 
           {/* Tarjetas de redes — carga lazy según scroll */}
-          <div className={cn("mx-auto grid max-w-5xl gap-6", pl.gridCols("grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"))}>
-            {igPosts.map((post) => (
-              <Reveal key={post.shortcode} y={20} delay={0.04}>
-                <LazyInstagramCard post={post} />
-              </Reveal>
-            ))}
-          </div>
+          {igLoading && igPosts.length === 0 ? (
+            <div className={cn("mx-auto grid max-w-5xl gap-6", pl.gridCols("grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"))}>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={`ig-skel-${i}`} className="aspect-square animate-pulse bg-brand-navy/10" aria-hidden />
+              ))}
+            </div>
+          ) : igPosts.length > 0 ? (
+            <div className={cn("mx-auto grid max-w-5xl gap-6", pl.gridCols("grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"))}>
+              {igPosts.map((post) => (
+                <Reveal key={post.shortcode} y={20} delay={0.04}>
+                  <LazyInstagramCard post={post} />
+                </Reveal>
+              ))}
+            </div>
+          ) : (
+            <Reveal className="mx-auto max-w-lg text-center" y={16}>
+              <p className="text-[15px] font-light text-brand-navy/70">
+                No pudimos cargar las 3 publicaciones ahora. Reintenta en unos segundos o ábrelo en Instagram.
+              </p>
+              <a
+                href={igProfileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-5 inline-flex items-center gap-2 border border-brand-navy/15 bg-white px-5 py-2.5 text-[13px] uppercase tracking-[0.14em] text-brand-navy transition-colors hover:border-primary/40"
+                style={{ fontWeight: 500 }}
+              >
+                Ver en Instagram
+                <ArrowRight className="h-4 w-4" />
+              </a>
+            </Reveal>
+          )}
 
           <Reveal className="mt-12 flex justify-center" y={16} delay={0.08}>
             <a
-              href="https://www.instagram.com/viterrainmobiliaria/"
+              href={igProfileUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2.5 rounded-full border border-brand-navy/15 bg-white px-6 py-3 text-[13px] uppercase tracking-[0.14em] text-brand-navy shadow-sm transition-all hover:border-primary/40 hover:shadow-md"

@@ -247,7 +247,7 @@ export function Header() {
   const navLinkActiveClassCenter = `${navLinkActiveBase} decoration-white`;
   return (
     <header
-      className={`left-0 right-0 z-50 w-full overflow-visible text-white pt-[env(safe-area-inset-top,0px)] ${
+      className={`left-0 right-0 z-[1100] w-full overflow-visible text-white pt-[env(safe-area-inset-top,0px)] ${
         useOverlayHeader ? "fixed top-0" : "sticky top-0"
       }`}
       style={{
