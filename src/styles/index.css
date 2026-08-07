@@ -10,3 +10,9 @@
 *::after {
   border-radius: 0 !important;
 }
+
+/* Contención de mapas Leaflet embebidos (evita que panes/tiles tapen el header) */
+.leaflet-container {
+  max-width: 100%;
+  background: #f1f5f9;
+}
