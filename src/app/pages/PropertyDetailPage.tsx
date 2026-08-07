@@ -158,7 +158,7 @@ export function PropertyDetailPage() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [activeTab, setActiveTab]   = useState("descripcion");
-  const [mapViewMode, setMapViewMode] = useState<"map" | "satellite">("map");
+  const [mapViewMode, setMapViewMode] = useState<"map" | "satellite">("satellite");
   const reduceMotion = useReducedMotion();
   const mapRef         = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);

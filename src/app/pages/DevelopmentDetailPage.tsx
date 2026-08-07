@@ -130,7 +130,7 @@ export function DevelopmentDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
-  const [mapViewMode, setMapViewMode] = useState<"map" | "satellite">("map");
+  const [mapViewMode, setMapViewMode] = useState<"map" | "satellite">("satellite");
   const mapRef         = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const reduceMotion   = useReducedMotion();
