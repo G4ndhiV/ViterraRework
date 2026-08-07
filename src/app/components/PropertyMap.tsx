@@ -18,7 +18,7 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
   const markersLayerRef = useRef<any>(null);
   const streetLayerRef = useRef<any>(null);
   const satelliteLayerRef = useRef<any>(null);
-  const [mapMode, setMapMode] = useState<MapMode>("map");
+  const [mapMode, setMapMode] = useState<MapMode>("satellite");
   const [mapReady, setMapReady] = useState(false);
 
   const propertiesWithCoordinates = properties.filter((p) => p.coordinates);
@@ -53,7 +53,7 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
         );
         markersLayerRef.current = (L as any).layerGroup().addTo(map);
 
-        streetLayerRef.current.addTo(map);
+        (mapMode === "satellite" ? satelliteLayerRef.current : streetLayerRef.current).addTo(map);
         setMapReady(true);
       } catch (error) {
         console.error("Error initializing property map:", error);

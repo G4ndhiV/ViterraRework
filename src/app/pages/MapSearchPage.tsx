@@ -517,7 +517,7 @@ export function MapSearchPage() {
           maxZoom: 20,
         }
       );
-      streetLayer.addTo(map);
+      satelliteLayer.addTo(map);
       L.control.layers(
         {
           Mapa: streetLayer,
