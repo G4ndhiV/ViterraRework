@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Layers, MapPin } from "lucide-react";
 import type { Property } from "./PropertyCard";
 import { escapeHtml } from "../lib/escapeHtml";
+import { getViterraStreetTileLayer } from "../lib/mapTileConfig";
 
 interface PropertyMapProps {
   properties: Property[];
@@ -41,12 +42,7 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
         const map = (L as any).map(mapRef.current, { zoomControl: true }).setView(center, 12);
         mapInstanceRef.current = map;
 
-        streetLayerRef.current = (L as any).tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-          attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-          subdomains: "abcd",
-          maxZoom: 20,
-        });
+        streetLayerRef.current = getViterraStreetTileLayer(L);
         satelliteLayerRef.current = (L as any).tileLayer(
           "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
           {

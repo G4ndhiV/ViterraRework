@@ -2,11 +2,15 @@ import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
-import { PropertyCard } from "../components/PropertyCard";
+import { PropertyCard, propertyMatchesOperation } from "../components/PropertyCard";
 import { SearchBar, SearchFilters } from "../components/SearchBar";
+import { PropertyMap } from "../components/PropertyMap";
 import { useFeaturedHomeProperties } from "../hooks/useFeaturedHomeProperties";
+import { useCatalogProperties } from "../hooks/useCatalogProperties";
 import { useCatalogPriceSlices } from "../hooks/useCatalogPriceSlices";
-import { ArrowRight, ChevronLeft, ChevronRight, Bed, Bath, Square } from "lucide-react";
+import { applyAdvancedPropertyFilters } from "../lib/applyAdvancedPropertyFilters";
+import { propertyMatchesTypeFilter } from "../lib/propertyTypesCatalog";
+import { ArrowRight, ChevronLeft, ChevronRight, Bed, Bath, Square, MapPin } from "lucide-react";
 import { motion, useReducedMotion, AnimatePresence } from "motion/react";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
@@ -220,7 +224,66 @@ export function HomePage() {
     error: featuredError,
     reload: reloadFeatured,
   } = useFeaturedHomeProperties();
+  const { properties: catalogProperties, loading: catalogLoading } = useCatalogProperties();
   const catalogPriceSlices = useCatalogPriceSlices();
+
+  const [activeFilters, setActiveFilters] = useState<SearchFilters>({
+    query: "",
+    type: "",
+    status: "",
+    minPrice: "",
+    maxPrice: "",
+    minBedrooms: "",
+    minBathrooms: "",
+    minArea: "",
+    maxArea: "",
+  });
+
+  const filteredHomeMapProperties = useMemo(() => {
+    if (!catalogProperties || catalogProperties.length === 0) return [];
+    let list = catalogProperties;
+
+    // 1. Estado de operación (venta / alquiler)
+    if (activeFilters.status) {
+      const st = activeFilters.status === "alquiler" ? "alquiler" : activeFilters.status === "venta" ? "venta" : activeFilters.status;
+      list = list.filter((p) => propertyMatchesOperation(p.status, st));
+    }
+
+    // 2. Búsqueda por texto (título, ubicación, colonia, tipo)
+    if (activeFilters.query.trim()) {
+      const q = activeFilters.query.toLowerCase().trim();
+      list = list.filter(
+        (p) =>
+          p.title.toLowerCase().includes(q) ||
+          p.location.toLowerCase().includes(q) ||
+          (p.publicationTitle && p.publicationTitle.toLowerCase().includes(q)) ||
+          (p.colony && p.colony.toLowerCase().includes(q)) ||
+          (p.type && p.type.toLowerCase().includes(q))
+      );
+    }
+
+    // 3. Tipo de propiedad
+    if (activeFilters.type) {
+      list = list.filter((p) => propertyMatchesTypeFilter(p.type, activeFilters.type));
+    }
+
+    // 4. Precios mínimo / máximo
+    if (activeFilters.minPrice) {
+      const min = Number(activeFilters.minPrice);
+      if (Number.isFinite(min) && min > 0) {
+        list = list.filter((p) => p.price >= min || (p.rentalPrice && p.rentalPrice >= min));
+      }
+    }
+    if (activeFilters.maxPrice) {
+      const max = Number(activeFilters.maxPrice);
+      if (Number.isFinite(max) && max > 0) {
+        list = list.filter((p) => p.price <= max || (p.rentalPrice && p.rentalPrice <= max));
+      }
+    }
+
+    // 5. Filtros avanzados (recámaras, baños, m²)
+    return applyAdvancedPropertyFilters(list, activeFilters);
+  }, [catalogProperties, activeFilters]);
   const carouselRef = useRef<HTMLDivElement>(null);
   const scrollCarousel = (direction: 'left' | 'right') => {
     if (carouselRef.current) {
@@ -409,22 +472,15 @@ export function HomePage() {
         </AnimatePresence>
       </PreviewSectionChrome>
 
-      {/* Búsqueda — mismo lenguaje visual que el hero: imagen + velo para legibilidad */}
-      <PreviewSectionChrome blockId="home-search" label="Búsqueda">
+      {/* Búsqueda y Mapa Integrados en una sola vista */}
+      <PreviewSectionChrome blockId="home-search" label="Búsqueda y Mapa">
       <section
         id="busqueda"
         className={cn(
           "relative flex flex-col overflow-hidden border-b border-brand-navy/20",
           "min-h-0 scroll-mt-[var(--viterra-sticky-header-offset)]",
-          pl.preview
-            ? "h-auto max-h-none justify-center py-10 sm:py-12"
-            : cn(
-                "justify-start py-8 sm:py-10 md:py-12",
-                "max-lg:h-auto max-lg:max-h-none",
-                "lg:h-[calc(100dvh-var(--viterra-sticky-header-offset))]",
-                "lg:max-h-[calc(100dvh-var(--viterra-sticky-header-offset))]",
-                "lg:justify-center"
-              )
+          "py-8 sm:py-10 md:py-12",
+          "lg:min-h-[calc(100vh-var(--viterra-sticky-header-offset))] lg:justify-center"
         )}
       >
         <div className="absolute inset-0 z-0 overflow-hidden">
@@ -435,11 +491,10 @@ export function HomePage() {
               className="w-full h-full object-cover scale-105"
               loading="lazy"
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/88 via-black/55 to-black/80" />
+            <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/90 via-black/60 to-black/85" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20 pointer-events-none" />
           </PreviewFieldPulse>
         </div>
-        {/* Velo radial: oscurece el centro (donde están filtros y texto) sin “tapar” todo el encuadre */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_135%_92%_at_50%_58%,rgb(0_0_0/0.78)_0%,rgb(0_0_0/0.42)_48%,rgb(0_0_0/0.14)_72%,transparent_100%)]"
@@ -447,46 +502,71 @@ export function HomePage() {
 
         <div
           className={cn(
-            "relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-col overflow-x-visible px-4 sm:px-6 lg:px-8",
+            "relative z-10 mx-auto flex min-h-0 w-full max-w-6xl flex-col overflow-x-visible px-4 sm:px-6 lg:px-8",
             pl.preview
               ? "flex-none py-1"
               : "max-lg:flex-none max-lg:py-0 lg:flex-1 lg:justify-center lg:py-1"
           )}
         >
-          <Reveal className={cn("mb-3 shrink-0", pl.preview ? "mb-8 sm:mb-10" : "md:mb-4")} y={28}>
+          {/* Título de la Sección */}
+          <Reveal className="mb-3 shrink-0 text-center" y={28}>
             <div>
-              <SectionKicker tone="light">
-                <PreviewFieldPulse blockId="home-search" fieldKey="home-search-kicker" layout="inline" className="inline-block">
-                  {h.searchKicker}
-                </PreviewFieldPulse>
-              </SectionKicker>
-              <h2 className="font-heading font-light mt-4 text-center text-2xl leading-tight tracking-tight text-white [text-shadow:0_2px_28px_rgb(0_0_0/0.55),0_1px_2px_rgb(0_0_0/0.4)] sm:text-3xl md:text-4xl lg:text-[2.2rem]">
+              <h2 className="font-heading font-light mt-1 text-center text-2xl leading-tight tracking-tight text-white sm:text-3xl lg:text-[2.1rem]">
                 <PreviewFieldPulse blockId="home-search" fieldKey="home-search-title" layout="inline" className="inline-block">
                   {h.searchTitle}
                 </PreviewFieldPulse>
               </h2>
-              <p className="font-heading mx-auto mt-2 max-w-xl text-center text-sm font-light not-italic leading-relaxed text-white/90 [text-shadow:0_1px_18px_rgb(0_0_0/0.5)] md:text-base">
+              <p className="font-heading mx-auto mt-1.5 max-w-xl text-center text-xs sm:text-sm font-light leading-relaxed text-white/88">
                 <PreviewFieldPulse blockId="home-search" fieldKey="home-search-subtitle" className="block">
                   {h.searchSubtitle}
                 </PreviewFieldPulse>
               </p>
             </div>
           </Reveal>
-          <Reveal delay={0.06} y={16} className={pl.preview ? "mt-4 sm:mt-6" : "mt-2 max-lg:mt-4"}>
+
+          {/* Barra de Filtros */}
+          <Reveal delay={0.04} y={16} className="mt-1 sm:mt-2">
             <motion.div
               initial={reduceMotion ? false : { opacity: 0.92, y: 8 }}
               whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.35 }}
               transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-              className="mx-auto w-full max-w-xl sm:max-w-2xl lg:max-w-4xl"
+              className="mx-auto w-full max-w-xl sm:max-w-2xl lg:max-w-5xl"
             >
               <SearchBar
                 onSearch={handleSearch}
+                onFilterChange={setActiveFilters}
                 variant="ambient"
                 catalogPriceSlices={catalogPriceSlices}
                 className="max-lg:rounded-2xl max-lg:border max-lg:border-white/10 max-lg:bg-black/35 max-lg:p-4 max-lg:backdrop-blur-md sm:max-lg:p-5"
               />
             </motion.div>
+          </Reveal>
+
+          {/* Mapa Interactivo Integrado en la misma vista */}
+          <Reveal delay={0.08} y={16} className="mt-4 sm:mt-5 mx-auto w-full max-w-xl sm:max-w-2xl lg:max-w-5xl">
+            <div className="relative overflow-hidden rounded-2xl border border-white/20 bg-slate-900/90 shadow-2xl backdrop-blur-md">
+              {/* Badge Contador Flotante sobre el Mapa (Esquina Inferior Izquierda) */}
+              <div className="absolute bottom-3 left-3 z-[450] flex items-center gap-2 rounded-full border border-white/25 bg-black/75 px-3.5 py-1.5 backdrop-blur-md text-[11px] font-medium text-white shadow-lg pointer-events-none">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>
+                  {catalogLoading
+                    ? "Cargando mapa..."
+                    : `${filteredHomeMapProperties.length} ${filteredHomeMapProperties.length === 1 ? "propiedad" : "propiedades"}`}
+                </span>
+              </div>
+
+              {catalogLoading ? (
+                <div className="flex h-[320px] sm:h-[360px] lg:h-[400px] items-center justify-center bg-slate-900 text-white/70 text-sm font-light">
+                  Cargando mapa y ubicaciones del catálogo...
+                </div>
+              ) : (
+                <PropertyMap
+                  properties={filteredHomeMapProperties}
+                  mapHeightClassName="h-[320px] sm:h-[360px] lg:h-[400px]"
+                />
+              )}
+            </div>
           </Reveal>
         </div>
       </section>
@@ -564,7 +644,7 @@ export function HomePage() {
                     <button
                       type="button"
                       onClick={() => scrollCarousel('left')}
-                      className="absolute left-4 md:left-8 top-[40%] -translate-y-1/2 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white opacity-0 transition-all duration-300 hover:bg-white hover:text-brand-navy group-hover/carousel:opacity-100 hidden sm:flex"
+                      className="absolute left-4 md:left-8 top-[32%] -translate-y-1/2 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-white/90 shadow-lg border border-slate-200/80 text-brand-navy opacity-0 transition-all duration-300 hover:bg-primary hover:text-white hover:border-primary group-hover/carousel:opacity-100 hidden sm:flex"
                       aria-label="Desplazar a la izquierda"
                     >
                       <ChevronLeft className="h-6 w-6" />
@@ -572,7 +652,7 @@ export function HomePage() {
                     <button
                       type="button"
                       onClick={() => scrollCarousel('right')}
-                      className="absolute right-4 md:right-8 top-[40%] -translate-y-1/2 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white opacity-0 transition-all duration-300 hover:bg-white hover:text-brand-navy group-hover/carousel:opacity-100 hidden sm:flex"
+                      className="absolute right-4 md:right-8 top-[32%] -translate-y-1/2 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-white/90 shadow-lg border border-slate-200/80 text-brand-navy opacity-0 transition-all duration-300 hover:bg-primary hover:text-white hover:border-primary group-hover/carousel:opacity-100 hidden sm:flex"
                       aria-label="Desplazar a la derecha"
                     >
                       <ChevronRight className="h-6 w-6" />
@@ -580,49 +660,88 @@ export function HomePage() {
                   </>
                 )}
                 <div ref={carouselRef} className="overflow-x-auto pb-12 pt-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden snap-x snap-mandatory px-4 sm:px-8 lg:px-12 scroll-pl-4 sm:scroll-pl-8 lg:scroll-pl-12 scroll-smooth">
-                  <div className="flex w-max gap-4 md:gap-6 mx-auto sm:mx-0">
+                  <div className="flex w-max gap-5 md:gap-7 mx-auto sm:mx-0">
                     {featuredProperties.map((property) => (
                       <Link
                         to={`/propiedades/${property.id}`}
                         state={{ property }}
                         viewTransition
                         key={property.id}
-                        className="group relative h-[420px] w-[280px] sm:h-[480px] sm:w-[320px] md:h-[560px] md:w-[380px] shrink-0 snap-center sm:snap-start overflow-hidden rounded-[2rem] bg-slate-900 shadow-xl transition-shadow duration-500 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.6)]"
+                        className="group flex flex-col w-[310px] sm:w-[360px] md:w-[410px] shrink-0 snap-center sm:snap-start overflow-hidden rounded-2xl bg-white border border-slate-200/80 shadow-md transition-all duration-500 hover:-translate-y-1.5 hover:shadow-2xl hover:border-slate-300/80"
                       >
-                        <img
-                          src={optimizedImageUrl(property.image, { width: 760 })}
-                          alt={property.title}
-                          className="absolute inset-0 h-full w-full object-cover"
-                          loading="lazy"
-                        />
-                        
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80 pointer-events-none" />
-                        
-                        <div className="absolute bottom-0 inset-x-0 p-5 sm:p-6 bg-black/20 backdrop-blur-xl border-t border-white/15 flex flex-col justify-end pointer-events-none">
-                          <div className="flex flex-col gap-1.5">
-                            <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-white/80">
+                        {/* Contenedor de Imagen Horizontal 16:10 */}
+                        <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-900">
+                          <img
+                            src={optimizedImageUrl(property.image, { width: 760 })}
+                            alt={property.title}
+                            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                            loading="lazy"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20 opacity-70 group-hover:opacity-40 transition-opacity" />
+                          
+                          {/* Badges Flotantes sobre la foto */}
+                          <div className="absolute top-3.5 left-3.5 flex flex-wrap gap-2 z-10">
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-white bg-primary/90 backdrop-blur-md px-2.5 py-1 rounded-md shadow-sm">
                               {property.status === 'venta' ? 'En Venta' : 'En Renta'}
-                              {property.location ? ` • ${property.location}` : ''}
-                            </p>
-                            <h3 className="text-xl sm:text-2xl font-light text-white leading-tight line-clamp-2">
+                            </span>
+                            {property.type && (
+                              <span className="text-[10px] font-medium uppercase tracking-wider text-slate-900 bg-white/90 backdrop-blur-md px-2.5 py-1 rounded-md shadow-sm">
+                                {property.type}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Panel de Detalles Inferior Limpio */}
+                        <div className="flex flex-col flex-1 p-5 sm:p-6 bg-white justify-between">
+                          <div>
+                            {property.location && (
+                              <div className="flex items-center gap-1.5 text-xs text-brand-navy/60 font-medium mb-2">
+                                <MapPin className="w-3.5 h-3.5 text-primary shrink-0" strokeWidth={1.75} />
+                                <span className="truncate">{property.location}</span>
+                              </div>
+                            )}
+                            <h3 className="font-heading text-lg sm:text-xl font-light leading-snug text-brand-navy group-hover:text-primary transition-colors line-clamp-2 min-h-[3.25rem] mb-4">
                               {featuredLabel(property.publicationTitle, property.title)}
                             </h3>
-                            
-                            <div className="flex gap-4 text-[11px] sm:text-xs font-medium text-white/80 mt-1 mb-1">
+                          </div>
+                          
+                          <div>
+                            {/* Estadísticas de la propiedad */}
+                            <div className="flex items-center gap-4 text-xs font-medium text-brand-navy/70 border-t border-slate-100 pt-3.5 mb-4">
                               {property.bedrooms > 0 && (
-                                <span className="flex items-center gap-1.5"><Bed className="w-3.5 h-3.5 opacity-70"/> {property.bedrooms}</span>
+                                <span className="flex items-center gap-1.5 tabular-nums">
+                                  <Bed className="w-4 h-4 text-brand-navy/45 stroke-[1.5]"/> {property.bedrooms} hab.
+                                </span>
                               )}
                               {property.bathrooms > 0 && (
-                                <span className="flex items-center gap-1.5"><Bath className="w-3.5 h-3.5 opacity-70"/> {property.bathrooms}</span>
+                                <span className="flex items-center gap-1.5 tabular-nums">
+                                  <Bath className="w-4 h-4 text-brand-navy/45 stroke-[1.5]"/> {property.bathrooms} baños
+                                </span>
                               )}
                               {property.area > 0 && (
-                                <span className="flex items-center gap-1.5"><Square className="w-3.5 h-3.5 opacity-70"/> {property.area} m²</span>
+                                <span className="flex items-center gap-1.5 tabular-nums">
+                                  <Square className="w-4 h-4 text-brand-navy/45 stroke-[1.5]"/> {property.area} m²
+                                </span>
                               )}
                             </div>
 
-                            <p className="mt-1 text-base sm:text-lg font-medium text-white/95">
-                              ${property.price?.toLocaleString()}
-                            </p>
+                            {/* Fila de precio y llamada a la acción */}
+                            <div className="flex items-end justify-between border-t border-slate-100 pt-3.5">
+                              <div>
+                                <p className="text-[10px] uppercase font-semibold tracking-wider text-brand-navy/45 mb-0.5">Precio</p>
+                                <p className="text-xl sm:text-2xl font-light text-brand-navy tabular-nums" style={{ fontFamily: "var(--font-heading)" }}>
+                                  ${property.price?.toLocaleString()}
+                                  {property.status === 'alquiler' && (
+                                    <span className="text-xs text-brand-navy/50 ml-1 font-normal">/ mes</span>
+                                  )}
+                                </p>
+                              </div>
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-primary tracking-wide transition-transform group-hover:translate-x-1">
+                                Ver detalles
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </Link>

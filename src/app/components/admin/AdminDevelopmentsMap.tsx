@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Development } from "../../data/developments";
+import { getViterraStreetTileLayer } from "../../lib/mapTileConfig";
 
 interface Props {
   developments: Development[];
@@ -51,12 +52,7 @@ export function AdminDevelopmentsMap({
         ];
 
         const map = L.map(mapRef.current).setView(center, 12);
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-          attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-          subdomains: "abcd",
-          maxZoom: 20,
-        }).addTo(map);
+        getViterraStreetTileLayer(L).addTo(map);
 
         const Lm = L as typeof import("leaflet") & {
           markerClusterGroup?: (opts: object) => { addLayer: (m: unknown) => void };

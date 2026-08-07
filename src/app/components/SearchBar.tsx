@@ -12,6 +12,7 @@ import { PropertyTypeFilterField } from "./PropertyTypeFilterField";
 
 interface SearchBarProps {
   onSearch?: (filters: SearchFilters) => void;
+  onFilterChange?: (filters: SearchFilters) => void;
   className?: string;
   /** premium: bordes rectos, tipografía manual Viterra (Poppins) · ambient: sobre fondo oscuro, solo líneas (landing) */
   variant?: "default" | "premium" | "ambient";
@@ -59,6 +60,7 @@ const fieldBase = cn(
 
 export function SearchBar({
   onSearch,
+  onFilterChange,
   className,
   variant = "default",
   defaultStatus = "",
@@ -154,6 +156,16 @@ export function SearchBar({
       searchParams.get("maxArea");
     if (hasAdv) setAdvancedOpen(true);
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!onFilterChange) return;
+    const effectiveFilters: SearchFilters = {
+      ...filters,
+      ...(showPriceOperationToggle ? { status: priceOp } : {}),
+      ...(isCatalogOperationLocked ? { status: defaultStatus } : {}),
+    };
+    onFilterChange(effectiveFilters);
+  }, [filters, priceOp, showPriceOperationToggle, isCatalogOperationLocked, defaultStatus, onFilterChange]);
 
   const setPriceOperation = (op: "venta" | "alquiler") => {
     setPriceOp(op);
@@ -402,83 +414,129 @@ export function SearchBar({
             id={advancedRegionId}
             role="region"
             aria-labelledby={advancedToggleId}
-            className={cn(
-              "mt-3 grid grid-cols-1 gap-3 sm:gap-4",
-              !previewCanvas && "sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-5"
-            )}
+            className="mt-3 space-y-4"
           >
-            <div className="min-w-0">
-              <label className={labelClass} htmlFor={`${advancedToggleId}-beds`}>
-                Recámaras (mín.)
-              </label>
-              <select
-                id={`${advancedToggleId}-beds`}
-                value={filters.minBedrooms}
-                onChange={(e) => setFilters({ ...filters, minBedrooms: e.target.value })}
-                className={cn(
-                  fieldClass,
-                  "cursor-pointer appearance-none bg-[length:12px] bg-[right_0.25rem_center] bg-no-repeat pr-9"
-                )}
-                style={selectChevronStyle}
-              >
-                <option value="">Cualquiera</option>
-                <option value="1">1 o más</option>
-                <option value="2">2 o más</option>
-                <option value="3">3 o más</option>
-                <option value="4">4 o más</option>
-                <option value="5">5 o más</option>
-              </select>
-            </div>
-            <div className="min-w-0">
-              <label className={labelClass} htmlFor={`${advancedToggleId}-baths`}>
-                Baños (mín.)
-              </label>
-              <select
-                id={`${advancedToggleId}-baths`}
-                value={filters.minBathrooms}
-                onChange={(e) => setFilters({ ...filters, minBathrooms: e.target.value })}
-                className={cn(
-                  fieldClass,
-                  "cursor-pointer appearance-none bg-[length:12px] bg-[right_0.25rem_center] bg-no-repeat pr-9"
-                )}
-                style={selectChevronStyle}
-              >
-                <option value="">Cualquiera</option>
-                <option value="1">1 o más</option>
-                <option value="2">2 o más</option>
-                <option value="3">3 o más</option>
-                <option value="4">4 o más</option>
-              </select>
-            </div>
-            <div className="min-w-0">
-              <label className={labelClass} htmlFor={`${advancedToggleId}-amin`}>
-                Superficie (m²)
-              </label>
-              <div className="flex min-w-0 items-stretch gap-2 sm:gap-3">
-                <input
-                  id={`${advancedToggleId}-amin`}
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  aria-label="Superficie mínima en m²"
-                  placeholder={isAmbient ? "Mín." : "Mín. m²"}
-                  value={filters.minArea}
-                  onChange={(e) => setFilters({ ...filters, minArea: e.target.value })}
-                  className={cn(fieldClass, "min-w-0 flex-1 tabular-nums")}
-                />
-                <input
-                  id={`${advancedToggleId}-amax`}
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  aria-label="Superficie máxima en m²"
-                  placeholder={isAmbient ? "Máx." : "Máx. m²"}
-                  value={filters.maxArea}
-                  onChange={(e) => setFilters({ ...filters, maxArea: e.target.value })}
-                  className={cn(fieldClass, "min-w-0 flex-1 tabular-nums")}
-                />
+            <div
+              className={cn(
+                "grid grid-cols-1 gap-3 sm:gap-4",
+                !previewCanvas && "sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-5"
+              )}
+            >
+              <div className="min-w-0">
+                <label className={labelClass} htmlFor={`${advancedToggleId}-beds`}>
+                  Recámaras (mín.)
+                </label>
+                <select
+                  id={`${advancedToggleId}-beds`}
+                  value={filters.minBedrooms}
+                  onChange={(e) => setFilters({ ...filters, minBedrooms: e.target.value })}
+                  className={cn(
+                    fieldClass,
+                    "cursor-pointer appearance-none bg-[length:12px] bg-[right_0.25rem_center] bg-no-repeat pr-9"
+                  )}
+                  style={selectChevronStyle}
+                >
+                  <option value="">Cualquiera</option>
+                  <option value="1">1 o más</option>
+                  <option value="2">2 o más</option>
+                  <option value="3">3 o más</option>
+                  <option value="4">4 o más</option>
+                  <option value="5">5 o más</option>
+                </select>
+              </div>
+              <div className="min-w-0">
+                <label className={labelClass} htmlFor={`${advancedToggleId}-baths`}>
+                  Baños (mín.)
+                </label>
+                <select
+                  id={`${advancedToggleId}-baths`}
+                  value={filters.minBathrooms}
+                  onChange={(e) => setFilters({ ...filters, minBathrooms: e.target.value })}
+                  className={cn(
+                    fieldClass,
+                    "cursor-pointer appearance-none bg-[length:12px] bg-[right_0.25rem_center] bg-no-repeat pr-9"
+                  )}
+                  style={selectChevronStyle}
+                >
+                  <option value="">Cualquiera</option>
+                  <option value="1">1 o más</option>
+                  <option value="2">2 o más</option>
+                  <option value="3">3 o más</option>
+                  <option value="4">4 o más</option>
+                </select>
+              </div>
+              <div className="min-w-0">
+                <label className={labelClass} htmlFor={`${advancedToggleId}-amin`}>
+                  Superficie (m²)
+                </label>
+                <div className="flex min-w-0 items-stretch gap-2 sm:gap-3">
+                  <input
+                    id={`${advancedToggleId}-amin`}
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    aria-label="Superficie mínima en m²"
+                    placeholder={isAmbient ? "Mín." : "Mín. m²"}
+                    value={filters.minArea}
+                    onChange={(e) => setFilters({ ...filters, minArea: e.target.value })}
+                    className={cn(fieldClass, "min-w-0 flex-1 tabular-nums")}
+                  />
+                  <input
+                    id={`${advancedToggleId}-amax`}
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    aria-label="Superficie máxima en m²"
+                    placeholder={isAmbient ? "Máx." : "Máx. m²"}
+                    value={filters.maxArea}
+                    onChange={(e) => setFilters({ ...filters, maxArea: e.target.value })}
+                    className={cn(fieldClass, "min-w-0 flex-1 tabular-nums")}
+                  />
+                </div>
               </div>
             </div>
+
+            {/* Rango de Precios integrado dentro de Filtros Avanzados */}
+            {showCatalogPriceRange ? (
+              <SearchBarCatalogPriceRange
+                ref={catalogRangeRef}
+                prices={effectiveCatalogPrices}
+                minPrice={filters.minPrice}
+                maxPrice={filters.maxPrice}
+                onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
+                variant={variant}
+              />
+            ) : (
+              <div
+                className={cn(
+                  "grid grid-cols-1 gap-4 border-t pt-3 sm:grid-cols-2 sm:gap-x-6",
+                  isAmbient && "border-white/15",
+                  isPremium && !isAmbient && "border-brand-navy/10",
+                  !isPremium && !isAmbient && "border-slate-200"
+                )}
+              >
+                <div>
+                  <label className={labelClass}>Precio mínimo (MXN)</label>
+                  <input
+                    type="number"
+                    placeholder="Ej. 500000"
+                    value={filters.minPrice}
+                    onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
+                    className={fieldClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Precio máximo (MXN)</label>
+                  <input
+                    type="number"
+                    placeholder="Ej. 15000000"
+                    value={filters.maxPrice}
+                    onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
+                    className={fieldClass}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         ) : null}
       </div>
@@ -487,17 +545,8 @@ export function SearchBar({
       {showMapZoneLink && (
         <div
           className={cn(
-            "flex",
-            compactAmbient ? "justify-start" : "justify-center",
-            showCatalogPriceRange
-              ? "mt-3 pt-1 sm:mt-4"
-              : cn(
-                  "mt-4 border-t pt-4 sm:mt-5 sm:pt-5",
-                  compactAmbient && "mt-3 pt-3 sm:mt-4 sm:pt-4",
-                  !showCatalogPriceRange && isAmbient && "border-white/15",
-                  !showCatalogPriceRange && isPremium && !isAmbient && "border-brand-navy/10",
-                  !showCatalogPriceRange && !isPremium && !isAmbient && "border-slate-200"
-                )
+            "flex mt-3 pt-1 justify-center border-t border-white/15",
+            compactAmbient && "justify-start"
           )}
         >
           <Link
@@ -523,48 +572,6 @@ export function SearchBar({
               Explorar en mapa
             </span>
           </Link>
-        </div>
-      )}
-
-      {showCatalogPriceRange ? (
-        <SearchBarCatalogPriceRange
-          ref={catalogRangeRef}
-          prices={effectiveCatalogPrices}
-          minPrice={filters.minPrice}
-          maxPrice={filters.maxPrice}
-          onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
-          variant={variant}
-        />
-      ) : (
-        <div
-          className={cn(
-            "mt-5 grid grid-cols-1 gap-4 border-t pt-5",
-            !previewCanvas && "md:grid-cols-2 md:gap-x-6",
-            isAmbient && "border-white/15",
-            isPremium && !isAmbient && "border-brand-navy/10",
-            !isPremium && !isAmbient && "border-slate-200"
-          )}
-        >
-          <div>
-            <label className={labelClass}>Precio mínimo (MXN)</label>
-            <input
-              type="number"
-              placeholder="Ej. 500000"
-              value={filters.minPrice}
-              onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
-              className={fieldClass}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Precio máximo (MXN)</label>
-            <input
-              type="number"
-              placeholder="Ej. 15000000"
-              value={filters.maxPrice}
-              onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
-              className={fieldClass}
-            />
-          </div>
         </div>
       )}
     </form>

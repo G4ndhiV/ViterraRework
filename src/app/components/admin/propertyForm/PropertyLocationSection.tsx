@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Map as LeafletMap, Marker } from "leaflet";
 import { MapPin } from "lucide-react";
 import { createViterraLeafletMarkerIcon } from "../../../lib/leafletViterraMarkerIcon";
+import { getViterraStreetTileLayer } from "../../../lib/mapTileConfig";
 import {
   PropertyField,
   PropertyFieldGrid,
@@ -85,10 +86,7 @@ export function PropertyLocationSection({
       const map = L.map(mapRef.current, { zoomControl: true }).setView([lat, lng], 14);
       mapInstanceRef.current = map;
 
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-        attribution: "&copy; OpenStreetMap",
-        maxZoom: 19,
-      }).addTo(map);
+      getViterraStreetTileLayer(L).addTo(map);
 
       const marker = L.marker([lat, lng], {
         draggable: true,

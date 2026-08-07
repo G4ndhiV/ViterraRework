@@ -3,6 +3,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { NEARBY_RADIUS_KM_OPTIONS } from "./NearbySearchEmpty";
 import { cn } from "./ui/utils";
+import { getViterraStreetTileLayer } from "../lib/mapTileConfig";
 
 const GDL = { lat: 20.676208, lng: -103.34721 };
 
@@ -53,12 +54,7 @@ export function NearbyPinSearchPanel({ value, onChange, className }: Props) {
       attributionControl: true,
     }).setView([pin.lat, pin.lng], 12);
 
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: "abcd",
-      maxZoom: 20,
-    }).addTo(map);
+    getViterraStreetTileLayer(L).addTo(map);
 
     // SVG: el sitio fuerza border-radius: 0 !important (un div redondo se veía cuadrado)
     const icon = L.divIcon({

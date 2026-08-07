@@ -6,6 +6,7 @@ import { cn } from "../components/ui/utils";
 import { MapSearchHeaderBar } from "../components/MapSearchHeaderBar";
 import { MapSearchListingCard } from "../components/map/MapSearchListingCard";
 import type { Property } from "../components/PropertyCard";
+import { getViterraStreetTileLayer } from "../lib/mapTileConfig";
 import {
   propertyMatchesOperation,
   propertyPriceForOperation,
@@ -507,11 +508,7 @@ export function MapSearchPage() {
 
       L.control.zoom({ position: "bottomright" }).addTo(map);
 
-      const streetLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; CARTO',
-        subdomains: "abcd",
-        maxZoom: 20,
-      });
+      const streetLayer = getViterraStreetTileLayer(L);
       const satelliteLayer = L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         {
@@ -1108,7 +1105,7 @@ export function MapSearchPage() {
             )}
             <div
               ref={mapEl}
-              className="absolute inset-0 z-0 bg-slate-100 [&_.leaflet-container]:!filter-none [&_.leaflet-tile-pane]:!filter-none"
+              className="absolute inset-0 z-0 bg-slate-100"
             />
             {!mapReady && (
               <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center bg-slate-100">
