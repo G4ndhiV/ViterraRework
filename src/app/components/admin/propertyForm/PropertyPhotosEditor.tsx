@@ -2,10 +2,10 @@ import { useCallback, useRef, useState, type DragEvent } from "react";
 import { ImagePlus, Star, Trash2, Upload } from "lucide-react";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/utils";
+import { PROPERTY_MEDIA_MAX_BYTES } from "../../../lib/supabasePropertyMedia";
 
-const MAX_IMAGES = 24;
 const MAX_DATA_URL_BYTES = 5 * 1024 * 1024;
-const MAX_STORAGE_IMAGE_BYTES = 25 * 1024 * 1024;
+const THUMB_DRAG_TYPE = "application/x-viterra-photo-index";
 
 function isImageFile(file: File): boolean {
   if (/^image\//i.test(file.type)) return true;
@@ -21,6 +21,14 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
+function reorderImages(list: string[], from: number, to: number): string[] {
+  if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return list;
+  const next = [...list];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
 type Props = {
   images: string[];
   onChange: (next: string[]) => void;
@@ -33,6 +41,8 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [dragFromIndex, setDragFromIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const coverIndex = 0;
   const previewIndex = Math.min(activeIndex, Math.max(0, images.length - 1));
@@ -45,19 +55,14 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
         window.alert("Selecciona archivos de imagen válidos.");
         return;
       }
-      const room = MAX_IMAGES - images.length;
-      if (room <= 0) {
-        window.alert(`Máximo ${MAX_IMAGES} imágenes. Elimina alguna antes de agregar más.`);
-        return;
-      }
       setBusy(true);
       try {
         const next: string[] = [...images];
-        for (const file of list.slice(0, room)) {
-          const maxBytes = onUploadFile ? MAX_STORAGE_IMAGE_BYTES : MAX_DATA_URL_BYTES;
+        for (const file of list) {
+          const maxBytes = onUploadFile ? PROPERTY_MEDIA_MAX_BYTES : MAX_DATA_URL_BYTES;
           if (file.size > maxBytes) {
             window.alert(
-              `«${file.name}» supera ${onUploadFile ? "25 MB" : "5 MB"}. Comprime la imagen o usa otro archivo.`,
+              `«${file.name}» supera ${onUploadFile ? "5 GB" : "5 MB"}. Comprime la imagen o usa otro archivo.`,
             );
             continue;
           }
@@ -82,6 +87,15 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
     setActiveIndex((i) => (i >= next.length ? Math.max(0, next.length - 1) : i));
   };
 
+  const clearAll = () => {
+    if (disabled || images.length === 0) return;
+    if (!window.confirm(`¿Eliminar las ${images.length} fotos de la galería?`)) return;
+    onChange([]);
+    setActiveIndex(0);
+    setDragFromIndex(null);
+    setDragOverIndex(null);
+  };
+
   const setAsCover = (index: number) => {
     if (disabled || index === 0) return;
     const next = [...images];
@@ -91,11 +105,50 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
     setActiveIndex(0);
   };
 
-  const onDrop = (e: DragEvent) => {
+  const onFileDrop = (e: DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     if (disabled) return;
-    void addFiles(e.dataTransfer.files);
+    if (e.dataTransfer.types.includes(THUMB_DRAG_TYPE)) return;
+    if (e.dataTransfer.files?.length) void addFiles(e.dataTransfer.files);
+  };
+
+  const onThumbDragStart = (e: DragEvent, index: number) => {
+    if (disabled) {
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData(THUMB_DRAG_TYPE, String(index));
+    e.dataTransfer.setData("text/plain", String(index));
+    setDragFromIndex(index);
+  };
+
+  const onThumbDragOver = (e: DragEvent, index: number) => {
+    if (disabled || dragFromIndex == null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverIndex !== index) setDragOverIndex(index);
+  };
+
+  const onThumbDrop = (e: DragEvent, toIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (disabled) return;
+    const raw = e.dataTransfer.getData(THUMB_DRAG_TYPE) || e.dataTransfer.getData("text/plain");
+    const from = Number(raw);
+    setDragFromIndex(null);
+    setDragOverIndex(null);
+    if (!Number.isFinite(from) || from === toIndex) return;
+    const next = reorderImages(images, from, toIndex);
+    if (next === images) return;
+    onChange(next);
+    setActiveIndex(toIndex);
+  };
+
+  const onThumbDragEnd = () => {
+    setDragFromIndex(null);
+    setDragOverIndex(null);
   };
 
   return (
@@ -109,14 +162,14 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
           )}
           onDragEnter={(e) => {
             e.preventDefault();
-            if (!disabled) setDragOver(true);
+            if (!disabled && !e.dataTransfer.types.includes(THUMB_DRAG_TYPE)) setDragOver(true);
           }}
           onDragLeave={(e) => {
             e.preventDefault();
             setDragOver(false);
           }}
           onDragOver={(e) => e.preventDefault()}
-          onDrop={onDrop}
+          onDrop={onFileDrop}
         >
           <div className="aspect-[16/10] min-h-[220px] w-full sm:min-h-[280px]">
             {previewSrc ? (
@@ -182,21 +235,39 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
               Galería
               <span className="ml-1.5 font-normal tabular-nums text-slate-500">({images.length})</span>
             </p>
-            <p className="text-[10px] text-slate-500">Clic = vista · ★ = portada</p>
+            <div className="flex items-center gap-2">
+              {!disabled && images.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  className="text-[10px] font-semibold text-rose-600 transition hover:text-rose-700"
+                >
+                  Eliminar todas
+                </button>
+              ) : null}
+              <p className="text-[10px] text-slate-500">Arrastra para ordenar · ★ = portada</p>
+            </div>
           </div>
-          <div className="grid min-h-[120px] flex-1 grid-cols-3 gap-2 overflow-y-auto content-start">
+          <div className="grid min-h-[120px] flex-1 grid-cols-3 content-start gap-2 overflow-y-auto">
             {images.map((src, index) => (
               <button
                 key={`${index}-${src.slice(0, 40)}`}
                 type="button"
                 disabled={disabled}
+                draggable={!disabled}
                 onClick={() => setActiveIndex(index)}
+                onDragStart={(e) => onThumbDragStart(e, index)}
+                onDragOver={(e) => onThumbDragOver(e, index)}
+                onDrop={(e) => onThumbDrop(e, index)}
+                onDragEnd={onThumbDragEnd}
                 className={cn(
-                  "group relative aspect-square overflow-hidden rounded-xl ring-2 transition",
+                  "group relative aspect-square cursor-grab overflow-hidden rounded-xl ring-2 transition active:cursor-grabbing",
                   previewIndex === index ? "ring-primary shadow-md" : "ring-transparent hover:ring-stone-300",
+                  dragFromIndex === index && "opacity-50",
+                  dragOverIndex === index && dragFromIndex !== index && "ring-primary/60 ring-offset-1",
                 )}
               >
-                <img src={src} alt="" className="h-full w-full object-cover" />
+                <img src={src} alt="" className="pointer-events-none h-full w-full object-cover" />
                 {index === coverIndex ? (
                   <span className="absolute left-1 top-1 rounded bg-brand-navy/90 px-1 py-0.5 text-[8px] font-bold uppercase text-white">
                     ★
@@ -246,7 +317,7 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
                 ) : null}
               </button>
             ))}
-            {!disabled && images.length < MAX_IMAGES ? (
+            {!disabled ? (
               <button
                 type="button"
                 disabled={busy}
@@ -266,14 +337,14 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
         role="presentation"
         onDragEnter={(e) => {
           e.preventDefault();
-          if (!disabled) setDragOver(true);
+          if (!disabled && !e.dataTransfer.types.includes(THUMB_DRAG_TYPE)) setDragOver(true);
         }}
         onDragLeave={(e) => {
           e.preventDefault();
           setDragOver(false);
         }}
         onDragOver={(e) => e.preventDefault()}
-        onDrop={onDrop}
+        onDrop={onFileDrop}
         className={cn(
           "flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed px-4 py-3 transition",
           disabled ? "cursor-not-allowed border-stone-200 bg-stone-50 opacity-70" : "border-stone-300 bg-white",
@@ -300,14 +371,14 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
           <div className="min-w-0">
             <p className="text-sm font-medium text-brand-navy">Arrastra fotos o selecciónalas</p>
             <p className="text-xs text-slate-500">
-              {onUploadFile ? "Cualquier imagen · máx. 25 MB" : "PNG, JPG o WebP · máx. 5 MB"} · hasta {MAX_IMAGES}{" "}
-              fotos
+              {onUploadFile ? "Cualquier imagen · máx. 5 GB" : "PNG, JPG o WebP · máx. 5 MB"} · sin límite de
+              cantidad
             </p>
           </div>
         </div>
         <Button
           type="button"
-          disabled={disabled || busy || images.length >= MAX_IMAGES}
+          disabled={disabled || busy}
           onClick={() => inputRef.current?.click()}
           className="shrink-0 rounded-xl"
         >

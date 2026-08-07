@@ -226,6 +226,10 @@ export function PropertyFormDialog({
       ...draft,
       id: propertyId,
       price: Number(draft.price) || 0,
+      rentalPrice:
+        draft.status === "venta"
+          ? undefined
+          : Number(draft.rentalPrice) || undefined,
       bedrooms: Number(draft.bedrooms) || 0,
       bathrooms: Number(draft.bathrooms) || 0,
       area: Number(draft.area) || 0,

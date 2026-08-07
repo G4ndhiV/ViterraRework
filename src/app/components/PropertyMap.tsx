@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Layers, MapPin } from "lucide-react";
 import type { Property } from "./PropertyCard";
 import { escapeHtml } from "../lib/escapeHtml";
+import { getViterraStreetTileLayer } from "../lib/mapTileConfig";
 
 interface PropertyMapProps {
   properties: Property[];
@@ -41,12 +42,7 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
         const map = (L as any).map(mapRef.current, { zoomControl: true }).setView(center, 12);
         mapInstanceRef.current = map;
 
-        streetLayerRef.current = (L as any).tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-          attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-          subdomains: "abcd",
-          maxZoom: 20,
-        });
+        streetLayerRef.current = getViterraStreetTileLayer(L);
         satelliteLayerRef.current = (L as any).tileLayer(
           "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
           {
@@ -123,7 +119,13 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
               <a href="/propiedades/${escapeHtml(property.id)}" style="text-decoration:none;color:#141c2e;">
                 <p style="margin:0 0 6px 0;font-size:15px;font-weight:600;line-height:1.3;">${escapeHtml(property.title)}</p>
                 <p style="margin:0 0 6px 0;font-size:12px;color:#64748b;">${escapeHtml(property.location)}</p>
-                <p style="margin:0;font-size:14px;font-weight:700;">$${escapeHtml(property.price.toLocaleString())}</p>
+                <p style="margin:0;font-size:14px;font-weight:700;">$${escapeHtml(property.price.toLocaleString())}${
+                  property.status === "alquiler"
+                    ? ' <span style="font-weight:500;color:#64748b;">/ mes</span>'
+                    : property.status === "venta_y_alquiler"
+                      ? ` <span style="font-weight:500;color:#64748b;">venta</span><br/><span style="font-size:13px;font-weight:600;">$${escapeHtml((property.rentalPrice ?? property.price).toLocaleString())} / mes</span>`
+                      : ""
+                }</p>
               </a>
             </div>
           `,

@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const PROPERTY_MEDIA_BUCKET_ID = "property-media";
-/** 5 GB */
-export const PROPERTY_VIDEO_MAX_BYTES = 5 * 1024 * 1024 * 1024;
+/** 5 GB — tope del bucket `property-media` (fotos y videos). */
+export const PROPERTY_MEDIA_MAX_BYTES = 5 * 1024 * 1024 * 1024;
+/** @deprecated Preferir PROPERTY_MEDIA_MAX_BYTES; se mantiene por usos de video. */
+export const PROPERTY_VIDEO_MAX_BYTES = PROPERTY_MEDIA_MAX_BYTES;
 
 function extensionForUpload(file: File): string {
   const name = file.name.split(".").pop()?.toLowerCase();

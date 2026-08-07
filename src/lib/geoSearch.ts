@@ -48,6 +48,40 @@ export function pointInZone(point: LatLng, zone: SearchZone): boolean {
   return pointInPolygonRing(point, zone.ring);
 }
 
+/** Centroide aproximado de un anillo (promedio de vértices). */
+export function ringCentroid(ring: LatLng[]): LatLng | null {
+  if (ring.length === 0) return null;
+  let lat = 0;
+  let lng = 0;
+  for (const p of ring) {
+    lat += p.lat;
+    lng += p.lng;
+  }
+  return L.latLng(lat / ring.length, lng / ring.length);
+}
+
+/** Centro de cualquier SearchZone. */
+export function zoneCenter(zone: SearchZone): LatLng | null {
+  if (zone.kind === "circle") return zone.center;
+  if (zone.kind === "rectangle") return zone.bounds.getCenter();
+  return ringCentroid(zone.ring);
+}
+
+/** Amplía la zona a un círculo de `km` kilómetros desde su centro. */
+export function expandZoneToCircleKm(zone: SearchZone, km: number): SearchZone | null {
+  const center = zoneCenter(zone);
+  if (!center || !(km > 0)) return null;
+  return { kind: "circle", center, radiusM: km * 1000 };
+}
+
+/** Distancia en metros entre dos puntos (Haversine vía Leaflet). */
+export function distanceMeters(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number }
+): number {
+  return L.latLng(a.lat, a.lng).distanceTo(L.latLng(b.lat, b.lng));
+}
+
 function firstPolygonRing(layer: L.Polygon): LatLng[] {
   const raw = layer.getLatLngs() as LatLng[] | LatLng[][];
   if (!raw || raw.length === 0) return [];

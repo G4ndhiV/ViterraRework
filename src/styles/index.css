@@ -10,3 +10,14 @@
 *::after {
   border-radius: 0 !important;
 }
+
+/* Contención de mapas Leaflet embebidos y mejora de contraste/claridad visual */
+.leaflet-container {
+  max-width: 100%;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+}
+
+.leaflet-tile-pane {
+  filter: none !important;
+}

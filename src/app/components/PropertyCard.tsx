@@ -22,6 +22,37 @@ import { tours3dFromLegacyFields } from "../lib/propertyTours3d";
 
 export type { PropertyVideoEntry, PropertyTour3dEntry };
 
+export type PropertyStatus = "venta" | "alquiler" | "venta_y_alquiler";
+
+/** Etiqueta legible para badges y filas (evita mostrar `venta_y_alquiler` crudo). */
+export function propertyStatusLabel(status: PropertyStatus): string {
+  if (status === "venta") return "En venta";
+  if (status === "venta_y_alquiler") return "Venta y Renta";
+  return "En renta";
+}
+
+/** Incluye duales (`venta_y_alquiler`) en listados de venta o renta. */
+export function propertyMatchesOperation(
+  status: PropertyStatus,
+  operation: "venta" | "alquiler" | "" | string
+): boolean {
+  if (!operation) return true;
+  if (operation === "venta") return status === "venta" || status === "venta_y_alquiler";
+  if (operation === "alquiler") return status === "alquiler" || status === "venta_y_alquiler";
+  return status === operation;
+}
+
+/** Precio relevante según operación del listado (dual: venta→price, renta→rentalPrice). */
+export function propertyPriceForOperation(
+  property: { status: PropertyStatus; price: number; rentalPrice?: number },
+  operation: "venta" | "alquiler" | "" | string
+): number {
+  if (operation === "alquiler" || property.status === "alquiler") {
+    return property.rentalPrice ?? property.price;
+  }
+  return property.price;
+}
+
 export interface Property {
   id: string;
   title: string;
@@ -32,7 +63,7 @@ export interface Property {
   area: number;
   image: string;
   type: string;
-  status: "venta" | "alquiler" | "venta_y_alquiler";
+  status: PropertyStatus;
   /** Precio de alquiler (cuando status es "alquiler" o "venta_y_alquiler"). */
   rentalPrice?: number;
   /** Destacada en inicio (columna `properties.featured`; máx. 4 en admin). */
@@ -242,7 +273,7 @@ export function PropertyCard({
               )}
               style={!ed ? { backgroundColor: "rgba(200, 16, 46, 0.9)", borderColor: "var(--primary)" } : undefined}
             >
-              {property.status === "venta" ? "En venta" : property.status === "venta_y_alquiler" ? "Venta y Renta" : "En renta"}
+              {propertyStatusLabel(property.status)}
             </span>
             <span
               className={cn(
@@ -314,10 +345,20 @@ export function PropertyCard({
               "flex gap-4 border-t pt-5",
               ed
                 ? "mt-auto flex-col items-stretch border-brand-navy/[0.06]"
-                : "items-center justify-between border-slate-200"
+                : "flex-col items-stretch gap-3 border-slate-200 sm:flex-row sm:items-center sm:justify-between"
             )}
           >
             <div className={ed ? "min-w-0 space-y-0.5" : undefined}>
+              {property.status === "venta_y_alquiler" && (
+                <p
+                  className={cn(
+                    "mb-1 text-[11px] font-medium uppercase tracking-[0.08em]",
+                    ed ? "text-brand-navy/50" : "text-slate-500"
+                  )}
+                >
+                  Se puede comprar o rentar
+                </p>
+              )}
               {(property.status === "venta" || property.status === "venta_y_alquiler") && (
                 <p
                   className={cn(
@@ -329,6 +370,11 @@ export function PropertyCard({
                   style={!ed ? { fontWeight: 700 } : undefined}
                 >
                   ${property.price.toLocaleString()}
+                  {property.status === "venta_y_alquiler" && (
+                    <span className={cn("ml-1.5 text-xs font-medium not-italic", ed ? "font-heading text-brand-navy/45" : "text-slate-500")}>
+                      venta
+                    </span>
+                  )}
                 </p>
               )}
               {(property.status === "alquiler" || property.status === "venta_y_alquiler") && (
@@ -422,7 +468,7 @@ export function PropertyCard({
               </button>
               <div className="absolute bottom-2.5 left-2.5 flex max-w-[calc(100%-2.75rem)] flex-wrap gap-1.5">
                 <span className="rounded-sm bg-primary px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-white">
-                  {property.status === "venta" ? "En venta" : property.status === "venta_y_alquiler" ? "Venta y Renta" : "En renta"}
+                  {propertyStatusLabel(property.status)}
                 </span>
                 <span className="rounded-sm border border-white/60 bg-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-brand-navy">
                   {property.type}

@@ -59,9 +59,17 @@ export function PropertiesPage() {
       filtered = filtered.filter((property) => propertyMatchesTypeFilter(property.type, filters.type));
     }
 
-    // Filter by status
+    // Filter by status (duales entran en venta y en renta)
     if (filters.status) {
-      filtered = filtered.filter((property) => property.status === filters.status);
+      filtered = filtered.filter((property) => {
+        if (filters.status === "venta") {
+          return property.status === "venta" || property.status === "venta_y_alquiler";
+        }
+        if (filters.status === "alquiler") {
+          return property.status === "alquiler" || property.status === "venta_y_alquiler";
+        }
+        return property.status === filters.status;
+      });
     }
 
     // Filter by price range (considers both sale and rental prices)

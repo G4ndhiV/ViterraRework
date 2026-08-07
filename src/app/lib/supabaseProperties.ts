@@ -364,7 +364,7 @@ export function idFromPropertyWriteResult(data: unknown): string | undefined {
 
 /** Listado admin sin `payload` (JSON Tokko grande). */
 const ADMIN_CATALOG_PROPERTY_COLUMNS_CORE =
-  "id,tokko_id,title,price,location,bedrooms,bathrooms,area,image,type,status,lat,lng,images,deleted_at,synced_at,updated_at,featured,colony,amenities,services,additional_features,publication_title,full_address,description,rich_description,reference_code,public_url,surface_land,expenses,age,parking_spaces,development_tokko_id,property_type_tokko_id,total_surface,roofed_surface,semiroofed_surface,unroofed_surface,front_measure,depth_measure,floors_amount,situation,orientation,half_bathrooms,credit_eligible,tags";
+  "id,tokko_id,title,price,rental_price,location,bedrooms,bathrooms,area,image,type,status,lat,lng,images,deleted_at,synced_at,updated_at,featured,colony,amenities,services,additional_features,publication_title,full_address,description,rich_description,reference_code,public_url,surface_land,expenses,age,parking_spaces,development_tokko_id,property_type_tokko_id,total_surface,roofed_surface,semiroofed_surface,unroofed_surface,front_measure,depth_measure,floors_amount,situation,orientation,half_bathrooms,credit_eligible,tags";
 
 /** Requiere migración `20260520180000_property_media_contact.sql`. */
 const ADMIN_CATALOG_PROPERTY_COLUMNS_MEDIA =

@@ -23,6 +23,7 @@ import { useSiteContent } from "../../contexts/SiteContentContext";
 import { PreviewFieldPulse } from "../components/admin/siteEditor/PreviewFieldPulse";
 import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
 import { HeroBackdropMedia } from "../components/HeroBackdropMedia";
+import { getViterraStreetTileLayer } from "../lib/mapTileConfig";
 import { Reveal } from "../components/Reveal";
 import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
 import { cn } from "../components/ui/utils";
@@ -258,12 +259,7 @@ export function ContactPage() {
         const el = mapRef.current;
         const map = L.map(el).setView(center, 15);
 
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-          attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-          subdomains: "abcd",
-          maxZoom: 20,
-        }).addTo(map);
+        getViterraStreetTileLayer(L).addTo(map);
 
         const customIcon = L.divIcon({
           className: "custom-office-marker",

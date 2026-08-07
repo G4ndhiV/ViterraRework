@@ -2,10 +2,9 @@ import { useCallback, useRef, useState, type DragEvent } from "react";
 import { ChevronLeft, ChevronRight, ImagePlus, Trash2 } from "lucide-react";
 import { Button } from "../ui/button";
 import { cn } from "../ui/utils";
+import { PROPERTY_MEDIA_MAX_BYTES } from "../../lib/supabasePropertyMedia";
 
-const MAX_IMAGES = 24;
 const MAX_DATA_URL_BYTES = 5 * 1024 * 1024;
-const MAX_STORAGE_IMAGE_BYTES = 25 * 1024 * 1024;
 
 function isImageFile(file: File): boolean {
   if (/^image\//i.test(file.type)) return true;
@@ -59,7 +58,7 @@ export function ImageGalleryEditor({
   const resolvedHint =
     hint ??
     (onUploadFile
-      ? "Cualquier imagen · máx. 25 MB · la primera es la portada."
+      ? "Cualquier imagen · máx. 5 GB · la primera es la portada."
       : "PNG, JPG o WebP · máx. 5 MB · la primera es la portada.");
   const featured = variant === "featured";
   const splitHero = featured && segment === "hero";
@@ -86,19 +85,14 @@ export function ImageGalleryEditor({
         window.alert("Selecciona archivos de imagen válidos.");
         return;
       }
-      const room = MAX_IMAGES - images.length;
-      if (room <= 0) {
-        window.alert(`Máximo ${MAX_IMAGES} imágenes. Elimina alguna antes de agregar más.`);
-        return;
-      }
       setBusy(true);
       try {
         const next: string[] = [...images];
-        for (const file of list.slice(0, room)) {
-          const maxBytes = onUploadFile ? MAX_STORAGE_IMAGE_BYTES : MAX_DATA_URL_BYTES;
+        for (const file of list) {
+          const maxBytes = onUploadFile ? PROPERTY_MEDIA_MAX_BYTES : MAX_DATA_URL_BYTES;
           if (file.size > maxBytes) {
             window.alert(
-              `«${file.name}» supera ${onUploadFile ? "25 MB" : "5 MB"}. Comprime la imagen o usa otro archivo.`,
+              `«${file.name}» supera ${onUploadFile ? "5 GB" : "5 MB"}. Comprime la imagen o usa otro archivo.`,
             );
             continue;
           }
@@ -369,7 +363,7 @@ export function ImageGalleryEditor({
               <Button
                 type="button"
                 size="sm"
-                disabled={disabled || busy || images.length >= MAX_IMAGES}
+                disabled={disabled || busy}
                 onClick={() => inputRef.current?.click()}
                 className="h-8 gap-1 rounded-full bg-gradient-to-r from-primary to-brand-burgundy/85 px-4 text-[10px] font-bold uppercase leading-none text-primary-foreground shadow-md ring-2 ring-primary/30 hover:brightness-110 min-[1100px]:h-9 min-[1100px]:px-5 min-[1100px]:text-xs"
               >
@@ -447,7 +441,7 @@ export function ImageGalleryEditor({
               <Button
                 type="button"
                 size="sm"
-                disabled={disabled || busy || images.length >= MAX_IMAGES}
+                disabled={disabled || busy}
                 onClick={() => inputRef.current?.click()}
                 className={cn(
                   "h-9 shrink-0 gap-1.5 rounded-full px-4 text-[11px] font-bold uppercase tracking-wide text-primary-foreground shadow-lg shadow-primary/40 ring-2 ring-primary/30 transition hover:brightness-110",
@@ -545,7 +539,7 @@ export function ImageGalleryEditor({
         <Button
           type="button"
           size="sm"
-          disabled={disabled || busy || images.length >= MAX_IMAGES}
+          disabled={disabled || busy}
           onClick={() => inputRef.current?.click()}
           className={cn(
             "mt-4 gap-1.5 rounded-full px-5 text-[11px] font-bold uppercase tracking-wide shadow-lg ring-2 transition hover:brightness-110",

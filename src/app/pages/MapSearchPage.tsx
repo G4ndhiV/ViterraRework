@@ -6,6 +6,12 @@ import { cn } from "../components/ui/utils";
 import { MapSearchHeaderBar } from "../components/MapSearchHeaderBar";
 import { MapSearchListingCard } from "../components/map/MapSearchListingCard";
 import type { Property } from "../components/PropertyCard";
+import { getViterraStreetTileLayer } from "../lib/mapTileConfig";
+import {
+  propertyMatchesOperation,
+  propertyPriceForOperation,
+  propertyStatusLabel,
+} from "../components/PropertyCard";
 import { useCatalogProperties } from "../hooks/useCatalogProperties";
 import { useTokkoPropertyTypes } from "../hooks/useTokkoPropertyTypes";
 import { propertyMatchesTypeFilter } from "../lib/propertyTypesCatalog";
@@ -14,8 +20,10 @@ import {
   pointInZone,
   zoneFromLeafletLayer,
   decimateLatLngs,
+  expandZoneToCircleKm,
   type SearchZone,
 } from "../../lib/geoSearch";
+import { NearbySearchEmpty } from "../components/NearbySearchEmpty";
 import { Bath, Bed, ChevronDown, MapPin, Maximize2, Minimize2, Square, X } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 type MapFilters = {
@@ -102,13 +110,15 @@ function applyFilters(list: Property[], f: MapFilters, zone: SearchZone | null):
     out = out.filter((p) => propertyMatchesTypeFilter(p.type, f.type));
   }
   if (f.status) {
-    out = out.filter((p) => p.status === f.status);
+    out = out.filter((p) => propertyMatchesOperation(p.status, f.status));
   }
   if (f.minPrice) {
-    out = out.filter((p) => p.price >= Number(f.minPrice));
+    const min = Number(f.minPrice);
+    out = out.filter((p) => propertyPriceForOperation(p, f.status) >= min);
   }
   if (f.maxPrice) {
-    out = out.filter((p) => p.price <= Number(f.maxPrice));
+    const max = Number(f.maxPrice);
+    out = out.filter((p) => propertyPriceForOperation(p, f.status) <= max);
   }
   if (zone) {
     out = out.filter((p) => {
@@ -186,12 +196,27 @@ function applySelectionToPriceMarkers(markerMap: Map<string, Marker>, selectedId
   });
 }
 
-function makePriceMarkerElement(price: number, status: Property["status"]): HTMLElement {
+function makePriceMarkerElement(
+  property: Property,
+  filterStatus: string
+): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "viterra-map-price-marker-wrap";
   const pill = document.createElement("div");
   pill.className = "viterra-map-price-pill";
-  pill.textContent = status === "alquiler" ? `$${price.toLocaleString()} /mes` : `$${price.toLocaleString()}`;
+  if (property.status === "venta_y_alquiler" && !filterStatus) {
+    const rent = property.rentalPrice ?? property.price;
+    pill.textContent = `$${property.price.toLocaleString()} · $${rent.toLocaleString()}/mes`;
+  } else {
+    const amount = propertyPriceForOperation(property, filterStatus);
+    const asRent =
+      filterStatus === "alquiler" ||
+      property.status === "alquiler" ||
+      (property.status === "venta_y_alquiler" && filterStatus === "alquiler");
+    pill.textContent = asRent || (property.status === "alquiler")
+      ? `$${amount.toLocaleString()} /mes`
+      : `$${amount.toLocaleString()}`;
+  }
   wrap.appendChild(pill);
   return wrap;
 }
@@ -232,6 +257,7 @@ export function MapSearchPage() {
   const cancelPartialStrokeRef = useRef<(() => void) | null>(null);
 
   const [zone, setZone] = useState<SearchZone | null>(null);
+  const [nearbyRadiusKm, setNearbyRadiusKm] = useState<number | null>(null);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [isReducedViewport, setIsReducedViewport] = useState(
     () => (typeof window !== "undefined" ? window.innerWidth < 1024 : false)
@@ -282,6 +308,8 @@ export function MapSearchPage() {
   );
   const resultsRef = useRef<Property[]>(results);
   resultsRef.current = results;
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
 
   const selectedProperty = useMemo(
     () =>
@@ -353,12 +381,12 @@ export function MapSearchPage() {
       });
       dots.addLayer(circle);
 
-      const el = makePriceMarkerElement(p.price, p.status);
+      const el = makePriceMarkerElement(p, filtersRef.current.status);
       const icon = L.divIcon({
         html: el,
         className: "viterra-map-divicon-root",
-        iconSize: [96, 36],
-        iconAnchor: [48, 36],
+        iconSize: [120, 36],
+        iconAnchor: [60, 36],
       });
       const priceLatLng = L.latLng(lat + PRICE_LABEL_LAT_OFFSET, lng);
       const pm = L.marker(priceLatLng, { icon });
@@ -480,11 +508,7 @@ export function MapSearchPage() {
 
       L.control.zoom({ position: "bottomright" }).addTo(map);
 
-      const streetLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; CARTO',
-        subdomains: "abcd",
-        maxZoom: 20,
-      });
+      const streetLayer = getViterraStreetTileLayer(L);
       const satelliteLayer = L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         {
@@ -576,6 +600,7 @@ export function MapSearchPage() {
         drawnRef.current = poly;
         const z = zoneFromLeafletLayer(poly);
         setZone(z);
+        setNearbyRadiusKm(null);
         drawingModeRef.current = false;
         setIsDrawingMode(false);
       };
@@ -706,6 +731,7 @@ export function MapSearchPage() {
     }
     drawnRef.current = null;
     setZone(null);
+    setNearbyRadiusKm(null);
     drawingModeRef.current = false;
     setIsDrawingMode(false);
     if (isReducedViewport) setMobileShowMap(true);
@@ -720,6 +746,7 @@ export function MapSearchPage() {
     }
     drawnRef.current = null;
     setZone(null);
+    setNearbyRadiusKm(null);
     drawingModeRef.current = true;
     setIsDrawingMode(true);
     if (isReducedViewport) {
@@ -727,6 +754,42 @@ export function MapSearchPage() {
       setMobileFiltersOpen(false);
     }
   };
+
+  const expandNearbySearch = useCallback(
+    (km: number) => {
+      const map = mapRef.current;
+      const baseZone =
+        zone ??
+        ({
+          kind: "circle",
+          center: L.latLng(20.676208, -103.34721),
+          radiusM: 500,
+        } satisfies SearchZone);
+      const next = expandZoneToCircleKm(baseZone, km);
+      if (!next || next.kind !== "circle" || !map) return;
+
+      cancelPartialStrokeRef.current?.();
+      const prev = drawnRef.current;
+      if (prev && map.hasLayer(prev)) map.removeLayer(prev);
+
+      const circle = L.circle(next.center, {
+        radius: next.radiusM,
+        color: "#141c2e",
+        weight: 2,
+        fillColor: "#141c2e",
+        fillOpacity: 0.12,
+      });
+      circle.addTo(map);
+      drawnRef.current = circle;
+      setZone(next);
+      setNearbyRadiusKm(km);
+      drawingModeRef.current = false;
+      setIsDrawingMode(false);
+      map.fitBounds(circle.getBounds(), { padding: [40, 40], maxZoom: 14 });
+      if (isReducedViewport) setMobileShowMap(true);
+    },
+    [zone, isReducedViewport]
+  );
 
   useEffect(() => {
     const map = mapRef.current;
@@ -837,7 +900,12 @@ export function MapSearchPage() {
                   {results.length} {results.length === 1 ? "alojamiento" : "alojamientos"}
                 </p>
                 <p className="mt-0.5 text-[13px] font-medium text-brand-navy/65">
-                  {zone ? "Solo en el área dibujada en el mapa" : "Guadalajara y zona metropolitana"}
+                  {zone ? "Solo en el área marcada en el mapa" : "Guadalajara y zona metropolitana"}
+                  {nearbyRadiusKm != null && zone?.kind === "circle" && (
+                    <span className="ml-2 inline-block border border-brand-navy/20 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-navy">
+                      Radio: {nearbyRadiusKm} km
+                    </span>
+                  )}
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
@@ -869,7 +937,7 @@ export function MapSearchPage() {
                       : "bg-brand-navy text-white hover:bg-brand-navy/90 hover:shadow-lg"
                   )}
                 >
-                  {isDrawingMode ? "Cancelar" : "Dibujar zona"}
+                  {isDrawingMode ? "Cancelar" : "Marcar zona"}
                 </button>
                 {zone && (
                   <button
@@ -884,7 +952,7 @@ export function MapSearchPage() {
             </div>
             {isDrawingMode && (
               <p className="mt-3 rounded-none border border-primary/30 bg-primary/10 px-3 py-2 text-[12px] font-medium text-brand-navy">
-                Mantén pulsado y dibuja en el mapa · Esc para salir
+                Mantén pulsado y marca en el mapa · Esc para salir
               </p>
             )}
           </div>
@@ -924,7 +992,17 @@ export function MapSearchPage() {
             {results.length === 0 && (
               <div className="px-4 pb-16 pt-4 text-center sm:px-5">
                 <p className="text-[15px] font-semibold text-slate-900">Sin resultados</p>
-                <p className="mt-1 text-[13px] text-slate-500">Prueba otros filtros o dibuja otra área en el mapa.</p>
+                <p className="mt-1 text-[13px] text-slate-500">
+                  Prueba otros filtros o marca otra área en el mapa.
+                </p>
+                <NearbySearchEmpty
+                  hint={
+                    zone
+                      ? "Amplía el radio desde el centro del área marcada."
+                      : "Busca alrededor de Guadalajara o marca un área primero."
+                  }
+                  onSearch={expandNearbySearch}
+                />
               </div>
             )}
           </div>
@@ -964,7 +1042,7 @@ export function MapSearchPage() {
                       onClick={zone && !isDrawingMode ? redrawZone : toggleDrawingMode}
                       className="font-heading inline-flex flex-1 items-center justify-center rounded-none bg-brand-navy px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white shadow-[0_4px_12px_rgba(20,28,46,0.15)] transition-all hover:bg-brand-navy/90"
                     >
-                      {zone ? "Redibujar zona" : "Dibujar zona"}
+                      {zone ? "Remarcar zona" : "Marcar zona"}
                     </button>
                     {zone && (
                       <button
@@ -1010,7 +1088,7 @@ export function MapSearchPage() {
                       onClick={zone ? redrawZone : toggleDrawingMode}
                       className="pointer-events-auto font-heading inline-flex items-center justify-center rounded-none bg-brand-navy px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white shadow-[0_4px_12px_rgba(20,28,46,0.15)] transition-all hover:bg-brand-navy/90"
                     >
-                      {zone ? "Redibujar zona" : "Dibujar zona"}
+                      {zone ? "Remarcar zona" : "Marcar zona"}
                     </button>
                     {zone && (
                       <button
@@ -1027,7 +1105,7 @@ export function MapSearchPage() {
             )}
             <div
               ref={mapEl}
-              className="absolute inset-0 z-0 bg-slate-100 [&_.leaflet-container]:!filter-none [&_.leaflet-tile-pane]:!filter-none"
+              className="absolute inset-0 z-0 bg-slate-100"
             />
             {!mapReady && (
               <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center bg-slate-100">
@@ -1089,7 +1167,7 @@ export function MapSearchPage() {
                     </button>
                     <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-2.5rem)] flex-wrap gap-1">
                       <span className="bg-primary px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-white">
-                        {selectedProperty.status === "venta" ? "En venta" : "En renta"}
+                        {propertyStatusLabel(selectedProperty.status)}
                       </span>
                       <span className="border border-white/60 bg-white px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.1em] text-brand-navy">
                         {selectedProperty.type}
@@ -1121,14 +1199,42 @@ export function MapSearchPage() {
                       </div>
                     </div>
 
-                    <div className="mt-2.5 border border-slate-200 px-2.5 py-2">
-                      <p className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-500">Precio</p>
-                      <p className="font-heading mt-0.5 text-base font-semibold tabular-nums text-brand-navy sm:text-lg">
-                        ${selectedProperty.price.toLocaleString()}
-                        {selectedProperty.status === "alquiler" && (
-                          <span className="ml-1 text-[10px] font-medium not-italic text-slate-600">/ mes</span>
-                        )}
-                      </p>
+                    <div className="mt-2.5 space-y-1.5 border border-slate-200 px-2.5 py-2">
+                      {selectedProperty.status === "venta_y_alquiler" && (
+                        <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                          Se puede comprar o rentar
+                        </p>
+                      )}
+                      {(selectedProperty.status === "venta" ||
+                        selectedProperty.status === "venta_y_alquiler") && (
+                        <div>
+                          <p className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                            {selectedProperty.status === "venta_y_alquiler" ? "Precio de venta" : "Precio"}
+                          </p>
+                          <p className="font-heading mt-0.5 text-base font-semibold tabular-nums text-brand-navy sm:text-lg">
+                            ${selectedProperty.price.toLocaleString()}
+                          </p>
+                        </div>
+                      )}
+                      {(selectedProperty.status === "alquiler" ||
+                        selectedProperty.status === "venta_y_alquiler") && (
+                        <div>
+                          <p className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                            {selectedProperty.status === "venta_y_alquiler" ? "Precio de renta" : "Precio"}
+                          </p>
+                          <p
+                            className={cn(
+                              "font-heading tabular-nums text-brand-navy",
+                              selectedProperty.status === "venta_y_alquiler"
+                                ? "text-sm font-semibold"
+                                : "mt-0.5 text-base font-semibold sm:text-lg"
+                            )}
+                          >
+                            ${(selectedProperty.rentalPrice ?? selectedProperty.price).toLocaleString()}
+                            <span className="ml-1 text-[10px] font-medium not-italic text-slate-600">/ mes</span>
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     <Link
@@ -1150,7 +1256,7 @@ export function MapSearchPage() {
                     onClick={redrawZone}
                     className="font-heading flex flex-1 items-center justify-center rounded-none bg-brand-navy px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition-colors hover:bg-brand-navy/90"
                   >
-                    Redibujar zona
+                    Remarcar zona
                   </button>
                   <button
                     type="button"

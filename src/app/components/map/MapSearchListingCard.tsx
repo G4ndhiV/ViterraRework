@@ -3,7 +3,7 @@ import { Heart, Star } from "lucide-react";
 import { useState } from "react";
 import { ImageWithFallback } from "../figma/ImageWithFallback";
 import { cn } from "../ui/utils";
-import type { Property } from "../PropertyCard";
+import { propertyStatusLabel, type Property } from "../PropertyCard";
 
 function demoRating(id: string): string {
   const n = id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
@@ -19,6 +19,7 @@ type Props = {
 export function MapSearchListingCard({ property, selected, onSelect }: Props) {
   const [saved, setSaved] = useState(false);
   const rating = demoRating(property.id);
+  const isDual = property.status === "venta_y_alquiler";
 
   return (
     <article
@@ -46,7 +47,7 @@ export function MapSearchListingCard({ property, selected, onSelect }: Props) {
           optimizeWidth={320}
         />
         <span className="absolute left-2 top-2 border border-slate-200 bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-slate-900 shadow-sm">
-          Destacado
+          {propertyStatusLabel(property.status)}
         </span>
         <button
           type="button"
@@ -78,14 +79,27 @@ export function MapSearchListingCard({ property, selected, onSelect }: Props) {
         <p className="mt-0.5 line-clamp-1 text-[13px] text-slate-500">
           {property.type} · {property.bedrooms} rec. · {property.area} m²
         </p>
-        <p className="mt-1 text-[15px] text-slate-900">
-          <span className="font-semibold tabular-nums">${property.price.toLocaleString()}</span>
-          {property.status === "alquiler" ? (
+        {isDual && (
+          <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.06em] text-slate-500">
+            Se puede comprar o rentar
+          </p>
+        )}
+        {(property.status === "venta" || isDual) && (
+          <p className="mt-1 text-[15px] text-slate-900">
+            <span className="font-semibold tabular-nums">${property.price.toLocaleString()}</span>
+            <span className="text-[13px] font-normal text-slate-600">
+              {isDual ? " venta" : " MXN"}
+            </span>
+          </p>
+        )}
+        {(property.status === "alquiler" || isDual) && (
+          <p className={cn("text-slate-900", isDual ? "text-[13px] text-slate-600" : "mt-1 text-[15px]")}>
+            <span className={cn("tabular-nums", isDual ? "font-medium" : "font-semibold")}>
+              ${(property.rentalPrice ?? property.price).toLocaleString()}
+            </span>
             <span className="font-normal text-slate-600"> / mes</span>
-          ) : (
-            <span className="text-[13px] font-normal text-slate-600"> MXN</span>
-          )}
-        </p>
+          </p>
+        )}
         <Link
           to={`/propiedades/${property.id}`}
           className="mt-2 block text-center text-[12px] font-medium text-primary underline-offset-2 hover:underline"

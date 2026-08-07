@@ -1,8 +1,12 @@
 /**
- * Vercel Serverless Function — proxy Instagram (sin dependencia @vercel/node).
+ * Vercel Serverless Function — proxy Instagram + scrape + caché Supabase.
  */
-import https from "node:https";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { createClient } from "@supabase/supabase-js";
+import {
+  fetchFreshInstagramPosts,
+  type IgPost,
+} from "../src/lib/instagramFeedFetch";
 
 const ALLOWED_ORIGINS = new Set([
   "http://localhost:5173",
@@ -13,13 +17,8 @@ const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 const RATE_MAX = 30;
 const RATE_WINDOW_MS = 60_000;
 
-type IgPost = {
-  shortcode: string;
-  type: "reel" | "p";
-  videoUrl: string | null;
-  thumbnail: string | null;
-  caption: string;
-};
+/** Caché en memoria del proceso (instancias warm de Vercel). */
+let memoryCache: { username: string; posts: IgPost[]; at: number } | null = null;
 
 function corsOrigin(req: IncomingMessage): string {
   const origin = req.headers.origin ?? "";
@@ -27,19 +26,6 @@ function corsOrigin(req: IncomingMessage): string {
   const vercelUrl = process.env.VERCEL_URL;
   if (vercelUrl && typeof origin === "string" && origin.endsWith(vercelUrl)) return origin;
   return "https://viterra.mx";
-}
-
-function httpsGet(url: string, headers: Record<string, string>): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers }, (res) => {
-      let body = "";
-      res.on("data", (chunk: Buffer) => {
-        body += chunk.toString();
-      });
-      res.on("end", () => resolve(body));
-    });
-    req.on("error", reject);
-  });
 }
 
 function checkRateLimit(key: string): boolean {
@@ -59,12 +45,60 @@ function readQuery(req: IncomingMessage): URLSearchParams {
   return new URLSearchParams(q);
 }
 
+function supabaseAdmin() {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+async function readCache(username: string): Promise<IgPost[] | null> {
+  if (memoryCache && memoryCache.username === username && memoryCache.posts.length > 0) {
+    return memoryCache.posts;
+  }
+  const sb = supabaseAdmin();
+  if (!sb) return null;
+  const { data, error } = await sb
+    .from("instagram_feed_cache")
+    .select("posts")
+    .eq("username", username)
+    .maybeSingle();
+  if (error || !data?.posts || !Array.isArray(data.posts) || data.posts.length === 0) return null;
+  return data.posts as IgPost[];
+}
+
+async function writeCache(username: string, posts: IgPost[]): Promise<void> {
+  memoryCache = { username, posts, at: Date.now() };
+  const sb = supabaseAdmin();
+  if (!sb) return;
+  await sb.from("instagram_feed_cache").upsert({
+    username,
+    posts,
+    fetched_at: new Date().toISOString(),
+  });
+}
+
+function sendJson(
+  res: ServerResponse,
+  status: number,
+  body: unknown,
+  extraHeaders?: Record<string, string>
+) {
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json");
+  if (extraHeaders) {
+    for (const [k, v] of Object.entries(extraHeaders)) res.setHeader(k, v);
+  }
+  res.end(JSON.stringify(body));
+}
+
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   const origin = corsOrigin(req);
   res.setHeader("Access-Control-Allow-Origin", origin);
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   res.setHeader("Vary", "Origin");
+  res.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
 
   if (req.method === "OPTIONS") {
     res.statusCode = 200;
@@ -74,64 +108,41 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
   const clientKey = String(req.headers["x-forwarded-for"] ?? req.socket?.remoteAddress ?? "unknown");
   if (!checkRateLimit(clientKey)) {
-    res.statusCode = 429;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ error: "Too many requests", posts: [] }));
+    sendJson(res, 429, { error: "Too many requests", posts: [] });
     return;
   }
 
   const params = readQuery(req);
   const username = params.get("username") ?? "viterrainmobiliaria";
-  const count = Math.min(parseInt(params.get("count") ?? "3", 10), 9);
+  const parsedCount = parseInt(params.get("count") ?? "3", 10);
+  const count = Number.isFinite(parsedCount) && parsedCount > 0 ? Math.min(parsedCount, 9) : 3;
 
   if (!/^[a-zA-Z0-9._]{1,30}$/.test(username)) {
-    res.statusCode = 400;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ error: "Invalid username", posts: [] }));
+    sendJson(res, 400, { error: "Invalid username", posts: [] });
     return;
   }
 
   try {
-    const body = await httpsGet(
-      `https://i.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`,
-      {
-        "User-Agent":
-          "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
-        "x-ig-app-id": "936619743392459",
-        Accept: "application/json",
-        "Accept-Language": "es-MX,es;q=0.9",
-        Referer: "https://www.instagram.com/",
-      },
-    );
+    const fresh = await fetchFreshInstagramPosts(username, count);
+    if (fresh.length > 0) {
+      await writeCache(username, fresh);
+      sendJson(res, 200, { posts: fresh.slice(0, count), stale: false });
+      return;
+    }
 
-    const data = JSON.parse(body) as {
-      data: { user: { edge_owner_to_timeline_media: { edges: { node: Record<string, unknown> }[] } } };
-    };
+    const cached = await readCache(username);
+    if (cached && cached.length > 0) {
+      sendJson(res, 200, { posts: cached.slice(0, count), stale: true }, { "X-Feed-Stale": "1" });
+      return;
+    }
 
-    const edges = data?.data?.user?.edge_owner_to_timeline_media?.edges ?? [];
-
-    const posts: IgPost[] = edges.slice(0, count).map(({ node: n }) => {
-      const isVideo = n.__typename === "GraphVideo";
-      const captionEdges =
-        (n.edge_media_to_caption as { edges: { node: { text: string } }[] } | undefined)?.edges ?? [];
-      const caption = captionEdges[0]?.node?.text ?? "";
-
-      return {
-        shortcode: n.shortcode as string,
-        type: isVideo ? "reel" : "p",
-        videoUrl: isVideo ? ((n.video_url as string) ?? null) : null,
-        thumbnail: (n.thumbnail_src ?? n.display_url ?? null) as string | null,
-        caption: caption.slice(0, 140),
-      };
-    });
-
-    res.statusCode = 200;
-    res.setHeader("Content-Type", "application/json");
-    res.setHeader("Cache-Control", "s-maxage=300");
-    res.end(JSON.stringify({ posts }));
+    sendJson(res, 502, { error: "Instagram feed unavailable", posts: [] });
   } catch {
-    res.statusCode = 500;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ error: "Instagram feed unavailable", posts: [] }));
+    const cached = await readCache(username);
+    if (cached && cached.length > 0) {
+      sendJson(res, 200, { posts: cached.slice(0, count), stale: true }, { "X-Feed-Stale": "1" });
+      return;
+    }
+    sendJson(res, 500, { error: "Instagram feed unavailable", posts: [] });
   }
 }

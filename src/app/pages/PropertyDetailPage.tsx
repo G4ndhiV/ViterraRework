@@ -7,6 +7,7 @@ import { useCatalogProperties } from "../hooks/useCatalogProperties";
 import { getSupabaseClient, syncSupabaseAuthSession } from "../lib/supabaseClient";
 import { fetchDevelopmentByTokkoId } from "../lib/supabaseDevelopments";
 import { messageForCatalogLeadRpcError, submitCatalogLeadViaRpc } from "../lib/supabaseLeads";
+import { getViterraStreetTileLayer } from "../lib/mapTileConfig";
 import { displayDeliveryDate, type Development } from "../data/developments";
 import {
   Bed,
@@ -30,7 +31,7 @@ import { cn } from "../components/ui/utils";
 import { FeatureSection } from "../components/FeatureSectionBlocks";
 import { WhatsAppGlyph } from "../components/WhatsAppGlyph";
 import { PropertyVideoPlayer } from "../components/PropertyVideoPlayer";
-import { propertyTours3dList, propertyVideosList, type Property } from "../components/PropertyCard";
+import { propertyTours3dList, propertyVideosList, propertyStatusLabel, type Property } from "../components/PropertyCard";
 import { propertyVideoDisplayTitle, resolveAllPropertyVideoUrls } from "../lib/propertyVideos";
 import {
   propertyTour3dDisplayTitle,
@@ -293,18 +294,15 @@ export function PropertyDetailPage() {
         if (cancelled || !mapRef.current) return;
         await import("leaflet/dist/leaflet.css");
         const map = L.map(mapRef.current).setView([property.coordinates.lat, property.coordinates.lng], 15);
-        const street = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-          subdomains: "abcd", maxZoom: 20,
-        });
+        const street = getViterraStreetTileLayer(L);
         const satellite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
           attribution: "Tiles &copy; Esri", maxZoom: 20,
         });
         (mapViewMode === "satellite" ? satellite : street).addTo(map);
         const marker = L.divIcon({
           className: "custom-marker",
-          html: `<div style="filter:drop-shadow(0 4px 10px rgba(20,28,46,0.35))"><svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="20" r="18" fill="#141c2e" stroke="#9a7b4f" stroke-width="2"/><path d="M20 13L14 17V25H26V17L20 13Z" fill="#9a7b4f"/></svg></div>`,
-          iconSize: [40, 40], iconAnchor: [20, 20],
+          html: `<div style="filter:drop-shadow(0 4px 10px rgba(20,28,46,0.35))"><svg width="42" height="42" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="20" r="18" fill="#141c2e" stroke="#9a7b4f" stroke-width="2.5"/><path d="M20 13L14 17V25H26V17L20 13Z" fill="#9a7b4f"/></svg></div>`,
+          iconSize: [42, 42], iconAnchor: [21, 21],
         });
         const mapMarker = L.marker([property.coordinates.lat, property.coordinates.lng], { icon: marker }).addTo(map);
         mapMarker.on("click", () => window.open(`https://www.google.com/maps/search/?api=1&query=${property.coordinates!.lat},${property.coordinates!.lng}`, "_blank", "noopener,noreferrer"));
@@ -502,7 +500,7 @@ export function PropertyDetailPage() {
                     <ImageWithFallback
                       src={propertyImages[currentImageIndex] ?? property.image}
                       alt={displayTitle}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain"
                       loading="eager"
                       fetchPriority="high"
                       optimizeWidth={1400}
@@ -547,7 +545,7 @@ export function PropertyDetailPage() {
                     fontSize: "0.62rem", letterSpacing: "0.14em", fontWeight: 700,
                     color: T.gold, textTransform: "uppercase",
                   }}>
-                    {property.status === "venta" ? "En venta" : "En renta"}
+                    {propertyStatusLabel(property.status)}
                   </span>
                   <span style={{
                     padding: "4px 11px", borderRadius: 4,
@@ -1022,7 +1020,7 @@ export function PropertyDetailPage() {
                     </>
                   ) : null}
                   <div style={{ height: 1, background: T.border }} />
-                  <DetailRow label="Estado">{property.status === "venta" ? "En venta" : property.status === "venta_y_alquiler" ? "Venta y Renta" : "En renta"}</DetailRow>
+                  <DetailRow label="Estado">{propertyStatusLabel(property.status)}</DetailRow>
                   <div style={{ height: 1, background: T.border }} />
                   <DetailRow label="Actualizado">
                     <span className="inline-flex items-center gap-1.5">

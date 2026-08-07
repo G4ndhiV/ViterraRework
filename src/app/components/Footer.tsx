@@ -15,6 +15,7 @@ import { CONTACT_SOCIAL_LABELS, type ContactInfoIcon, type FooterNavLink } from 
 import { footerServiceLinksFromCards } from "../../lib/footerSiteLinks";
 import { mergeSiteSection } from "../../lib/siteContentMerge";
 import { ContactSocialGlyph } from "./ContactSocialGlyph";
+import { WhatsAppGlyph } from "./WhatsAppGlyph";
 import { usePreviewCanvas, usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { PreviewSectionChrome } from "./admin/siteEditor/PreviewSectionChrome";
 import { PreviewFieldPulse } from "./admin/siteEditor/PreviewFieldPulse";
@@ -36,6 +37,13 @@ function firstLine(text: string) {
 function telHref(phoneLines: string) {
   const digits = firstLine(phoneLines).replace(/\D/g, "");
   return digits ? `tel:${digits}` : "#";
+}
+
+function whatsappHref(phoneLines: string) {
+  const digits = firstLine(phoneLines).replace(/\D/g, "");
+  if (!digits) return "#";
+  const formattedDigits = digits.length === 10 ? `52${digits}` : digits;
+  return `https://wa.me/${formattedDigits}`;
 }
 
 /** Formatea un teléfono MX de 10 dígitos como "(33) 3629-7122"; deja intacto cualquier otro formato. */
@@ -117,6 +125,17 @@ function FooterContactRow({
   const isPhone = icon === "phone";
   const isMail = icon === "mail";
   const isMap = icon === "map";
+
+  const iconElement = isPhone ? (
+    <WhatsAppGlyph className="w-5 h-5 text-[#25D366] flex-shrink-0 mt-0.5 transition-transform duration-200 group-hover:scale-110" />
+  ) : isMap ? (
+    <MapPin className="w-5 h-5 text-[#EF4444] flex-shrink-0 mt-0.5 transition-transform duration-200 group-hover:scale-110" strokeWidth={1.75} />
+  ) : isMail ? (
+    <Mail className="w-5 h-5 text-[#3B82F6] flex-shrink-0 mt-0.5 transition-transform duration-200 group-hover:scale-110" strokeWidth={1.75} />
+  ) : (
+    <Icon className="w-5 h-5 text-slate-400 flex-shrink-0 mt-0.5 transition-transform duration-200 group-hover:scale-110" strokeWidth={1.75} />
+  );
+
   const inner = (
     <span
       className="group-hover:text-white transition-colors whitespace-pre-line leading-relaxed"
@@ -128,13 +147,15 @@ function FooterContactRow({
 
   return (
     <li className={cn("flex gap-3 group", isPhone ? "items-center" : "items-start")}>
-      <Icon
-        className="w-5 h-5 text-slate-400 group-hover:text-white flex-shrink-0 mt-0.5 transition-colors"
-        strokeWidth={1.5}
-      />
+      {iconElement}
       <PreviewFieldPulse blockId="footer-contact" fieldKey={fieldKey}>
         {isPhone ? (
-          <a href={telHref(body)} className="hover:text-white transition-colors">
+          <a
+            href={whatsappHref(body)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-white transition-colors"
+          >
             {inner}
           </a>
         ) : isMail ? (
