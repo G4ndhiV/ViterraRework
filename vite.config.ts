@@ -3,7 +3,7 @@ import path from "path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { fetchFreshInstagramPosts, type IgPost } from "./src/lib/instagramFeedFetch";
+import { fetchFreshInstagramPosts, type IgPost } from "./api/_lib/instagramFeedFetch";
 
 function figmaAssetResolver() {
   return {

@@ -1,12 +1,9 @@
 /**
  * Proxy para obtener los últimos posts de Instagram sin restricciones CORS.
- * Devuelve los 3 posts más recientes con videoUrl para reproducción nativa.
  *
  * GET /functions/v1/instagram-feed
- *   ?username=viterrainmobiliaria   (opcional, default fijo)
- *   &count=3                        (opcional, default 3)
- *
- * No requiere autenticación (datos públicos de perfil público).
+ *   ?username=viterrainmobiliaria   (opcional)
+ *   &count=3                        (opcional)
  */
 
 const CORS = {
@@ -29,52 +26,136 @@ type IgPost = {
   caption: string;
 };
 
+const IG_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
+
+function unescapeIgUrl(raw: string): string {
+  let s = raw;
+  for (let i = 0; i < 5; i++) {
+    const next = s
+      .replace(/\\\\/g, "\\")
+      .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex: string) =>
+        String.fromCharCode(parseInt(hex, 16))
+      )
+      .replace(/\\\//g, "/")
+      .replace(/\\"/g, '"');
+    if (next === s) break;
+    s = next;
+  }
+  return s;
+}
+
+function scrapePostsFromHtml(html: string, count: number): IgPost[] {
+  const posts: IgPost[] = [];
+  const seen = new Set<string>();
+  const rootRe =
+    /shortcode_media\\":\{\\"__typename\\":\\"(GraphVideo|GraphSidecar|GraphImage)\\",\\"id\\":\\"\d+\\",\\"shortcode\\":\\"([A-Za-z0-9_-]+)\\"/g;
+
+  for (const m of html.matchAll(rootRe)) {
+    const typename = m[1];
+    const shortcode = m[2];
+    if (seen.has(shortcode)) continue;
+    seen.add(shortcode);
+    const chunk = html.slice(m.index ?? 0, (m.index ?? 0) + 1800);
+    const thumbMatch = chunk.match(/\\"display_url\\":\\"((?:[^"\\]|\\.)+?)\\"/);
+    const videoMatch = chunk.match(/\\"video_url\\":\\"((?:[^"\\]|\\.)+?)\\"/);
+    const isVideo = typename === "GraphVideo" || /\\"is_video\\":true/.test(chunk.slice(0, 400));
+    posts.push({
+      shortcode,
+      type: isVideo ? "reel" : "p",
+      videoUrl: videoMatch ? unescapeIgUrl(videoMatch[1]) : null,
+      thumbnail: thumbMatch ? unescapeIgUrl(thumbMatch[1]) : null,
+      caption: "",
+    });
+    if (posts.length >= count) return posts;
+  }
+  return posts.slice(0, count);
+}
+
+function mapWebProfileEdges(
+  edges: { node: Record<string, unknown> }[],
+  count: number
+): IgPost[] {
+  return edges
+    .slice(0, count)
+    .map(({ node: n }) => {
+      const isVideo = n.__typename === "GraphVideo";
+      const captionEdges =
+        (n.edge_media_to_caption as { edges: { node: { text: string } }[] } | undefined)?.edges ?? [];
+      const caption = captionEdges[0]?.node?.text ?? "";
+      return {
+        shortcode: String(n.shortcode ?? ""),
+        type: (isVideo ? "reel" : "p") as "reel" | "p",
+        videoUrl: isVideo ? ((n.video_url as string) ?? null) : null,
+        thumbnail: (n.thumbnail_src ?? n.display_url ?? null) as string | null,
+        caption: caption.slice(0, 140),
+      };
+    })
+    .filter((p) => Boolean(p.shortcode));
+}
+
+async function fetchFresh(username: string, count: number): Promise<IgPost[]> {
+  try {
+    const embedRes = await fetch(`https://www.instagram.com/${encodeURIComponent(username)}/embed/`, {
+      headers: {
+        "User-Agent": IG_UA,
+        Accept: "text/html,application/xhtml+xml",
+        "Accept-Language": "es-MX,es;q=0.9",
+        Referer: `https://www.instagram.com/${username}/`,
+      },
+    });
+    if (embedRes.ok) {
+      const posts = scrapePostsFromHtml(await embedRes.text(), count);
+      if (posts.length > 0) return posts;
+    }
+  } catch {
+    /* continue */
+  }
+
+  for (const host of ["www.instagram.com", "i.instagram.com"] as const) {
+    try {
+      const igRes = await fetch(
+        `https://${host}/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`,
+        {
+          headers: {
+            "User-Agent": IG_UA,
+            "x-ig-app-id": "936619743392459",
+            Accept: "application/json",
+            "Accept-Language": "es-MX,es;q=0.9",
+            Referer: "https://www.instagram.com/",
+          },
+        }
+      );
+      if (!igRes.ok) continue;
+      const data = await igRes.json();
+      const edges: { node: Record<string, unknown> }[] =
+        data?.data?.user?.edge_owner_to_timeline_media?.edges ?? [];
+      const posts = mapWebProfileEdges(edges, count);
+      if (posts.length > 0) return posts;
+    } catch {
+      /* next */
+    }
+  }
+
+  return [];
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
   const url = new URL(req.url);
   const username = url.searchParams.get("username") ?? "viterrainmobiliaria";
-  const count = Math.min(parseInt(url.searchParams.get("count") ?? "3", 10), 9);
+  const parsedCount = parseInt(url.searchParams.get("count") ?? "3", 10);
+  const count = Number.isFinite(parsedCount) && parsedCount > 0 ? Math.min(parsedCount, 9) : 3;
+
+  if (!/^[a-zA-Z0-9._]{1,30}$/.test(username)) {
+    return json({ error: "Invalid username", posts: [] }, 400);
+  }
 
   try {
-    const igRes = await fetch(
-      `https://i.instagram.com/api/v1/users/web_profile_info/?username=${username}`,
-      {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
-          "x-ig-app-id": "936619743392459",
-          "Accept": "application/json",
-          "Accept-Language": "es-MX,es;q=0.9",
-        },
-      }
-    );
-
-    if (!igRes.ok) {
-      return json({ error: `Instagram responded ${igRes.status}`, posts: [] }, 502);
-    }
-
-    const data = await igRes.json();
-    const edges: unknown[] =
-      data?.data?.user?.edge_owner_to_timeline_media?.edges ?? [];
-
-    const posts: IgPost[] = edges.slice(0, count).map((e: unknown) => {
-      const n = (e as { node: Record<string, unknown> }).node;
-      const typename = n.__typename as string;
-      const isVideo = typename === "GraphVideo";
-      const captionEdges = (n.edge_media_to_caption as { edges: { node: { text: string } }[] } | undefined)?.edges ?? [];
-      const caption = captionEdges[0]?.node?.text ?? "";
-
-      return {
-        shortcode: n.shortcode as string,
-        type: isVideo ? "reel" : "p",
-        videoUrl: isVideo ? ((n.video_url as string) ?? null) : null,
-        thumbnail: (n.thumbnail_src as string | undefined) ?? (n.display_url as string | undefined) ?? null,
-        caption: caption.slice(0, 140),
-      };
-    });
-
-    return json({ posts });
+    const posts = await fetchFresh(username, count);
+    if (posts.length > 0) return json({ posts });
+    return json({ error: "Instagram feed unavailable", posts: [] }, 502);
   } catch (err) {
     return json({ error: String(err), posts: [] }, 500);
   }
