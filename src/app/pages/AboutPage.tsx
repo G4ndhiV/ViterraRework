@@ -541,51 +541,47 @@ export function AboutPage() {
           </Reveal>
 
           <div className="relative">
-            <div className="absolute left-1/2 h-full w-0.5 -translate-x-1/2 transform bg-brand-navy/12" />
+            {/* Línea horizontal en Desktop (PC) */}
+            <div className="hidden lg:block absolute top-[26px] left-[6%] right-[6%] h-0.5 bg-brand-navy/15 z-0" />
+            
+            {/* Línea vertical en Mobile */}
+            <div className="lg:hidden absolute left-4 top-3 bottom-3 w-0.5 bg-brand-navy/15 z-0" />
 
-            <div className="space-y-16">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 sm:gap-8 lg:gap-5 relative z-10">
               {a.milestones.map((milestone, index) => (
                 <Reveal
                   key={`${milestone.year}-${index}`}
-                  delay={Math.min(index * 0.08, 0.45)}
-                  y={24}
-                  className={cn(
-                    "flex items-center gap-8",
-                    pl.preview ? "flex-col" : index % 2 === 0 ? "flex-row" : "flex-row-reverse"
-                  )}
+                  delay={Math.min(index * 0.06, 0.35)}
+                  y={20}
+                  className="relative flex flex-col pl-10 lg:pl-0"
                 >
-                  <div
-                    className={cn(
-                      "flex-1",
-                      pl.preview ? "text-center" : index % 2 === 0 ? "text-right" : "text-left"
-                    )}
+                  {/* Punto indicador (Nodal dot) */}
+                  <div className="absolute left-4 -translate-x-1/2 top-4 lg:relative lg:left-0 lg:translate-x-0 lg:top-0 lg:mx-auto lg:mb-5 z-20 shrink-0">
+                    <div className="h-4 w-4 lg:h-5 lg:w-5 rounded-full border-4 border-white bg-primary shadow-md transition-transform hover:scale-125 duration-300" />
+                  </div>
+
+                  {/* Tarjeta con información del hito */}
+                  <motion.div
+                    className="flex flex-col h-full rounded-2xl border border-brand-navy/10 bg-white p-5 sm:p-6 shadow-sm transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:-translate-y-1 text-left"
+                    whileHover={reduceMotion ? undefined : { y: -4 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 26 }}
                   >
-                    <motion.div
-                      className="inline-block rounded-lg border border-brand-navy/10 bg-white p-6"
-                      whileHover={reduceMotion ? undefined : { scale: 1.02 }}
-                      transition={{ type: "spring", stiffness: 400, damping: 26 }}
-                    >
-                      <div className="font-heading mb-2 text-sm uppercase tracking-[0.1em] text-brand-navy/60">
-                        <PreviewFieldPulse blockId="about-timeline" fieldKey={`about-timeline-${index}-year`} className="inline-block">
-                          {milestone.year}
-                        </PreviewFieldPulse>
-                      </div>
-                      <h3 className="font-heading mb-2 text-xl font-semibold text-brand-navy">
-                        <PreviewFieldPulse blockId="about-timeline" fieldKey={`about-timeline-${index}-title`} className="inline-block">
-                          {milestone.title}
-                        </PreviewFieldPulse>
-                      </h3>
-                      <p className="font-heading text-sm leading-relaxed text-brand-navy/72 font-normal not-italic">
-                        <PreviewFieldPulse blockId="about-timeline" fieldKey={`about-timeline-${index}-description`} className="block">
-                          {milestone.description}
-                        </PreviewFieldPulse>
-                      </p>
-                    </motion.div>
-                  </div>
-                  <div className="relative z-10">
-                    <div className="h-4 w-4 rounded-full border-4 border-white shadow-lg bg-primary" />
-                  </div>
-                  <div className="flex-1" />
+                    <div className="font-heading mb-1.5 text-xs font-bold uppercase tracking-[0.14em] text-primary">
+                      <PreviewFieldPulse blockId="about-timeline" fieldKey={`about-timeline-${index}-year`} className="inline-block">
+                        {milestone.year}
+                      </PreviewFieldPulse>
+                    </div>
+                    <h3 className="font-heading mb-3 text-base sm:text-lg font-semibold leading-snug text-brand-navy min-h-[2.8rem] sm:min-h-[3.25rem] flex items-start">
+                      <PreviewFieldPulse blockId="about-timeline" fieldKey={`about-timeline-${index}-title`} className="inline-block">
+                        {milestone.title}
+                      </PreviewFieldPulse>
+                    </h3>
+                    <p className="font-heading text-xs sm:text-sm leading-relaxed text-brand-navy/72 font-normal not-italic">
+                      <PreviewFieldPulse blockId="about-timeline" fieldKey={`about-timeline-${index}-description`} className="block">
+                        {milestone.description}
+                      </PreviewFieldPulse>
+                    </p>
+                  </motion.div>
                 </Reveal>
               ))}
             </div>

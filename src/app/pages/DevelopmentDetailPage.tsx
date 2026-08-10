@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { useDevelopmentDetail } from "../hooks/useDevelopmentsCatalog";
+import { getViterraStreetTileLayer } from "../lib/mapTileConfig";
 import { displayDeliveryDate } from "../data/developments";
 import { previewDevelopmentReferenceCode } from "../lib/developmentReferenceCode";
 import { developmentTours3dList, developmentVideosList } from "../lib/developmentMedia";
@@ -129,7 +130,7 @@ export function DevelopmentDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
-  const [mapViewMode, setMapViewMode] = useState<"map" | "satellite">("map");
+  const [mapViewMode, setMapViewMode] = useState<"map" | "satellite">("satellite");
   const mapRef         = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const reduceMotion   = useReducedMotion();
@@ -144,18 +145,17 @@ export function DevelopmentDetailPage() {
         if (cancelled || !mapRef.current) return;
         await import("leaflet/dist/leaflet.css");
         const map = (L as any).map(mapRef.current).setView([development.coordinates.lat, development.coordinates.lng], 15);
-        const isSatellite = mapViewMode === "satellite";
-        const url = isSatellite
-          ? "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-          : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
-        const opts = isSatellite
-          ? { attribution: "Tiles &copy; Esri", maxZoom: 20 }
-          : { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', subdomains: "abcd", maxZoom: 20 };
-        (L as any).tileLayer(url, opts).addTo(map);
+        if (mapViewMode === "satellite") {
+          (L as any).tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+            attribution: "Tiles &copy; Esri", maxZoom: 20,
+          }).addTo(map);
+        } else {
+          getViterraStreetTileLayer(L).addTo(map);
+        }
         const customIcon = (L as any).divIcon({
           className: "custom-marker",
-          html: `<div style="filter:drop-shadow(0 4px 10px rgba(20,28,46,0.35))"><svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="20" r="18" fill="#141c2e" stroke="#9a7b4f" stroke-width="2"/><path d="M20 13L14 17V25H26V17L20 13Z" fill="#9a7b4f"/></svg></div>`,
-          iconSize: [40, 40], iconAnchor: [20, 20],
+          html: `<div style="filter:drop-shadow(0 4px 10px rgba(20,28,46,0.35))"><svg width="42" height="42" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="20" r="18" fill="#141c2e" stroke="#9a7b4f" stroke-width="2.5"/><path d="M20 13L14 17V25H26V17L20 13Z" fill="#9a7b4f"/></svg></div>`,
+          iconSize: [42, 42], iconAnchor: [21, 21],
         });
         const marker = (L as any).marker([development.coordinates.lat, development.coordinates.lng], { icon: customIcon }).addTo(map);
         marker.on("click", () => window.open(`https://www.google.com/maps/search/?api=1&query=${development.coordinates.lat},${development.coordinates.lng}`, "_blank", "noopener,noreferrer"));

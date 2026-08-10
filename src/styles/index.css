@@ -11,8 +11,18 @@
   border-radius: 0 !important;
 }
 
-/* Contención de mapas Leaflet embebidos (evita que panes/tiles tapen el header) */
+/* Contención de mapas Leaflet embebidos y mejora de contraste/claridad visual */
 .leaflet-container {
   max-width: 100%;
-  background: #f1f5f9;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+}
+
+/* Solo tiles de calle (Positron) — NO usar `.leaflet-tile-pane` genérico: esa capa se
+   comparte con la satelital cuando ambas coexisten en el mismo mapa, así que un filtro ahí
+   también oscurece/satura las fotos aéreas. Orden importa (se aplica en secuencia):
+   oscurecer primero y luego estirar el contraste para que las calles "clipeen" de vuelta
+   a blanco puro mientras el terreno queda en gris. Invertir el orden anula el efecto. */
+.viterra-street-tiles {
+  filter: brightness(0.8) contrast(1.7) !important;
 }
