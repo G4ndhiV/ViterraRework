@@ -1,4 +1,10 @@
 {
+  "functions": {
+    "api/instagram-feed.ts": {
+      "maxDuration": 30,
+      "includeFiles": "api/_lib/**"
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",

@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+import { scrapePostsFromHtml, type IgPost } from "../../lib/instagramFeedFetch";
 
-export type InstagramPost = {
-  shortcode: string;
-  type: "reel" | "p";
-  videoUrl: string | null;
-  thumbnail: string | null;
-  caption: string;
-};
+export type InstagramPost = IgPost;
 
 const IG_USERNAME = "viterrainmobiliaria";
 const MAX_ATTEMPTS = 3;
@@ -37,16 +32,80 @@ function writeLocalCache(posts: InstagramPost[]) {
   }
 }
 
+function parseFeedPayload(text: string, count: number): InstagramPost[] {
+  let data: { posts?: InstagramPost[]; error?: string };
+  try {
+    data = JSON.parse(text) as { posts?: InstagramPost[]; error?: string };
+  } catch {
+    throw new Error("instagram-feed non-json");
+  }
+  if (Array.isArray(data?.posts) && data.posts.length > 0) {
+    return data.posts.slice(0, count).filter((p) => Boolean(p?.shortcode));
+  }
+  throw new Error(data?.error || "instagram-feed empty");
+}
+
 async function fetchFeed(count: number, signal?: AbortSignal): Promise<InstagramPost[]> {
   const res = await fetch(
     `/api/instagram-feed?username=${encodeURIComponent(IG_USERNAME)}&count=${count}&_=${Date.now()}`,
     { cache: "no-store", signal }
   );
-  const data = (await res.json()) as { posts?: InstagramPost[]; error?: string };
-  if (Array.isArray(data?.posts) && data.posts.length > 0) {
-    return data.posts.slice(0, count).filter((p) => Boolean(p?.shortcode));
+  const text = await res.text();
+  return parseFeedPayload(text, count);
+}
+
+async function fetchFeedFromSupabase(count: number, signal?: AbortSignal): Promise<InstagramPost[]> {
+  const base = import.meta.env.VITE_SUPABASE_URL?.trim();
+  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+  if (!base || !anon) return [];
+
+  // 1) Edge Function (si está desplegada)
+  try {
+    const res = await fetch(
+      `${base}/functions/v1/instagram-feed?username=${encodeURIComponent(IG_USERNAME)}&count=${count}`,
+      {
+        cache: "no-store",
+        signal,
+        headers: { Authorization: `Bearer ${anon}`, apikey: anon },
+      }
+    );
+    if (res.ok) {
+      const text = await res.text();
+      try {
+        return parseFeedPayload(text, count);
+      } catch {
+        /* continue */
+      }
+    }
+  } catch {
+    /* continue */
   }
-  throw new Error(data?.error || `instagram-feed ${res.status}`);
+
+  // 2) Tabla de caché (lectura pública RLS)
+  try {
+    const res = await fetch(
+      `${base}/rest/v1/instagram_feed_cache?username=eq.${encodeURIComponent(IG_USERNAME)}&select=posts`,
+      {
+        cache: "no-store",
+        signal,
+        headers: {
+          apikey: anon,
+          Authorization: `Bearer ${anon}`,
+          Accept: "application/json",
+        },
+      }
+    );
+    if (!res.ok) return [];
+    const rows = (await res.json()) as { posts?: InstagramPost[] }[];
+    const posts = rows?.[0]?.posts;
+    if (Array.isArray(posts) && posts.length > 0) {
+      return posts.slice(0, count).filter((p) => Boolean(p?.shortcode));
+    }
+  } catch {
+    /* empty */
+  }
+
+  return [];
 }
 
 /** Último recurso en el navegador: HTML del /embed/ vía proxy CORS. */
@@ -66,42 +125,13 @@ async function fetchFeedFromBrowser(count: number, signal?: AbortSignal): Promis
       const res = await fetch(url, { signal, cache: "no-store" });
       if (!res.ok) continue;
       const html = await res.text();
-      const posts = scrapeShortcodesFromHtml(html, count);
+      const posts = scrapePostsFromHtml(html, count);
       if (posts.length > 0) return posts;
     } catch {
       /* next proxy */
     }
   }
   return [];
-}
-
-function scrapeShortcodesFromHtml(html: string, count: number): InstagramPost[] {
-  const posts: InstagramPost[] = [];
-  const seen = new Set<string>();
-
-  const rootRe =
-    /shortcode_media\\":\{\\"__typename\\":\\"(GraphVideo|GraphSidecar|GraphImage)\\",\\"id\\":\\"\d+\\",\\"shortcode\\":\\"([A-Za-z0-9_-]+)\\"/g;
-
-  for (const m of html.matchAll(rootRe)) {
-    const typename = m[1];
-    const shortcode = m[2];
-    if (seen.has(shortcode)) continue;
-    seen.add(shortcode);
-    const chunk = html.slice(m.index ?? 0, (m.index ?? 0) + 1800);
-    const thumbMatch = chunk.match(/\\"display_url\\":\\"((?:[^"\\]|\\.)+?)\\"/);
-    posts.push({
-      shortcode,
-      type: typename === "GraphVideo" ? "reel" : "p",
-      videoUrl: null,
-      thumbnail: thumbMatch
-        ? thumbMatch[1].replace(/\\u0026/g, "&").replace(/\\\//g, "/")
-        : null,
-      caption: "",
-    });
-    if (posts.length >= count) return posts;
-  }
-
-  return posts;
 }
 
 export function useInstagramFeed(count = 3) {
@@ -117,6 +147,7 @@ export function useInstagramFeed(count = 3) {
       setLoading(true);
       setError(false);
       let lastErr: unknown;
+
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         if (signal?.aborted) return;
         try {
@@ -132,6 +163,21 @@ export function useInstagramFeed(count = 3) {
           if (signal?.aborted) return;
           await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
         }
+      }
+
+      if (signal?.aborted) return;
+
+      try {
+        const fromSb = await fetchFeedFromSupabase(count, signal);
+        if (fromSb.length > 0) {
+          setPosts(fromSb);
+          writeLocalCache(fromSb);
+          setLoading(false);
+          setError(false);
+          return;
+        }
+      } catch (err) {
+        lastErr = err;
       }
 
       if (signal?.aborted) return;
