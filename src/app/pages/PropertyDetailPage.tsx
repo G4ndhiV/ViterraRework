@@ -40,6 +40,7 @@ import {
 import { useSiteContent } from "../../contexts/SiteContentContext";
 import { mergeSiteSection } from "../../lib/siteContentMerge";
 import { resolveWhatsappHref, whatsappDisplayLabel } from "../lib/whatsappLink";
+import { appendListingLinkToMessage, propertyPublicUrl } from "../lib/publicListingUrl";
 import { resolveTelHref, formatPhoneForDisplay } from "../lib/phoneLink";
 import { hasRichDescription, RICH_DESCRIPTION_HTML_CLASS, sanitizeRichHtml } from "../lib/propertyDescription";
 import { IFRAME_SANDBOX_ATTR } from "../lib/safeEmbed";
@@ -227,7 +228,10 @@ export function PropertyDetailPage() {
   const hasVideo  = resolvedVideos.length > 0;
   const hasTour3d = resolvedTours3d.length > 0;
 
-  const whatsappInterestMessage = `Hola, me interesa la propiedad ${property?.publicationTitle?.trim() || property?.title || ""}.`;
+  const whatsappInterestMessage = useMemo(() => {
+    const base = `Hola, me interesa la propiedad ${property?.publicationTitle?.trim() || property?.title || ""}.`;
+    return appendListingLinkToMessage(base, propertyPublicUrl(property?.id, property?.tokkoId));
+  }, [property?.publicationTitle, property?.title, property?.id, property?.tokkoId]);
   const telHref = useMemo(() => {
     const fromProp = resolveTelHref(property?.contactPhone);
     if (fromProp) return fromProp;
