@@ -44,7 +44,7 @@ export function DevelopmentInventorySection({
       description="Busca propiedades del catálogo y asígnalas a este desarrollo. Unidades y rango de precio se actualizan al guardar o al vincular."
     >
       <div className="mb-4 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-primary/15 bg-primary/[0.04] p-4">
+        <div className="rounded-xl border border-slate-300 bg-slate-900/[0.04] p-4">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
             Unidades mostradas
           </p>
@@ -92,7 +92,7 @@ export function DevelopmentInventorySection({
               </div>
               <button
                 type="button"
-                className="shrink-0 text-xs font-semibold text-primary hover:underline"
+                className="shrink-0 text-xs font-semibold text-slate-700 hover:text-slate-900 hover:underline"
                 onClick={() => onEditProperty(p)}
               >
                 Editar ficha

@@ -142,7 +142,7 @@ export function PropertyVideosEditor({
                   </div>
                   <button
                     type="button"
-                    className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                    className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-900 transition-colors"
                     onClick={() => void removeAt(index)}
                     aria-label="Quitar video"
                   >

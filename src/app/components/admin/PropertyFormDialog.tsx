@@ -272,7 +272,7 @@ export function PropertyFormDialog({
         ) : (
           <form onSubmit={handleSubmit} className="flex min-h-0 w-full flex-1">
             {/* Navegación lateral */}
-            <aside className="hidden w-[17rem] shrink-0 flex-col border-r border-white/10 bg-brand-navy text-white md:flex">
+            <aside className="hidden w-[17rem] shrink-0 flex-col border-r border-white/10 bg-[#0d1117] text-white md:flex">
               <div className="border-b border-white/10 px-5 py-6">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/50">Propiedades</p>
                 <h2 className="font-heading mt-1 text-xl font-semibold tracking-tight">
@@ -294,17 +294,17 @@ export function PropertyFormDialog({
                       className={cn(
                         "flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition",
                         active
-                          ? "bg-white/12 text-white ring-1 ring-white/20"
+                          ? "bg-white/12 text-white ring-1 ring-white/20 font-medium"
                           : "text-white/75 hover:bg-white/8 hover:text-white",
                       )}
                     >
                       <span
                         className={cn(
-                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold",
-                          active ? "bg-primary text-white" : "bg-white/10 text-white/80",
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold transition-colors",
+                          active ? "bg-slate-800 text-white ring-1 ring-slate-700 shadow-sm" : "bg-white/10 text-white/80",
                         )}
                       >
-                        {active ? <Icon className="h-4 w-4" /> : i + 1}
+                        {active ? <Icon className="h-4 w-4 text-white" /> : i + 1}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm font-semibold">{step.label}</span>
@@ -355,7 +355,7 @@ export function PropertyFormDialog({
                       Cerrar
                     </Button>
                   </DialogClose>
-                  <Button type="submit" className="rounded-xl bg-primary px-5 font-semibold shadow-md">
+                  <Button type="submit" className="rounded-xl bg-slate-900 text-white hover:bg-slate-800 border border-slate-800 px-5 font-semibold shadow-sm transition-colors">
                     {mode === "create" ? "Crear propiedad" : "Guardar"}
                   </Button>
                 </div>

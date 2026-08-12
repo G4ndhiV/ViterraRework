@@ -83,7 +83,7 @@ function FeatureListPicker({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 bg-stone-50/80 px-4 py-3">
         <p className="text-sm font-semibold text-brand-navy">{title}</p>
         {selected.length > 0 ? (
-          <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-primary">
+          <span className="rounded-full bg-slate-900/10 px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-slate-900">
             {selected.length} seleccionada{selected.length === 1 ? "" : "s"}
           </span>
         ) : null}
@@ -100,7 +100,7 @@ function FeatureListPicker({
                 </span>
                 <button
                   type="button"
-                  className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                  className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-900"
                   onClick={() => remove(item)}
                   aria-label={`Quitar ${featureDisplayText(item)}`}
                 >
@@ -143,14 +143,14 @@ function FeatureListPicker({
                       className={cn(
                         "flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left text-sm transition",
                         isOn
-                          ? "border-primary/35 bg-primary/5 text-brand-navy ring-1 ring-primary/20"
+                          ? "border-slate-900/35 bg-slate-900/5 text-brand-navy ring-1 ring-slate-900/20"
                           : "border-transparent bg-white text-slate-700 hover:border-stone-200 hover:bg-white hover:shadow-sm",
                       )}
                     >
                       <span
                         className={cn(
                           "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-                          isOn ? "bg-primary/10 text-primary" : "bg-stone-100 text-slate-500",
+                          isOn ? "bg-slate-900/10 text-slate-900" : "bg-stone-100 text-slate-500",
                         )}
                       >
                         {Icon ? (
@@ -163,7 +163,7 @@ function FeatureListPicker({
                       </span>
                       <span className="min-w-0 flex-1 leading-snug">{featureDisplayText(item)}</span>
                       {isOn ? (
-                        <Check className="h-4 w-4 shrink-0 text-primary" strokeWidth={2.5} aria-hidden />
+                        <Check className="h-4 w-4 shrink-0 text-slate-900" strokeWidth={2.5} aria-hidden />
                       ) : null}
                     </button>
                   </li>
@@ -188,7 +188,7 @@ function FeatureListPicker({
                     className={cn(
                       "flex h-10 w-full items-center justify-center rounded-xl border transition",
                       pickedIconKey === key
-                        ? "border-primary bg-primary/10 text-primary ring-2 ring-primary/25"
+                        ? "border-slate-900 bg-slate-900/10 text-slate-900 ring-2 ring-slate-900/25"
                         : "border-stone-200 bg-white text-slate-500 hover:border-stone-300",
                     )}
                     title={label}
@@ -216,7 +216,7 @@ function FeatureListPicker({
                 className={propertyFieldClass}
               />
               <div className="flex flex-wrap gap-2">
-                <Button type="button" className="h-11 rounded-xl px-5" onClick={addCustom}>
+                <Button type="button" className="h-11 rounded-xl px-5 bg-slate-900 text-white hover:bg-slate-800" onClick={addCustom}>
                   Añadir
                 </Button>
                 <Button

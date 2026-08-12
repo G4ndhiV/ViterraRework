@@ -354,8 +354,8 @@ export function ImageGalleryEditor({
               "mt-2 rounded-lg border-2 border-dashed px-2 py-2 transition-colors min-[1100px]:px-2.5 min-[1100px]:py-2.5",
               disabled
                 ? "cursor-not-allowed border-slate-200/90 bg-slate-50/80 opacity-70"
-                : "border-primary/45 bg-primary/[0.04]",
-              dragOver && !disabled && "border-primary bg-primary/[0.08] ring-2 ring-primary/20"
+                : "border-slate-900/40 bg-slate-900/[0.03]",
+              dragOver && !disabled && "border-slate-900 bg-slate-900/[0.08] ring-2 ring-slate-900/20"
             )}
           >
             {fileInput}
@@ -365,7 +365,7 @@ export function ImageGalleryEditor({
                 size="sm"
                 disabled={disabled || busy}
                 onClick={() => inputRef.current?.click()}
-                className="h-8 gap-1 rounded-full bg-gradient-to-r from-primary to-brand-burgundy/85 px-4 text-[10px] font-bold uppercase leading-none text-primary-foreground shadow-md ring-2 ring-primary/30 hover:brightness-110 min-[1100px]:h-9 min-[1100px]:px-5 min-[1100px]:text-xs"
+                className="h-8 gap-1 rounded-full bg-slate-900 text-white border border-slate-800 px-4 text-[10px] font-bold uppercase leading-none shadow-sm hover:bg-slate-800 min-[1100px]:h-9 min-[1100px]:px-5 min-[1100px]:text-xs"
               >
                 {busy ? (
                   "…"
@@ -426,14 +426,14 @@ export function ImageGalleryEditor({
             {...dropHandlers}
             className={cn(
               "mt-2 rounded-xl border-2 border-dashed px-2.5 py-2.5 text-center transition-colors sm:px-3",
-              disabled ? "cursor-not-allowed border-slate-200 bg-slate-50/50 opacity-70" : "border-primary/40 bg-white/90 shadow-inner",
-              dragOver && !disabled && "border-primary bg-primary/[0.06] ring-2 ring-primary/20"
+              disabled ? "cursor-not-allowed border-slate-200 bg-slate-50/50 opacity-70" : "border-slate-300 bg-white/90 shadow-inner",
+              dragOver && !disabled && "border-slate-900 bg-slate-900/[0.06] ring-2 ring-slate-900/20"
             )}
           >
             {fileInput}
             <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-center sm:gap-3">
               <div className="flex items-center gap-1.5 text-left sm:text-center">
-                <ImagePlus className="h-6 w-6 shrink-0 text-primary sm:h-6 sm:w-6" strokeWidth={1.75} aria-hidden />
+                <ImagePlus className="h-6 w-6 shrink-0 text-slate-700 sm:h-6 sm:w-6" strokeWidth={1.75} aria-hidden />
                 <p className="text-[11px] text-slate-600 sm:max-w-[13rem]" style={{ fontWeight: 600 }}>
                   Arrastra o añade archivos
                 </p>
@@ -444,8 +444,8 @@ export function ImageGalleryEditor({
                 disabled={disabled || busy}
                 onClick={() => inputRef.current?.click()}
                 className={cn(
-                  "h-9 shrink-0 gap-1.5 rounded-full px-4 text-[11px] font-bold uppercase tracking-wide text-primary-foreground shadow-lg shadow-primary/40 ring-2 ring-primary/30 transition hover:brightness-110",
-                  "bg-gradient-to-r from-primary via-primary to-brand-burgundy/85"
+                  "h-9 shrink-0 gap-1.5 rounded-full px-4 text-[11px] font-bold uppercase tracking-wide text-white shadow-sm transition hover:bg-slate-800",
+                  "bg-slate-900 border border-slate-800"
                 )}
               >
                 {busy ? (
@@ -520,8 +520,8 @@ export function ImageGalleryEditor({
           featured ? "mt-5 px-4 py-6 sm:px-6 sm:py-8" : "mt-4 px-4 py-8",
           images.length > 0 && "border-t border-slate-200/90 pt-5 sm:pt-6",
           disabled ? "cursor-not-allowed border-slate-200 bg-slate-50/50 opacity-70" : "border-slate-300 bg-white",
-          dragOver && !disabled && "border-primary/60 bg-primary/[0.03]",
-          featured && !disabled && "border-primary/35 bg-white/90 shadow-inner"
+          dragOver && !disabled && "border-slate-900/60 bg-slate-900/[0.03]",
+          featured && !disabled && "border-slate-300 bg-white/90 shadow-inner"
         )}
       >
         {fileInput}
@@ -542,9 +542,9 @@ export function ImageGalleryEditor({
           disabled={disabled || busy}
           onClick={() => inputRef.current?.click()}
           className={cn(
-            "mt-4 gap-1.5 rounded-full px-5 text-[11px] font-bold uppercase tracking-wide shadow-lg ring-2 transition hover:brightness-110",
+            "mt-4 gap-1.5 rounded-full px-5 text-[11px] font-bold uppercase tracking-wide shadow-sm transition hover:bg-slate-800",
             featured
-              ? "h-9 bg-gradient-to-r from-primary via-primary to-brand-burgundy/85 text-primary-foreground shadow-primary/35 ring-primary/25"
+              ? "h-9 bg-slate-900 text-white border border-slate-800"
               : "h-9 border border-slate-300 bg-white text-slate-800 shadow-slate-200/80 ring-slate-200 hover:bg-slate-50"
           )}
         >

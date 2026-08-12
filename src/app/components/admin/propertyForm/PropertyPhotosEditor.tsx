@@ -158,7 +158,7 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
         <div
           className={cn(
             "relative overflow-hidden rounded-2xl bg-brand-navy/[0.04] ring-1 ring-stone-200/90",
-            dragOver && !disabled && "ring-2 ring-primary/40",
+            dragOver && !disabled && "ring-2 ring-slate-900/40",
           )}
           onDragEnter={(e) => {
             e.preventDefault();
@@ -217,7 +217,7 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
               {!disabled ? (
                 <button
                   type="button"
-                  className="absolute right-3 top-3 rounded-lg bg-black/50 p-2 text-white backdrop-blur-sm transition hover:bg-red-600/90"
+                  className="absolute right-3 top-3 rounded-lg bg-black/50 p-2 text-white backdrop-blur-sm transition hover:bg-slate-900/90"
                   aria-label="Eliminar foto"
                   onClick={() => removeAt(previewIndex)}
                 >
@@ -240,7 +240,7 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
                 <button
                   type="button"
                   onClick={clearAll}
-                  className="text-[10px] font-semibold text-rose-600 transition hover:text-rose-700"
+                  className="text-[10px] font-semibold text-slate-500 transition hover:text-slate-900"
                 >
                   Eliminar todas
                 </button>
@@ -262,9 +262,9 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
                 onDragEnd={onThumbDragEnd}
                 className={cn(
                   "group relative aspect-square cursor-grab overflow-hidden rounded-xl ring-2 transition active:cursor-grabbing",
-                  previewIndex === index ? "ring-primary shadow-md" : "ring-transparent hover:ring-stone-300",
+                  previewIndex === index ? "ring-slate-900 shadow-md" : "ring-transparent hover:ring-stone-300",
                   dragFromIndex === index && "opacity-50",
-                  dragOverIndex === index && dragFromIndex !== index && "ring-primary/60 ring-offset-1",
+                  dragOverIndex === index && dragFromIndex !== index && "ring-slate-900/60 ring-offset-1",
                 )}
               >
                 <img src={src} alt="" className="pointer-events-none h-full w-full object-cover" />
@@ -298,7 +298,7 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
                     <span
                       role="button"
                       tabIndex={0}
-                      className="rounded bg-white/95 p-0.5 text-rose-600 shadow ring-1 ring-stone-200"
+                      className="rounded bg-white/95 p-0.5 text-slate-700 shadow ring-1 ring-stone-200 hover:text-slate-900"
                       onClick={(e) => {
                         e.stopPropagation();
                         removeAt(index);
@@ -322,7 +322,7 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
                 type="button"
                 disabled={busy}
                 onClick={() => inputRef.current?.click()}
-                className="flex aspect-square flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-stone-300 bg-white text-slate-500 transition hover:border-primary/50 hover:bg-primary/[0.03] hover:text-primary"
+                className="flex aspect-square flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-stone-300 bg-white text-slate-500 transition hover:border-slate-900/50 hover:bg-slate-900/[0.03] hover:text-slate-900"
               >
                 <ImagePlus className="h-5 w-5" strokeWidth={1.75} />
                 <span className="text-[9px] font-semibold uppercase">Añadir</span>
@@ -348,7 +348,7 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
         className={cn(
           "flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed px-4 py-3 transition",
           disabled ? "cursor-not-allowed border-stone-200 bg-stone-50 opacity-70" : "border-stone-300 bg-white",
-          dragOver && !disabled && "border-primary bg-primary/[0.04] ring-1 ring-primary/20",
+          dragOver && !disabled && "border-slate-900 bg-slate-900/[0.04] ring-1 ring-slate-900/20",
         )}
       >
         <input
@@ -380,7 +380,7 @@ export function PropertyPhotosEditor({ images, onChange, disabled = false, onUpl
           type="button"
           disabled={disabled || busy}
           onClick={() => inputRef.current?.click()}
-          className="shrink-0 rounded-xl"
+          className="shrink-0 rounded-xl bg-slate-900 text-white hover:bg-slate-800 border border-slate-800 shadow-sm transition-colors"
         >
           {busy ? "Subiendo…" : "Elegir archivos"}
         </Button>

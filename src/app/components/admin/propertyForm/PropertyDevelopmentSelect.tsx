@@ -46,7 +46,7 @@ function DevelopmentMiniCard({
       className={cn(
         "flex w-full gap-3 rounded-xl border p-2 text-left transition",
         active
-          ? "border-primary/40 bg-primary/[0.06] ring-2 ring-primary/20"
+          ? "border-slate-900/40 bg-slate-900/[0.06] ring-2 ring-slate-900/20"
           : "border-stone-200/90 bg-white hover:border-stone-300 hover:shadow-sm",
       )}
     >
@@ -59,7 +59,7 @@ function DevelopmentMiniCard({
           </div>
         )}
         {active ? (
-          <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white">
+          <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-white">
             <Check className="h-3 w-3" strokeWidth={3} />
           </span>
         ) : null}
@@ -111,7 +111,7 @@ export function PropertyDevelopmentSelect({
   if (developmentsLoading) {
     return (
       <div className="flex items-center gap-3 rounded-xl border border-stone-200/90 bg-stone-50/80 px-4 py-8">
-        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+        <Loader2 className="h-5 w-5 animate-spin text-slate-700" />
         <p className="text-sm text-slate-600">Cargando desarrollos del catálogo…</p>
       </div>
     );
@@ -120,7 +120,7 @@ export function PropertyDevelopmentSelect({
   if (selected) {
     const cover = selected.images?.[0] ?? selected.image;
     return (
-      <div className="overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/[0.04] to-white ring-1 ring-primary/15">
+      <div className="overflow-hidden rounded-2xl border border-slate-300 bg-gradient-to-br from-slate-50 to-white ring-1 ring-slate-200">
         <div className="flex flex-col sm:flex-row">
           <div className="relative aspect-[16/10] w-full shrink-0 bg-stone-100 sm:aspect-auto sm:h-36 sm:w-44">
             {cover ? (
@@ -136,7 +136,7 @@ export function PropertyDevelopmentSelect({
           </div>
           <div className="flex min-w-0 flex-1 flex-col justify-between p-4">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700">
                 Desarrollo vinculado
               </p>
               <h4 className="font-heading mt-1 text-lg font-semibold text-brand-navy">{selected.name}</h4>
@@ -181,7 +181,7 @@ export function PropertyDevelopmentSelect({
               </a>
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
+                className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 onClick={() => {
                   onSelect(undefined);
                   setBrowseOpen(true);
@@ -194,7 +194,7 @@ export function PropertyDevelopmentSelect({
           </div>
         </div>
         {browseOpen ? (
-          <div className="border-t border-primary/10 bg-white/80 p-4">
+          <div className="border-t border-slate-200 bg-white/80 p-4">
             <PickerPanel
               query={query}
               setQuery={setQuery}
@@ -223,7 +223,7 @@ export function PropertyDevelopmentSelect({
           </p>
           <button
             type="button"
-            className="mt-2 text-xs font-semibold text-red-700 hover:underline"
+            className="mt-2 text-xs font-semibold text-slate-700 hover:underline"
             onClick={() => onSelect(undefined)}
           >
             Quitar vínculo
