@@ -1,10 +1,9 @@
 import { toast } from "sonner";
+import { publicPageUrl } from "./publicListingUrl";
 
 /** Copia la URL absoluta del sitio para una ruta pública (p. ej. `/propiedades/1`). */
 export function copyPublicPageUrl(path: string): void {
-  const normalized = path.startsWith("/") ? path : `/${path}`;
-  const url =
-    typeof window !== "undefined" ? `${window.location.origin}${normalized}` : normalized;
+  const url = publicPageUrl(path);
 
   void navigator.clipboard.writeText(url).then(
     () => {
