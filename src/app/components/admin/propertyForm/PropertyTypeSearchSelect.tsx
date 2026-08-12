@@ -56,7 +56,7 @@ export function PropertyTypeSearchSelect({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            className="h-11 rounded-xl bg-primary px-4 text-sm font-semibold text-white"
+            className="h-11 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 transition-colors"
             onClick={() => {
               const v = otherInput.trim();
               if (!v) return;
@@ -85,11 +85,11 @@ export function PropertyTypeSearchSelect({
   return (
     <div className="space-y-3">
       {selectedCatalog ? (
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5">
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-300 bg-slate-900/[0.04] px-3 py-2.5">
           <span className="text-sm font-medium text-brand-navy">{selectedCatalog.name}</span>
           <button
             type="button"
-            className="text-xs font-medium text-slate-500 hover:text-red-600"
+            className="text-xs font-medium text-slate-500 hover:text-slate-900"
             onClick={() => {
               onClear();
               setQuery("");
@@ -132,7 +132,7 @@ export function PropertyTypeSearchSelect({
                     className={cn(
                       "w-full rounded-lg px-3 py-2 text-left text-sm transition",
                       active
-                        ? "bg-primary/10 font-semibold text-brand-navy ring-1 ring-primary/25"
+                        ? "bg-slate-900/10 font-semibold text-brand-navy ring-1 ring-slate-900/20"
                         : "text-slate-700 hover:bg-white hover:shadow-sm",
                     )}
                   >
@@ -147,7 +147,7 @@ export function PropertyTypeSearchSelect({
 
       <button
         type="button"
-        className="w-full rounded-xl border border-dashed border-stone-300 py-2.5 text-sm font-medium text-slate-600 transition hover:border-primary/40 hover:bg-stone-50"
+        className="w-full rounded-xl border border-dashed border-stone-300 py-2.5 text-sm font-medium text-slate-600 transition hover:border-slate-900/40 hover:bg-stone-50"
         onClick={() => {
           setOtherOpen(true);
           setOtherInput(typeName && !propertyTypeTokkoId ? typeName : "");

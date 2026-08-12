@@ -31,14 +31,14 @@ function MediaPanel({
     <div
       className={cn(
         "flex flex-col rounded-2xl border bg-white p-4 shadow-sm transition",
-        active ? "border-primary/30 ring-1 ring-primary/15" : "border-stone-200/90",
+        active ? "border-slate-300 ring-1 ring-slate-200" : "border-stone-200/90",
       )}
     >
       <div className="mb-4 flex items-start gap-3">
         <span
           className={cn(
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
-            active ? "bg-primary/10 text-primary" : "bg-stone-100 text-slate-500",
+            active ? "bg-slate-900/10 text-slate-900" : "bg-stone-100 text-slate-500",
           )}
         >
           <Icon className="h-5 w-5" strokeWidth={1.75} />

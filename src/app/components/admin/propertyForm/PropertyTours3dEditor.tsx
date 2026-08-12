@@ -71,7 +71,7 @@ export function PropertyTours3dEditor({ tours, onChange }: Props) {
                 </div>
                 <button
                   type="button"
-                  className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                  className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-900 transition-colors"
                   onClick={() => removeAt(index)}
                   aria-label="Quitar recorrido 3D"
                 >
@@ -89,7 +89,7 @@ export function PropertyTours3dEditor({ tours, onChange }: Props) {
                   href={entry.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-1 border-t border-stone-100 py-2 text-[11px] font-medium text-primary hover:underline"
+                  className="flex items-center justify-center gap-1 border-t border-stone-100 py-2 text-[11px] font-medium text-slate-700 hover:text-slate-900 hover:underline"
                 >
                   Abrir en nueva pestaña
                 </a>

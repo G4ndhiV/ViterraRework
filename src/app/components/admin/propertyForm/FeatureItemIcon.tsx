@@ -27,7 +27,7 @@ export function FeatureItemIcon({ label, className, iconClassName }: Props) {
           {emoji}
         </span>
       ) : Icon ? (
-        <Icon className={cn("h-4 w-4 text-primary", iconClassName)} strokeWidth={1.75} aria-hidden />
+        <Icon className={cn("h-4 w-4 text-slate-700", iconClassName)} strokeWidth={1.75} aria-hidden />
       ) : (
         <Circle className="h-3 w-3 fill-stone-300 text-stone-300" aria-hidden />
       )}

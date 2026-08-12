@@ -3,10 +3,10 @@ import type { ReactNode } from "react";
 import { cn } from "../../ui/utils";
 
 export const propertyFieldClass =
-  "h-11 w-full rounded-xl border border-stone-200/90 bg-white px-3.5 text-sm text-brand-navy shadow-sm transition placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15";
+  "h-11 w-full rounded-xl border border-stone-200/90 bg-white px-3.5 text-sm text-brand-navy shadow-sm transition placeholder:text-slate-400 focus:border-slate-900/40 focus:outline-none focus:ring-2 focus:ring-slate-900/10";
 
 export const propertyTextareaClass =
-  "min-h-[7rem] w-full resize-y rounded-xl border border-stone-200/90 bg-white px-3.5 py-3 text-sm text-brand-navy shadow-sm transition placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15";
+  "min-h-[7rem] w-full resize-y rounded-xl border border-stone-200/90 bg-white px-3.5 py-3 text-sm text-brand-navy shadow-sm transition placeholder:text-slate-400 focus:border-slate-900/40 focus:outline-none focus:ring-2 focus:ring-slate-900/10";
 
 export const propertyLabelClass = "text-xs font-medium text-slate-600";
 

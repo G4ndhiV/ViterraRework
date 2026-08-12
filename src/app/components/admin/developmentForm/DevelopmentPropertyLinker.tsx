@@ -60,7 +60,7 @@ function PropertyMiniCard({
     <li
       className={cn(
         "flex items-center gap-3 rounded-xl border p-2",
-        linked ? "border-primary/25 bg-primary/[0.04]" : "border-stone-200/90 bg-white",
+        linked ? "border-slate-300 bg-slate-900/[0.04]" : "border-stone-200/90 bg-white",
       )}
     >
       <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-stone-100">
@@ -72,7 +72,7 @@ function PropertyMiniCard({
           </div>
         )}
         {linked ? (
-          <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white">
+          <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-white">
             <Check className="h-3 w-3" strokeWidth={3} />
           </span>
         ) : null}
@@ -91,7 +91,7 @@ function PropertyMiniCard({
           <button
             type="button"
             disabled={busy}
-            className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+            className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 transition-colors"
             onClick={() => void onUnlink()}
           >
             <X className="mr-0.5 inline h-3.5 w-3.5" />
@@ -102,7 +102,7 @@ function PropertyMiniCard({
         <button
           type="button"
           disabled={busy}
-          className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90 disabled:opacity-50"
+          className="shrink-0 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50 transition-colors"
           onClick={() => void onLink()}
         >
           Vincular
@@ -144,7 +144,7 @@ export function DevelopmentPropertyLinker({
   if (propertiesLoading) {
     return (
       <div className="flex items-center gap-3 rounded-xl border border-stone-200/90 bg-stone-50/80 px-4 py-8">
-        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+        <Loader2 className="h-5 w-5 animate-spin text-slate-700" />
         <p className="text-sm text-slate-600">Cargando propiedades del catálogo…</p>
       </div>
     );

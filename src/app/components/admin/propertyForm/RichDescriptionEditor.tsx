@@ -5,14 +5,18 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
 import {
   Bold,
+  Eraser,
+  Heading2,
+  Heading3,
   Italic,
-  Link2,
+  Link2 as LinkIcon,
   List,
   ListOrdered,
   Pilcrow,
   Redo2,
   Strikethrough,
   Undo2,
+  Unlink,
 } from "lucide-react";
 import { cn } from "../../ui/utils";
 
@@ -45,7 +49,7 @@ function ToolbarButton({
       onClick={onClick}
       className={cn(
         "flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 transition",
-        active ? "bg-primary/10 text-primary" : "hover:bg-stone-100 hover:text-brand-navy",
+        active ? "bg-slate-900/10 text-slate-900 font-semibold" : "hover:bg-stone-100 hover:text-brand-navy",
         disabled && "cursor-not-allowed opacity-40",
       )}
     >
@@ -66,8 +70,6 @@ export function RichDescriptionEditor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [2, 3] },
-        // StarterKit v3 ya trae Link; se desactiva aquí para usar la config propia de abajo
-        // (openOnClick, protocolos, clases) y evitar "Duplicate extension names: ['link']".
         link: false,
       }),
       Placeholder.configure({ placeholder }),
@@ -75,7 +77,7 @@ export function RichDescriptionEditor({
         openOnClick: false,
         protocols: ["http", "https", "mailto"],
         defaultProtocol: "https",
-        HTMLAttributes: { class: "text-primary underline", rel: "noopener noreferrer" },
+        HTMLAttributes: { class: "text-slate-900 underline", rel: "noopener noreferrer" },
       }),
     ],
     content: value || "",
@@ -130,7 +132,7 @@ export function RichDescriptionEditor({
   return (
     <div
       className={cn(
-        "viterra-rich-editor overflow-hidden rounded-xl border border-stone-200/90 bg-white shadow-sm ring-1 ring-stone-200/50 transition focus-within:border-primary/40 focus-within:ring-primary/15",
+        "viterra-rich-editor overflow-hidden rounded-xl border border-stone-200/90 bg-white shadow-sm ring-1 ring-stone-200/50 transition focus-within:border-slate-900/40 focus-within:ring-slate-900/15",
         disabled && "opacity-70",
         className,
       )}
@@ -138,80 +140,77 @@ export function RichDescriptionEditor({
       <div className="flex flex-wrap items-center gap-0.5 border-b border-stone-100 bg-stone-50/80 px-2 py-1.5">
         <ToolbarButton
           title="Negrita"
-          disabled={disabled}
           active={editor.isActive("bold")}
           onClick={() => editor.chain().focus().toggleBold().run()}
         >
-          <Bold className="h-4 w-4" strokeWidth={2} />
+          <Bold className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           title="Cursiva"
-          disabled={disabled}
           active={editor.isActive("italic")}
           onClick={() => editor.chain().focus().toggleItalic().run()}
         >
-          <Italic className="h-4 w-4" strokeWidth={2} />
+          <Italic className="h-4 w-4" />
         </ToolbarButton>
+
+        <div className="mx-1 h-4 w-px bg-stone-200" />
+
         <ToolbarButton
-          title="Tachado"
-          disabled={disabled}
-          active={editor.isActive("strike")}
-          onClick={() => editor.chain().focus().toggleStrike().run()}
-        >
-          <Strikethrough className="h-4 w-4" strokeWidth={2} />
-        </ToolbarButton>
-        <span className="mx-1 h-5 w-px bg-stone-200" aria-hidden />
-        <ToolbarButton
-          title="Subtítulo"
-          disabled={disabled}
+          title="Subtítulo (H2)"
           active={editor.isActive("heading", { level: 2 })}
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
         >
-          <span className="text-xs font-bold">H2</span>
+          <Heading2 className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
-          title="Párrafo normal"
-          disabled={disabled}
-          active={editor.isActive("paragraph")}
-          onClick={() => editor.chain().focus().setParagraph().run()}
+          title="Sección (H3)"
+          active={editor.isActive("heading", { level: 3 })}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
         >
-          <Pilcrow className="h-4 w-4" strokeWidth={2} />
+          <Heading3 className="h-4 w-4" />
         </ToolbarButton>
-        <span className="mx-1 h-5 w-px bg-stone-200" aria-hidden />
+
+        <div className="mx-1 h-4 w-px bg-stone-200" />
+
         <ToolbarButton
           title="Lista con viñetas"
-          disabled={disabled}
           active={editor.isActive("bulletList")}
           onClick={() => editor.chain().focus().toggleBulletList().run()}
         >
-          <List className="h-4 w-4" strokeWidth={2} />
+          <List className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           title="Lista numerada"
-          disabled={disabled}
           active={editor.isActive("orderedList")}
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
         >
-          <ListOrdered className="h-4 w-4" strokeWidth={2} />
+          <ListOrdered className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton title="Enlace" disabled={disabled} active={editor.isActive("link")} onClick={setLink}>
-          <Link2 className="h-4 w-4" strokeWidth={2} />
+
+        <div className="mx-1 h-4 w-px bg-stone-200" />
+
+        <ToolbarButton title="Enlace" active={editor.isActive("link")} onClick={setLink}>
+          <LinkIcon className="h-4 w-4" />
         </ToolbarButton>
-        <span className="mx-1 h-5 w-px bg-stone-200" aria-hidden />
-        <ToolbarButton
-          title="Deshacer"
-          disabled={disabled || !editor.can().undo()}
-          onClick={() => editor.chain().focus().undo().run()}
-        >
-          <Undo2 className="h-4 w-4" strokeWidth={2} />
-        </ToolbarButton>
-        <ToolbarButton
-          title="Rehacer"
-          disabled={disabled || !editor.can().redo()}
-          onClick={() => editor.chain().focus().redo().run()}
-        >
-          <Redo2 className="h-4 w-4" strokeWidth={2} />
-        </ToolbarButton>
+        {editor.isActive("link") ? (
+          <ToolbarButton
+            title="Quitar enlace"
+            onClick={() => editor.chain().focus().unsetLink().run()}
+          >
+            <Unlink className="h-4 w-4 text-slate-500" />
+          </ToolbarButton>
+        ) : null}
+
+        {!empty ? (
+          <div className="ml-auto">
+            <ToolbarButton
+              title="Borrar formato"
+              onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
+            >
+              <Eraser className="h-4 w-4" />
+            </ToolbarButton>
+          </div>
+        ) : null}
       </div>
 
       <EditorContent editor={editor} />
@@ -221,7 +220,7 @@ export function RichDescriptionEditor({
         {!empty ? (
           <button
             type="button"
-            className="shrink-0 font-medium text-slate-600 hover:text-red-600"
+            className="shrink-0 font-medium text-slate-600 hover:text-slate-900"
             disabled={disabled}
             onClick={() => {
               if (window.confirm("¿Borrar todo el contenido formateado?")) {

@@ -77,7 +77,7 @@ export function PropertyFormPreview({ draft, developments = [], className }: Pro
           )}
           <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/45 via-black/15 to-transparent" />
           <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
-            <span className="border border-primary/20 bg-primary/95 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary-foreground shadow-sm backdrop-blur-sm">
+            <span className="border border-white/20 bg-slate-900/95 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white shadow-sm backdrop-blur-sm">
               {draft.status === "alquiler" ? "En renta" : "En venta"}
             </span>
             {draft.type?.trim() ? (
@@ -173,13 +173,13 @@ export function PropertyFormPreview({ draft, developments = [], className }: Pro
             <ul className="mt-4 space-y-1.5 border-t border-brand-navy/[0.06] pt-3">
               {hasVideo ? (
                 <li className="flex items-center gap-2 text-[11px] text-slate-600">
-                  <Film className="h-3.5 w-3.5 text-primary" strokeWidth={1.75} />
+                  <Film className="h-3.5 w-3.5 text-slate-700" strokeWidth={1.75} />
                   Video en ficha
                 </li>
               ) : null}
               {hasTour ? (
                 <li className="flex items-center gap-2 text-[11px] text-slate-600">
-                  <Box className="h-3.5 w-3.5 text-primary" strokeWidth={1.75} />
+                  <Box className="h-3.5 w-3.5 text-slate-700" strokeWidth={1.75} />
                   Recorrido 3D
                 </li>
               ) : null}

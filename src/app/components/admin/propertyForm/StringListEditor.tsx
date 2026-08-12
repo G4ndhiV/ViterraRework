@@ -56,7 +56,7 @@ export function StringListEditor({ label, items, placeholder, onChange }: Props)
               {item}
               <button
                 type="button"
-                className="text-slate-400 hover:text-red-600"
+                className="text-slate-400 hover:text-slate-900 transition-colors"
                 onClick={() => onChange(items.filter((_, i) => i !== idx))}
                 aria-label={`Quitar ${item}`}
               >
