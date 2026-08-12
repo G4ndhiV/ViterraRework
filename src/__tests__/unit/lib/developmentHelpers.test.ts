@@ -83,10 +83,10 @@ describe("Development helpers", () => {
         type: "Residencial",
         description: "Lujo y confort",
         developmentUnits: [
-          { id: "u1", name: "Dpto A", type: "Departamento", bedrooms: 2, bathrooms: 2, price: 3500000 },
-          { id: "u2", name: "PH 1", type: "Penthouse", bedrooms: 3, bathrooms: 3, price: 7500000 },
+          { type: "Departamento", address: "Dpto A", spaces: 2, bedrooms: 2, coveredArea: 80, totalArea: 100, parking: true, price: 3500000, forRent: false },
+          { type: "Penthouse", address: "PH 1", spaces: 3, bedrooms: 3, coveredArea: 150, totalArea: 200, parking: true, price: 7500000, forRent: false },
         ],
-        status: "En Pre-Venta",
+        status: "Pre-venta",
       },
       {
         id: "d2",
@@ -97,9 +97,9 @@ describe("Development helpers", () => {
         type: "Casas",
         description: "Hermosas casas",
         developmentUnits: [
-          { id: "u3", name: "Casa 1", type: "Casa", bedrooms: 4, bathrooms: 4, price: 5000000 },
+          { type: "Casa", address: "Casa 1", spaces: 4, bedrooms: 4, coveredArea: 180, totalArea: 220, parking: true, price: 5000000, forRent: false },
         ],
-        status: "Listo para Entregar",
+        status: "Disponible",
       },
     ];
 
@@ -119,7 +119,7 @@ describe("Development helpers", () => {
         query: "Altus",
         minPrice: "3000000",
         maxPrice: "8000000",
-      });
+      } as any);
       expect(result.length).toBe(1);
       expect(result[0].id).toBe("d1");
     });

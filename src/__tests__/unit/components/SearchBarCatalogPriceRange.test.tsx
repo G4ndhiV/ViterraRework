@@ -9,6 +9,7 @@ describe("SearchBarCatalogPriceRange component", () => {
 
     render(
       <SearchBarCatalogPriceRange
+        variant="default"
         prices={[1000000, 5000000, 10000000]}
         minPrice="1000000"
         maxPrice="5000000"

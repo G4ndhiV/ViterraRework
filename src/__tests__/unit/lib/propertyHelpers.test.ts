@@ -132,11 +132,15 @@ describe("Property helpers", () => {
     });
 
     it("should apply advanced property filters", () => {
-      const filters: SearchFilters = {
-        operationType: "todos",
-        propertyType: "todos",
+      const filters = {
+        query: "",
+        minPrice: "",
+        maxPrice: "",
+        status: "todos",
+        type: "todos",
         minBedrooms: "3",
-      };
+        minBathrooms: "todos",
+      } as SearchFilters;
       const filtered = applyAdvancedPropertyFilters(props as Property[], filters);
       expect(filtered.length).toBe(1);
       expect(filtered[0].id).toBe("p2");

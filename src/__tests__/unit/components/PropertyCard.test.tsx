@@ -30,7 +30,6 @@ describe("PropertyCard & helper functions", () => {
       id: "prop-1",
       title: "Residencia Valle Oriente",
       price: 15500000,
-      currency: "MXN",
       location: "San Pedro Garza García, NL",
       bedrooms: 4,
       bathrooms: 5,

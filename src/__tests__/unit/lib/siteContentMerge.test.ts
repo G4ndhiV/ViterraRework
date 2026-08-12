@@ -55,8 +55,8 @@ describe("deepMerge & siteContentMerge utilities", () => {
     it("should merge contact section and fallback faq/social links", () => {
       const contact = mergeSiteSection("contact", {
         title: "Contacto Viterra",
-      });
-      expect(contact.title).toBe("Contacto Viterra");
+      } as any);
+      expect((contact as any).title).toBe("Contacto Viterra");
       expect(contact.faq.length).toBeGreaterThan(0);
       expect(contact.infoItems.length).toBeGreaterThan(0);
     });

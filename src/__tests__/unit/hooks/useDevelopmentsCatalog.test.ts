@@ -28,7 +28,7 @@ describe("useDevelopmentsCatalog hook", () => {
 
     const mockClient = {} as any;
     vi.spyOn(supabaseClientModule, "getSupabaseClient").mockReturnValue(mockClient);
-    vi.spyOn(supabaseClientModule, "syncSupabaseAuthSession").mockResolvedValue(true);
+    vi.spyOn(supabaseClientModule, "syncSupabaseAuthSession").mockResolvedValue({ hasSession: true, userId: "u1" });
     vi.spyOn(supabaseDevelopmentsModule, "fetchDevelopmentsWithUnits").mockResolvedValue({
       data: mockDevs as any,
       error: null,

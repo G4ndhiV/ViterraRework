@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { vi } from "vitest";
+import { afterEach, vi } from "vitest";
 
 // Mock global de fetch para evitar peticiones reales en tests unitarios
 global.fetch = vi.fn().mockResolvedValue({

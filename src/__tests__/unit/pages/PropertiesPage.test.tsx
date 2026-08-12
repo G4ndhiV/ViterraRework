@@ -17,7 +17,6 @@ describe("PropertiesPage Component", () => {
           id: "p1",
           title: "Casa San Pedro",
           price: 12000000,
-          currency: "MXN",
           location: "San Pedro",
           bedrooms: 3,
           bathrooms: 4,
@@ -32,6 +31,7 @@ describe("PropertiesPage Component", () => {
       error: null,
       catalogSchemaWarning: null,
       reload: vi.fn(),
+      patchProperty: vi.fn(),
       applySavedProperty: vi.fn(),
     });
   });

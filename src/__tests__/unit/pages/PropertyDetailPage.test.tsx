@@ -17,7 +17,6 @@ describe("PropertyDetailPage Component", () => {
           id: "prop-100",
           title: "Penthouse Lujo Valle",
           price: 25000000,
-          currency: "MXN",
           location: "San Pedro Garza García",
           bedrooms: 4,
           bathrooms: 5,
@@ -34,6 +33,7 @@ describe("PropertyDetailPage Component", () => {
       error: null,
       catalogSchemaWarning: null,
       reload: vi.fn(),
+      patchProperty: vi.fn(),
       applySavedProperty: vi.fn(),
     });
   });

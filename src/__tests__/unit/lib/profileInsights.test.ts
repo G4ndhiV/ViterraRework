@@ -14,6 +14,11 @@ describe("profileInsights utilities", () => {
     name: "Carlos Advisor",
     role: "asesor",
     permissions: [],
+    profile: {} as any,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    history: [],
   };
 
   const mockLeads: Partial<Lead>[] = [
@@ -70,13 +75,12 @@ describe("profileInsights utilities", () => {
       users: [mockUser],
       leads: mockLeads as Lead[],
       customStages: [],
-      propertiesCount: 10,
       myActivePropertiesCount: 4,
       appointments: [],
       groups: [],
       targets: [],
       stageOrder: ["nuevo", "cerrado"],
-    });
+    } as any);
 
     expect(insights.stats.activePipeline).toBe(1);
     expect(insights.stats.newLeadsMonth).toBe(2);

@@ -26,6 +26,7 @@ describe("HomePage Component", () => {
       error: null,
       catalogSchemaWarning: null,
       reload: vi.fn(),
+      patchProperty: vi.fn(),
       applySavedProperty: vi.fn(),
     });
     vi.spyOn(useCatalogPriceSlicesModule, "useCatalogPriceSlices").mockReturnValue({
@@ -35,8 +36,8 @@ describe("HomePage Component", () => {
     vi.spyOn(useInstagramFeedModule, "useInstagramFeed").mockReturnValue({
       posts: [],
       loading: false,
-      error: null,
-      source: "fallback",
+      error: false,
+      profileUrl: "https://www.instagram.com/",
     });
   });
 

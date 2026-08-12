@@ -5,14 +5,18 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
 import {
   Bold,
+  Eraser,
+  Heading2,
+  Heading3,
   Italic,
-  Link2,
+  Link2 as LinkIcon,
   List,
   ListOrdered,
   Pilcrow,
   Redo2,
   Strikethrough,
   Undo2,
+  Unlink,
 } from "lucide-react";
 import { cn } from "../../ui/utils";
 

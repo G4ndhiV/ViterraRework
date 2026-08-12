@@ -85,7 +85,7 @@ describe("Formatting and Security Helpers", () => {
       expect(isWhatsappHttpUrl("https://wa.me/528112345678")).toBe(true);
       expect(isValidWhatsappLinkInput("8112345678")).toBe(true);
       expect(normalizeWhatsappLinkForStorage("8112345678")).toBe("https://wa.me/8112345678");
-      expect(resolveWhatsappHref("https://wa.me/528112345678")).toContain("wa.me");
+      expect(resolveWhatsappHref("https://wa.me/528112345678", "https://wa.me/fallback")).toContain("wa.me");
     });
   });
 
