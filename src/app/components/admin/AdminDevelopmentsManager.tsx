@@ -3,6 +3,7 @@ import {
   Activity,
   Building2,
   Calendar,
+  Cloud,
   Download,
   Edit,
   Eye,
@@ -49,6 +50,8 @@ interface Props {
   onSave: (input: Development) => boolean | Promise<boolean>;
   onDelete: (id: string) => void | Promise<void>;
   onEditProperty?: (property: Property) => void;
+  /** El botón "Importar de Tokko" solo se muestra a role='admin' (igual que en propiedades). */
+  onImport?: () => void;
 }
 
 type DevelopmentFormState =
@@ -72,9 +75,11 @@ export function AdminDevelopmentsManager({
   onSave,
   onDelete,
   onEditProperty,
+  onImport,
 }: Props) {
   const { user } = useAuth();
   const readOnly = user?.role === "asesor" || user?.role === "lider_grupo";
+  const isAdmin = user?.role === "admin";
   const [developmentForm, setDevelopmentForm] = useState<DevelopmentFormState | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [newDevelopmentId, setNewDevelopmentId] = useState(() => crypto.randomUUID());
@@ -214,14 +219,26 @@ export function AdminDevelopmentsManager({
               </button>
             </div>
             {!readOnly && (
-              <button
-                type="button"
-                onClick={openCreate}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-black sm:w-auto"
-              >
-                <Plus className="h-4 w-4" strokeWidth={1.5} />
-                Nuevo Desarrollo
-              </button>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-black sm:w-auto"
+                >
+                  <Plus className="h-4 w-4" strokeWidth={1.5} />
+                  Nuevo Desarrollo
+                </button>
+                {isAdmin && onImport && (
+                  <button
+                    type="button"
+                    onClick={onImport}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 sm:w-auto"
+                  >
+                    <Cloud className="h-4 w-4" strokeWidth={1.5} />
+                    Importar de Tokko
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>

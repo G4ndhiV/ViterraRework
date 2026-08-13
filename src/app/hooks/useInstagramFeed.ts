@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { FALLBACK_INSTAGRAM_POSTS, type InstagramPost } from "../../data/instagramFallback";
+import { scrapePostsFromHtml, type IgPost } from "../../lib/instagramFeedFetch";
 import { getSupabaseClient } from "../lib/supabaseClient";
 
 export type { InstagramPost };
@@ -33,35 +34,17 @@ function writeLocalCache(posts: InstagramPost[]) {
   }
 }
 
-async function fetchFromSupabase(count: number): Promise<InstagramPost[] | null> {
+function parseFeedPayload(text: string, count: number): InstagramPost[] {
+  let data: { posts?: InstagramPost[]; error?: string };
   try {
-    const client = getSupabaseClient();
-    if (!client) return null;
-
-    const queryPromise = (async () => {
-      const { data, error } = await client
-        .from("instagram_feed_cache")
-        .select("posts")
-        .eq("username", IG_USERNAME)
-        .maybeSingle();
-
-      if (!error && Array.isArray(data?.posts) && data.posts.length > 0) {
-        return (data.posts as InstagramPost[])
-          .slice(0, count)
-          .filter((p) => Boolean(p?.shortcode));
-      }
-      return null;
-    })();
-
-    const timeoutPromise = new Promise<null>((resolve) =>
-      setTimeout(() => resolve(null), 500)
-    );
-
-    return await Promise.race([queryPromise, timeoutPromise]);
+    data = JSON.parse(text) as { posts?: InstagramPost[]; error?: string };
   } catch {
-    /* ignore supabase errors */
+    throw new Error("instagram-feed non-json");
   }
-  return null;
+  if (Array.isArray(data?.posts) && data.posts.length > 0) {
+    return data.posts.slice(0, count).filter((p) => Boolean(p?.shortcode));
+  }
+  throw new Error(data?.error || "instagram-feed empty");
 }
 
 async function fetchFeed(count: number, signal?: AbortSignal): Promise<InstagramPost[]> {
@@ -69,11 +52,94 @@ async function fetchFeed(count: number, signal?: AbortSignal): Promise<Instagram
     `/api/instagram-feed?username=${encodeURIComponent(IG_USERNAME)}&count=${count}&_=${Date.now()}`,
     { cache: "no-store", signal }
   );
-  const data = (await res.json()) as { posts?: InstagramPost[]; error?: string };
-  if (Array.isArray(data?.posts) && data.posts.length > 0) {
-    return data.posts.slice(0, count).filter((p) => Boolean(p?.shortcode));
+  const text = await res.text();
+  return parseFeedPayload(text, count);
+}
+
+async function fetchFeedFromSupabase(count: number, signal?: AbortSignal): Promise<InstagramPost[]> {
+  const base = import.meta.env.VITE_SUPABASE_URL?.trim();
+  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+
+  // 1) Edge Function (si está desplegada)
+  if (base && anon) {
+    try {
+      const res = await fetch(
+        `${base}/functions/v1/instagram-feed?username=${encodeURIComponent(IG_USERNAME)}&count=${count}`,
+        {
+          cache: "no-store",
+          signal,
+          headers: { Authorization: `Bearer ${anon}`, apikey: anon },
+        }
+      );
+      if (res.ok) {
+        const text = await res.text();
+        try {
+          return parseFeedPayload(text, count);
+        } catch {
+          /* continue */
+        }
+      }
+    } catch {
+      /* continue */
+    }
+
+    // 2) Tabla de caché REST API (lectura pública RLS)
+    try {
+      const res = await fetch(
+        `${base}/rest/v1/instagram_feed_cache?username=eq.${encodeURIComponent(IG_USERNAME)}&select=posts`,
+        {
+          cache: "no-store",
+          signal,
+          headers: {
+            apikey: anon,
+            Authorization: `Bearer ${anon}`,
+            Accept: "application/json",
+          },
+        }
+      );
+      if (res.ok) {
+        const rows = (await res.json()) as { posts?: InstagramPost[] }[];
+        const posts = rows?.[0]?.posts;
+        if (Array.isArray(posts) && posts.length > 0) {
+          return posts.slice(0, count).filter((p) => Boolean(p?.shortcode));
+        }
+      }
+    } catch {
+      /* empty */
+    }
   }
-  throw new Error(data?.error || `instagram-feed ${res.status}`);
+
+  // 3) Supabase Client fallback con timeout guard
+  try {
+    const client = getSupabaseClient();
+    if (client) {
+      const queryPromise = (async () => {
+        const { data, error } = await client
+          .from("instagram_feed_cache")
+          .select("posts")
+          .eq("username", IG_USERNAME)
+          .maybeSingle();
+
+        if (!error && Array.isArray(data?.posts) && data.posts.length > 0) {
+          return (data.posts as InstagramPost[])
+            .slice(0, count)
+            .filter((p) => Boolean(p?.shortcode));
+        }
+        return null;
+      })();
+
+      const timeoutPromise = new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), 500)
+      );
+
+      const res = await Promise.race([queryPromise, timeoutPromise]);
+      if (res && res.length > 0) return res;
+    }
+  } catch {
+    /* ignore client errors */
+  }
+
+  return [];
 }
 
 /** Último recurso en el navegador: HTML del /embed/ vía proxy CORS. */
@@ -93,46 +159,13 @@ async function fetchFeedFromBrowser(count: number, signal?: AbortSignal): Promis
       const res = await fetch(url, { signal, cache: "no-store" });
       if (!res.ok) continue;
       const html = await res.text();
-      const posts = scrapeShortcodesFromHtml(html, count);
+      const posts = scrapePostsFromHtml(html, count);
       if (posts.length > 0) return posts;
     } catch {
       /* next proxy */
     }
   }
   return [];
-}
-
-function scrapeShortcodesFromHtml(html: string, count: number): InstagramPost[] {
-  const posts: InstagramPost[] = [];
-  const seen = new Set<string>();
-
-  const rootRe =
-    /shortcode_media\\":\{\\"__typename\\":\\"(GraphVideo|GraphSidecar|GraphImage)\\",\\"id\\":\\"\d+\\",\\"shortcode\\":\\"([A-Za-z0-9_-]+)\\"/g;
-
-  for (const m of html.matchAll(rootRe)) {
-    const typename = m[1];
-    const shortcode = m[2];
-    if (seen.has(shortcode)) continue;
-    seen.add(shortcode);
-    const chunk = html.slice(m.index ?? 0, (m.index ?? 0) + 1800);
-    const thumbMatch = chunk.match(/\\"display_url\\":\\"((?:[^"\\]|\\.)+?)\\"/);
-    posts.push({
-      shortcode,
-      type: typename === "GraphVideo" ? "reel" : "p",
-      videoUrl: null,
-      thumbnail: thumbMatch
-        ? thumbMatch[1]
-            .replace(/\\+u0025/gi, "%")
-            .replace(/\\+u0026/gi, "&")
-            .replace(/\\+u002f/gi, "/")
-            .replace(/\\\//g, "/")
-        : null,
-      caption: "",
-    });
-    if (posts.length >= count) return posts;
-  }
-
-  return posts;
 }
 
 export function useInstagramFeed(count = 3) {
@@ -154,7 +187,7 @@ export function useInstagramFeed(count = 3) {
       let lastErr: unknown;
 
       try {
-        // 1. Intento API local / dev server
+        // 1. Intento API local / dev server / Vercel endpoint
         for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
           if (signal?.aborted) return;
           try {
@@ -169,15 +202,15 @@ export function useInstagramFeed(count = 3) {
           } catch (err) {
             lastErr = err;
             if (signal?.aborted) return;
-            await new Promise((r) => setTimeout(r, 20 * (attempt + 1)));
+            await new Promise((r) => setTimeout(r, 40 * (attempt + 1)));
           }
         }
 
         if (signal?.aborted) return;
 
-        // 2. Intento Supabase Cache Table
+        // 2. Intento Supabase Edge Function / Cache Table
         try {
-          const sbPosts = await fetchFromSupabase(count);
+          const sbPosts = await fetchFeedFromSupabase(count, signal);
           if (sbPosts && sbPosts.length > 0) {
             if (signal?.aborted) return;
             setPosts(sbPosts);

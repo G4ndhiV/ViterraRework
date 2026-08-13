@@ -23,7 +23,6 @@ import { useSiteContent } from "../../contexts/SiteContentContext";
 import { PreviewFieldPulse } from "../components/admin/siteEditor/PreviewFieldPulse";
 import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
 import { HeroBackdropMedia } from "../components/HeroBackdropMedia";
-import { getViterraStreetTileLayer } from "../lib/mapTileConfig";
 import { Reveal } from "../components/Reveal";
 import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
 import { cn } from "../components/ui/utils";
@@ -259,7 +258,14 @@ export function ContactPage() {
         const el = mapRef.current;
         const map = L.map(el).setView(center, 15);
 
-        getViterraStreetTileLayer(L).addTo(map);
+        L.tileLayer(
+          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+          {
+            attribution:
+              "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+            maxZoom: 20,
+          }
+        ).addTo(map);
 
         const customIcon = L.divIcon({
           className: "custom-office-marker",

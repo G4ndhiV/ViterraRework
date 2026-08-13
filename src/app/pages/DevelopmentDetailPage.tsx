@@ -38,6 +38,7 @@ import {
 } from "../lib/propertyVideos";
 import { resolveTelHref, formatPhoneForDisplay } from "../lib/phoneLink";
 import { resolveWhatsappHref, whatsappDisplayLabel } from "../lib/whatsappLink";
+import { appendListingLinkToMessage, developmentPublicUrl } from "../lib/publicListingUrl";
 import { useSiteContent } from "../../contexts/SiteContentContext";
 import { mergeSiteSection } from "../../lib/siteContentMerge";
 import { PropertyVideoPlayer } from "../components/PropertyVideoPlayer";
@@ -108,12 +109,12 @@ function propertyCardHeadline(p: Property) {
   return p.publicationTitle?.trim() || p.title;
 }
 
-function developmentContactMessage(dev: { name: string; referenceCode?: string }, extra: string): string {
+function developmentContactMessage(dev: { id?: string; tokkoId?: string; name: string; referenceCode?: string }, extra: string): string {
   const ref = dev.referenceCode?.trim();
   const parts = [`Hola, me interesa el desarrollo ${dev.name}.`];
   if (ref) parts.push(`Referencia: ${ref}.`);
   parts.push(extra);
-  return parts.join(" ");
+  return appendListingLinkToMessage(parts.join(" "), developmentPublicUrl(dev.id, dev.tokkoId));
 }
 
 /* ─── Page ───────────────────────────────────────────────────────────────── */
@@ -130,7 +131,7 @@ export function DevelopmentDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
-  const [mapViewMode, setMapViewMode] = useState<"map" | "satellite">("map");
+  const [mapViewMode, setMapViewMode] = useState<"map" | "satellite">("satellite");
   const mapRef         = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const reduceMotion   = useReducedMotion();
@@ -199,8 +200,8 @@ export function DevelopmentDetailPage() {
     return development.referenceCode?.trim() || previewDevelopmentReferenceCode(development.referenceCode, development.tokkoId, development.id);
   }, [development]);
 
-  const whatsappInterestMessage = useMemo(() => development ? developmentContactMessage({ name: development.name, referenceCode: displayReference }, "¿Podrían darme más información?") : "", [development, displayReference]);
-  const whatsappVisitMessage    = useMemo(() => development ? developmentContactMessage({ name: development.name, referenceCode: displayReference }, "Me gustaría agendar una visita.") : "", [development, displayReference]);
+  const whatsappInterestMessage = useMemo(() => development ? developmentContactMessage({ id: development.id, tokkoId: development.tokkoId, name: development.name, referenceCode: displayReference }, "¿Podrían darme más información?") : "", [development, displayReference]);
+  const whatsappVisitMessage    = useMemo(() => development ? developmentContactMessage({ id: development.id, tokkoId: development.tokkoId, name: development.name, referenceCode: displayReference }, "Me gustaría agendar una visita.") : "", [development, displayReference]);
   const whatsappContactHref = useMemo(() => resolveWhatsappHref(undefined, siteWhatsappFallback, whatsappInterestMessage), [siteWhatsappFallback, whatsappInterestMessage]);
   const whatsappVisitHref   = useMemo(() => resolveWhatsappHref(undefined, siteWhatsappFallback, whatsappVisitMessage), [siteWhatsappFallback, whatsappVisitMessage]);
   const waDisplay = "(33) 1445 7122";

@@ -241,6 +241,11 @@ const PropertyFormDialog = lazy(() =>
 const PropertyImportDialog = lazy(() =>
   import("../../components/admin/PropertyImportDialog").then((m) => ({ default: m.PropertyImportDialog }))
 );
+const DevelopmentImportDialog = lazy(() =>
+  import("../../components/admin/DevelopmentImportDialog").then((m) => ({
+    default: m.DevelopmentImportDialog,
+  }))
+);
 const LeadImportDialog = lazy(() =>
   import("../../components/admin/LeadImportDialog").then((m) => ({ default: m.LeadImportDialog }))
 );
@@ -485,6 +490,7 @@ export function AdminWorkspace() {
   );
   const [deletePropertyId, setDeletePropertyId] = useState<string | null>(null);
   const [propertyImportOpen, setPropertyImportOpen] = useState(false);
+  const [developmentImportOpen, setDevelopmentImportOpen] = useState(false);
   const [leadImportOpen, setLeadImportOpen] = useState(false);
   const { appointments, setAppointments } = useAdminAppointments(activeTab);
 
@@ -3566,6 +3572,7 @@ export function AdminWorkspace() {
                 goTab("properties");
                 setPropertyForm({ mode: "edit", property });
               }}
+              onImport={isAdmin ? () => setDevelopmentImportOpen(true) : undefined}
             />
           ))}
 
@@ -3898,6 +3905,16 @@ export function AdminWorkspace() {
               open={propertyImportOpen}
               onOpenChange={setPropertyImportOpen}
               onImportComplete={() => void reloadProperties()}
+            />
+          </Suspense>
+        )}
+
+        {activeTab === "developments" && isAdmin && (
+          <Suspense fallback={null}>
+            <DevelopmentImportDialog
+              open={developmentImportOpen}
+              onOpenChange={setDevelopmentImportOpen}
+              onImportComplete={() => void refreshDevelopmentsCatalog()}
             />
           </Suspense>
         )}

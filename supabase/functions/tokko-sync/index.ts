@@ -17,7 +17,9 @@
  * Modos de "properties" desde el panel (body.propertiesMode): "new_only" solo inserta
  * tokko_id nuevos, "update_only" solo actualiza existentes con lo que traiga Tokko,
  * "sync_all" hace ambas. Ninguno borra propiedades obsoletas — eso queda reservado al
- * modo completo (cron/curl sin propertiesMode ni insertOnlyNew). Leads del panel:
+ * modo completo (cron/curl sin propertiesMode ni insertOnlyNew).
+ * "developments" usa el mismo contrato vía body.developmentsMode (ver
+ * src/app/components/admin/DevelopmentImportDialog.tsx). Leads del panel:
  * `insertOnlyNew: true` con resources "contact"/"web_contact" (dedupe `lead_kind,tokko_id`),
  * solo inserta nuevos.
  *
@@ -1053,6 +1055,10 @@ Deno.serve(async (req: Request) => {
        *  Tiene precedencia sobre insertOnlyNew para properties; insertOnlyNew se mantiene
        *  por compatibilidad (frontend viejo, o función vieja que ignore este campo). */
       propertiesMode?: "new_only" | "update_only" | "sync_all";
+      /** Modo del recurso "developments" para el botón del panel; mismo contrato que
+       *  `propertiesMode`: ninguno de los tres borra desarrollos obsoletos (eso queda
+       *  reservado al modo completo del cron/curl, que no envía developmentsMode). */
+      developmentsMode?: "new_only" | "update_only" | "sync_all";
       /** Para retomar contact/web_contact entre invocaciones cuando el dataset es grande
        *  (ver fetchTokkoItemsSince) — el frontend reenvía el `nextOffset` recibido hasta
        *  que `hasMore` sea false. */
@@ -1071,6 +1077,15 @@ Deno.serve(async (req: Request) => {
       body.propertiesMode === "update_only" ||
       body.propertiesMode === "sync_all"
         ? body.propertiesMode
+        : insertOnlyNew
+          ? "new_only"
+          : "full";
+    /** Igual que propertiesMode: "full" es el modo legado del cron/curl (upsert + borrado). */
+    const developmentsMode: "new_only" | "update_only" | "sync_all" | "full" =
+      body.developmentsMode === "new_only" ||
+      body.developmentsMode === "update_only" ||
+      body.developmentsMode === "sync_all"
+        ? body.developmentsMode
         : insertOnlyNew
           ? "new_only"
           : "full";
@@ -1139,10 +1154,45 @@ Deno.serve(async (req: Request) => {
       try {
         const errors: string[] = [];
         let upserted = 0;
-        const items = await fetchTokkoAllItems(pathDevs);
+        let created = 0;
+        let updated = 0;
+        let skippedExisting = 0;
+        let skippedNew = 0;
+        let items = await fetchTokkoAllItems(pathDevs);
         if (dryRun) {
           summary.developments = { upserted: items.length, errors: [] };
         } else {
+          // Modos del panel: hace falta saber qué tokko_id ya existen, tanto para filtrar
+          // (new_only/update_only) como para reportar creados vs actualizados (sync_all).
+          const existingIds = new Set<string>();
+          if (developmentsMode !== "full" && items.length > 0) {
+            const fetchedIds = items.map((item) => String(pickTokkoId(item))).filter(Boolean);
+            const lookupBatch = 300;
+            for (let i = 0; i < fetchedIds.length; i += lookupBatch) {
+              const slice = fetchedIds.slice(i, i + lookupBatch);
+              const { data: existingRows, error: lookupErr } = await supabase
+                .from("developments")
+                .select("tokko_id")
+                .in("tokko_id", slice);
+              if (lookupErr) {
+                errors.push(`Error al revisar existentes: ${lookupErr.message}`);
+                continue;
+              }
+              for (const r of existingRows ?? []) {
+                existingIds.add(String((r as { tokko_id: string }).tokko_id));
+              }
+            }
+            const beforeCount = items.length;
+            if (developmentsMode === "new_only") {
+              items = items.filter((item) => !existingIds.has(String(pickTokkoId(item))));
+              skippedExisting = beforeCount - items.length;
+            } else if (developmentsMode === "update_only") {
+              items = items.filter((item) => existingIds.has(String(pickTokkoId(item))));
+              skippedNew = beforeCount - items.length;
+            }
+            // sync_all: se procesan todos; created/updated se cuentan al escribir.
+          }
+
           for (const item of items) {
             try {
               const row = mapDevelopmentRow(item);
@@ -1163,32 +1213,44 @@ Deno.serve(async (req: Request) => {
                 if (uErr) throw uErr;
               }
               upserted++;
+              if (developmentsMode !== "full") {
+                if (existingIds.has(tokko_id)) updated++;
+                else created++;
+              }
             } catch (e) {
               errors.push(e instanceof Error ? e.message : String(e));
             }
           }
-          // Clean up obsolete developments (not in Tokko Broker responses and not manual)
-          const fetchedTokkoIds = items.map((item) => String(pickTokkoId(item))).filter(Boolean);
-          if (fetchedTokkoIds.length > 0 && errors.length === 0) {
-            const { data: dbDevs, error: fetchErr } = await supabase
-              .from("developments")
-              .select("tokko_id");
-            if (!fetchErr && dbDevs) {
-              const idsToDelete = dbDevs
-                .map((d) => String(d.tokko_id))
-                .filter((tokkoId) => !fetchedTokkoIds.includes(tokkoId) && !isManualTokkoId(tokkoId));
-              if (idsToDelete.length > 0) {
-                const { error: delErr } = await supabase
-                  .from("developments")
-                  .delete()
-                  .in("tokko_id", idsToDelete);
-                if (delErr) {
-                  errors.push(`Error al limpiar desarrollos obsoletos: ${delErr.message}`);
+          // Solo el modo completo (cron/curl) borra obsoletos; los modos del panel
+          // (new_only/update_only/sync_all) solo insertan/actualizan. Además, en esos modos
+          // `items` viene filtrado, así que usarlo aquí borraría de más.
+          if (developmentsMode === "full") {
+            // Clean up obsolete developments (not in Tokko Broker responses and not manual)
+            const fetchedTokkoIds = items.map((item) => String(pickTokkoId(item))).filter(Boolean);
+            if (fetchedTokkoIds.length > 0 && errors.length === 0) {
+              const { data: dbDevs, error: fetchErr } = await supabase
+                .from("developments")
+                .select("tokko_id");
+              if (!fetchErr && dbDevs) {
+                const idsToDelete = dbDevs
+                  .map((d) => String(d.tokko_id))
+                  .filter((tokkoId) => !fetchedTokkoIds.includes(tokkoId) && !isManualTokkoId(tokkoId));
+                if (idsToDelete.length > 0) {
+                  const { error: delErr } = await supabase
+                    .from("developments")
+                    .delete()
+                    .in("tokko_id", idsToDelete);
+                  if (delErr) {
+                    errors.push(`Error al limpiar desarrollos obsoletos: ${delErr.message}`);
+                  }
                 }
               }
             }
           }
-          summary.developments = { upserted, errors };
+          summary.developments =
+            developmentsMode === "full"
+              ? { upserted, errors }
+              : { upserted, created, updated, skippedExisting, skippedNew, errors };
         }
       } catch (e) {
         summary.developments = {

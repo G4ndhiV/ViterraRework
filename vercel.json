@@ -1,4 +1,10 @@
 {
+  "functions": {
+    "api/instagram-feed.ts": {
+      "maxDuration": 30,
+      "includeFiles": "api/_lib/**"
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",
@@ -33,12 +39,38 @@
     { "source": "/s/Nosotros", "destination": "/nosotros", "permanent": true },
     { "source": "/s/nosotros", "destination": "/nosotros", "permanent": true },
     { "source": "/s/Servicios", "destination": "/servicios", "permanent": true },
-    { "source": "/nuestros-servicios", "destination": "/servicios", "permanent": true }
+    { "source": "/nuestros-servicios", "destination": "/servicios", "permanent": true },
+    { "source": "/Contacto", "destination": "/contacto", "permanent": true },
+    { "source": "/Casas-en-Renta", "destination": "/renta", "permanent": true },
+    { "source": "/Casas-en-Renta-Temp", "destination": "/renta", "permanent": true },
+    { "source": "/Casas-en-Venta", "destination": "/venta", "permanent": true },
+    { "source": "/Casas-Condominio", "destination": "/venta", "permanent": true },
+    { "source": "/Departamentos-en-Renta", "destination": "/renta", "permanent": true },
+    { "source": "/Departamentos-en-Venta", "destination": "/venta", "permanent": true },
+    { "source": "/Bodegas-Industriales", "destination": "/renta", "permanent": true },
+    { "source": "/Oficinas", "destination": "/renta", "permanent": true },
+    { "source": "/Terrenos", "destination": "/venta", "permanent": true }
   ],
   "rewrites": [
     {
       "source": "/api/(.*)",
       "destination": "/api/$1"
+    },
+    {
+      "source": "/p/(\\d+)(.*)",
+      "destination": "/api/legacy-listing?kind=p&slug=$1"
+    },
+    {
+      "source": "/d/(\\d+)(.*)",
+      "destination": "/api/legacy-listing?kind=d&slug=$1"
+    },
+    {
+      "source": "/p/(.*)",
+      "destination": "/api/legacy-listing?kind=p&slug="
+    },
+    {
+      "source": "/d/(.*)",
+      "destination": "/api/legacy-listing?kind=d&slug="
     },
     {
       "source": "/(.*)",
