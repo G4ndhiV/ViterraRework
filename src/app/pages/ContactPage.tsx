@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { Link } from "react-router";
 import { Header } from "../components/Header";
-import { Footer } from "../components/Footer";
+import { Footer, VITERRA_GOOGLE_MAPS_URL } from "../components/Footer";
 import {
   MapPin,
   Phone,
@@ -292,7 +292,7 @@ export function ContactPage() {
               ${mapAddrSafe}
             </p>
             <a
-              href="https://maps.google.com/?q=${c.mapLat},${c.mapLng}"
+              href="${VITERRA_GOOGLE_MAPS_URL}"
               target="_blank"
               style="color: #C8102E; font-size: 14px; font-weight: 600; text-decoration: none;"
             >
@@ -564,7 +564,7 @@ export function ContactPage() {
                     </p>
                     <p className="mt-2 text-xs leading-relaxed text-brand-navy/70">{mapSnippet}</p>
                     <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${c.mapLat},${c.mapLng}`}
+                      href={VITERRA_GOOGLE_MAPS_URL}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="pointer-events-auto mt-3 inline-flex text-xs font-semibold text-primary underline-offset-2 hover:underline"

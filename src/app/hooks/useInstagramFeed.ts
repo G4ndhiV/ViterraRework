@@ -1,15 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
+import { FALLBACK_INSTAGRAM_POSTS, type InstagramPost } from "../../data/instagramFallback";
+import { getSupabaseClient } from "../lib/supabaseClient";
 
-export type InstagramPost = {
-  shortcode: string;
-  type: "reel" | "p";
-  videoUrl: string | null;
-  thumbnail: string | null;
-  caption: string;
-};
+export type { InstagramPost };
 
 const IG_USERNAME = "viterrainmobiliaria";
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 2;
 const LS_KEY = `viterra_ig_feed_${IG_USERNAME}`;
 const LS_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -35,6 +31,37 @@ function writeLocalCache(posts: InstagramPost[]) {
   } catch {
     /* ignore quota */
   }
+}
+
+async function fetchFromSupabase(count: number): Promise<InstagramPost[] | null> {
+  try {
+    const client = getSupabaseClient();
+    if (!client) return null;
+
+    const queryPromise = (async () => {
+      const { data, error } = await client
+        .from("instagram_feed_cache")
+        .select("posts")
+        .eq("username", IG_USERNAME)
+        .maybeSingle();
+
+      if (!error && Array.isArray(data?.posts) && data.posts.length > 0) {
+        return (data.posts as InstagramPost[])
+          .slice(0, count)
+          .filter((p) => Boolean(p?.shortcode));
+      }
+      return null;
+    })();
+
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 500)
+    );
+
+    return await Promise.race([queryPromise, timeoutPromise]);
+  } catch {
+    /* ignore supabase errors */
+  }
+  return null;
 }
 
 async function fetchFeed(count: number, signal?: AbortSignal): Promise<InstagramPost[]> {
@@ -94,7 +121,11 @@ function scrapeShortcodesFromHtml(html: string, count: number): InstagramPost[] 
       type: typename === "GraphVideo" ? "reel" : "p",
       videoUrl: null,
       thumbnail: thumbMatch
-        ? thumbMatch[1].replace(/\\u0026/g, "&").replace(/\\\//g, "/")
+        ? thumbMatch[1]
+            .replace(/\\+u0025/gi, "%")
+            .replace(/\\+u0026/gi, "&")
+            .replace(/\\+u002f/gi, "/")
+            .replace(/\\\//g, "/")
         : null,
       caption: "",
     });
@@ -106,10 +137,14 @@ function scrapeShortcodesFromHtml(html: string, count: number): InstagramPost[] 
 
 export function useInstagramFeed(count = 3) {
   const [posts, setPosts] = useState<InstagramPost[]>(() => {
-    if (typeof window === "undefined") return [];
-    return (readLocalCache() ?? []).slice(0, count);
+    if (typeof window === "undefined") return FALLBACK_INSTAGRAM_POSTS.slice(0, count);
+    const cached = readLocalCache();
+    if (cached && cached.length > 0) {
+      return cached.slice(0, count);
+    }
+    return FALLBACK_INSTAGRAM_POSTS.slice(0, count);
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
   const load = useCallback(
@@ -117,48 +152,74 @@ export function useInstagramFeed(count = 3) {
       setLoading(true);
       setError(false);
       let lastErr: unknown;
-      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        if (signal?.aborted) return;
-        try {
-          const next = await fetchFeed(count, signal);
-          if (signal?.aborted) return;
-          setPosts(next);
-          writeLocalCache(next);
-          setLoading(false);
-          setError(false);
-          return;
-        } catch (err) {
-          lastErr = err;
-          if (signal?.aborted) return;
-          await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
-        }
-      }
-
-      if (signal?.aborted) return;
 
       try {
-        const browserPosts = await fetchFeedFromBrowser(count, signal);
-        if (browserPosts.length > 0) {
-          setPosts(browserPosts);
-          writeLocalCache(browserPosts);
-          setLoading(false);
-          setError(false);
-          return;
+        // 1. Intento API local / dev server
+        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+          if (signal?.aborted) return;
+          try {
+            const next = await fetchFeed(count, signal);
+            if (signal?.aborted) return;
+            if (next && next.length > 0) {
+              setPosts(next);
+              writeLocalCache(next);
+              setError(false);
+              return;
+            }
+          } catch (err) {
+            lastErr = err;
+            if (signal?.aborted) return;
+            await new Promise((r) => setTimeout(r, 20 * (attempt + 1)));
+          }
         }
-      } catch (err) {
-        lastErr = err;
-      }
 
-      console.warn("[instagram-feed]", lastErr);
-      const cached = readLocalCache();
-      if (cached && cached.length > 0) {
-        setPosts(cached.slice(0, count));
+        if (signal?.aborted) return;
+
+        // 2. Intento Supabase Cache Table
+        try {
+          const sbPosts = await fetchFromSupabase(count);
+          if (sbPosts && sbPosts.length > 0) {
+            if (signal?.aborted) return;
+            setPosts(sbPosts);
+            writeLocalCache(sbPosts);
+            setError(false);
+            return;
+          }
+        } catch (err) {
+          lastErr = err;
+        }
+
+        if (signal?.aborted) return;
+
+        // 3. Intento Browser Proxy
+        try {
+          const browserPosts = await fetchFeedFromBrowser(count, signal);
+          if (browserPosts.length > 0) {
+            if (signal?.aborted) return;
+            setPosts(browserPosts);
+            writeLocalCache(browserPosts);
+            setError(false);
+            return;
+          }
+        } catch (err) {
+          lastErr = err;
+        }
+
+        if (signal?.aborted) return;
+
+        // 4. Local storage o Fallback definitivo
+        const cached = readLocalCache();
+        if (cached && cached.length > 0) {
+          setPosts(cached.slice(0, count));
+        } else {
+          setPosts(FALLBACK_INSTAGRAM_POSTS.slice(0, count));
+        }
         setError(false);
-      } else {
-        setPosts([]);
-        setError(true);
+      } finally {
+        if (!signal?.aborted) {
+          setLoading(false);
+        }
       }
-      setLoading(false);
     },
     [count]
   );

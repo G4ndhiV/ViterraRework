@@ -39,7 +39,8 @@ function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?
   );
 }
 
-function LazyInstagramCard({ post }: { post: InstagramPost }) {
+export function LazyInstagramCard({ post }: { post: InstagramPost }) {
+
   const { shortcode, type, videoUrl, thumbnail, caption } = post;
   const [inView, setInView] = useState(false);
   const [useIframeFallback, setUseIframeFallback] = useState(false);

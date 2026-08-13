@@ -35,14 +35,19 @@ export function mapWebProfileEdges(
     .filter((p) => Boolean(p.shortcode));
 }
 
-function unescapeIgUrl(raw: string): string {
-  return raw
-    .replace(/\\u0026/gi, "&")
-    .replace(/\\u002f/gi, "/")
-    .replace(/\\+\//g, "/")
-    .replace(/\\"/g, '"')
-    .replace(/\\\//g, "/");
+export function unescapeIgUrl(raw: string): string {
+  if (!raw) return "";
+  let res = raw;
+  res = res.replace(/\\+u0025/gi, "%");
+  res = res.replace(/\\+u0026/gi, "&");
+  res = res.replace(/\\+u002f/gi, "/");
+  res = res.replace(/\\+u003d/gi, "=");
+  res = res.replace(/\\+\//g, "/");
+  res = res.replace(/\\"/g, '"');
+  res = res.replace(/\\\//g, "/");
+  return res;
 }
+
 
 /**
  * Extrae posts del HTML (perfil o /embed/).

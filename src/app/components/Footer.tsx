@@ -68,10 +68,13 @@ function mailHref(emailLines: string) {
   return line.includes("@") ? `mailto:${line}` : "#";
 }
 
+export const VITERRA_GOOGLE_MAPS_URL =
+  "https://www.google.com/maps/place/Viterra+Grupo+Inmobiliario/@20.6972686,-103.3891484,17z/data=!3m1!4b1!4m6!3m5!1s0x8428ae461eb017bb:0x78bc52b4e33f1f28!8m2!3d20.6972636!4d-103.3865735!16s%2Fg%2F1vzg2k9l?entry=ttu&g_ep=EgoyMDI2MDgxMC4wIKXMDSoASAFQAw%3D%3D";
+
 function mapsHref(addressLines: string) {
   const query = addressLines.replace(/\n+/g, ", ").trim();
   if (!query) return "#";
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+  return VITERRA_GOOGLE_MAPS_URL;
 }
 
 function normalizeExternalHref(raw: string): string {
