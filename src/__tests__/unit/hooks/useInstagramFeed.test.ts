@@ -44,8 +44,10 @@ describe("useInstagramFeed hook", () => {
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
+      text: async () => JSON.stringify({ posts: mockPosts }),
       json: async () => ({ posts: mockPosts }),
-    } as Response);
+    } as unknown as Response);
+
 
     const { result } = renderHook(() => useInstagramFeed(1));
 
