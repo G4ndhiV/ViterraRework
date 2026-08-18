@@ -4,14 +4,22 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { trackPageView } from "./lib/googleAnalytics";
 import { LocaleProvider, useLocale } from "./i18n/LocaleContext";
+import { isAdminSurfacePath } from "./i18n/locale";
 import { SiteContentLocaleSync } from "../contexts/SiteContentContext";
 
 /**
  * Puente entre el idioma de la ruta y el contenido del CMS: `SiteContentProvider`
  * está por encima del router y no puede leer la ubicación.
+ *
+ * En el admin NO se sincroniza: sus rutas (`/admin/...`) no llevan prefijo de
+ * idioma, así que el puente las leería como español y revertiría el selector
+ * ES/EN del editor en cuanto el usuario lo pulsa. Dentro del admin la autoridad
+ * sobre el idioma editado es ese selector.
  */
 function ContentLocaleBridge() {
   const { locale } = useLocale();
+  const { pathname } = useLocation();
+  if (isAdminSurfacePath(pathname)) return null;
   return <SiteContentLocaleSync locale={locale} />;
 }
 

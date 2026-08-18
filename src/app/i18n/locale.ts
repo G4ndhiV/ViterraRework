@@ -86,6 +86,16 @@ export function localizeInternalHref(href: string, locale: Locale): string {
   return `${localizePathname(pathname, locale)}${rest}`;
 }
 
+/**
+ * Superficies del admin (CRM y el iframe de vista previa). No llevan prefijo de
+ * idioma, así que el contenido del CMS no debe seguir a la ruta ahí: dentro del
+ * admin manda el selector ES/EN del editor. Sin esta distinción, pulsar EN se
+ * revertía al instante porque `/admin/...` se leía como español.
+ */
+export function isAdminSurfacePath(pathname: string): boolean {
+  return pathname.startsWith("/admin") || pathname.startsWith("/site-preview-frame");
+}
+
 /** Idioma preferido del navegador, si es uno de los soportados. */
 export function preferredLocaleFromNavigator(languages: readonly string[]): Locale | null {
   for (const raw of languages) {
