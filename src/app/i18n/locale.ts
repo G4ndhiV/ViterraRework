@@ -71,6 +71,21 @@ export function localizePathname(pathname: string, locale: Locale): string {
   return canonical === "/" ? prefix : `${prefix}${canonical}`;
 }
 
+/**
+ * Aplica el prefijo de idioma a un enlace escrito en el admin.
+ *
+ * El CMS guarda los `href` como rutas en español (`/renta`), así que sin esto
+ * el footer y las tarjetas de servicios devolverían al visitante en inglés a
+ * las páginas en español. Solo toca rutas internas: deja intactos los enlaces
+ * externos, `mailto:`, `tel:` y las anclas.
+ */
+export function localizeInternalHref(href: string, locale: Locale): string {
+  const t = href.trim();
+  if (!t.startsWith("/")) return t;
+  const [pathname, rest = ""] = [t.split(/(?=[?#])/)[0], t.slice(t.split(/(?=[?#])/)[0].length)];
+  return `${localizePathname(pathname, locale)}${rest}`;
+}
+
 /** Idioma preferido del navegador, si es uno de los soportados. */
 export function preferredLocaleFromNavigator(languages: readonly string[]): Locale | null {
   for (const raw of languages) {

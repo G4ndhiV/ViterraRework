@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { Link } from "react-router";
+import { LocaleLink as Link } from "../components/LocaleLink";
 import { Header } from "../components/Header";
 import { Footer, VITERRA_GOOGLE_MAPS_URL } from "../components/Footer";
 import {

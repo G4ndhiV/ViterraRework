@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { LocaleLink as Link } from "../LocaleLink";
 import { Heart, Star } from "lucide-react";
 import { useState } from "react";
 import { ImageWithFallback } from "../figma/ImageWithFallback";
@@ -18,7 +18,7 @@ type Props = {
 };
 
 export function MapSearchListingCard({ property, selected, onSelect }: Props) {
-  const { locale } = useLocale();
+  const { locale, t } = useLocale();
   const [saved, setSaved] = useState(false);
   const rating = demoRating(property.id);
   const isDual = property.status === "venta_y_alquiler";
@@ -83,7 +83,7 @@ export function MapSearchListingCard({ property, selected, onSelect }: Props) {
         </p>
         {isDual && (
           <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.06em] text-slate-500">
-            Se puede comprar o rentar
+            {t("card.dualOperation")}
           </p>
         )}
         {(property.status === "venta" || isDual) && (

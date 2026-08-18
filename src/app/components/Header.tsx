@@ -274,7 +274,7 @@ export function Header() {
           style={{ paddingTop: `${logoPadTop}px`, paddingBottom: `${logoPadBottom}px` }}
         >
           <Link
-            to="/"
+            to={localePath("/")}
             aria-label="Viterra Grupo Inmobiliario — Inicio"
             className="group relative flex w-full max-w-none justify-center overflow-visible"
           >
@@ -380,7 +380,7 @@ export function Header() {
           )}
         >
           <Link
-            to="/"
+            to={localePath("/")}
             className="relative z-[56] hidden min-w-0 max-w-full flex-col items-start justify-center gap-0.5 justify-self-start sm:inline-flex"
             onClick={() => setIsMenuOpen(false)}
             aria-label="Viterra Grupo Inmobiliario — Inicio"
@@ -401,7 +401,7 @@ export function Header() {
               style={{ width: markBoxWMobile, maxWidth: "100%" }}
             >
               <Link
-                to="/"
+                to={localePath("/")}
                 className="flex w-full shrink-0 items-center justify-center overflow-visible rounded-sm"
                 onClick={() => setIsMenuOpen(false)}
                 aria-label="Viterra Grupo Inmobiliario — Inicio"

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
-import { Link } from "react-router";
+import { LocaleLink as Link } from "../components/LocaleLink";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { PropertyCard, propertyMatchesOperation } from "../components/PropertyCard";

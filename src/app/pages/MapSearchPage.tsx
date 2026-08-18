@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
+import { LocaleLink as Link } from "../components/LocaleLink";
 import type { CircleMarker, Layer, Map as LeafletMap, Marker } from "leaflet";
 import L from "leaflet";
 import { cn } from "../components/ui/utils";
@@ -228,7 +229,7 @@ function statusFromSearchParams(searchParams: URLSearchParams): "" | "venta" | "
 }
 
 export function MapSearchPage() {
-  const { locale } = useLocale();
+  const { locale, t } = useLocale();
   const { properties: catalogProperties } = useCatalogProperties();
   const catalogPropertyTypes = useMemo(
     () => catalogProperties.map((p) => p.type).filter(Boolean),
@@ -1204,7 +1205,7 @@ export function MapSearchPage() {
                     <div className="mt-2.5 space-y-1.5 border border-slate-200 px-2.5 py-2">
                       {selectedProperty.status === "venta_y_alquiler" && (
                         <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-500">
-                          Se puede comprar o rentar
+                          {t("card.dualOperation")}
                         </p>
                       )}
                       {(selectedProperty.status === "venta" ||

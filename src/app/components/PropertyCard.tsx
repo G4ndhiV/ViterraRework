@@ -1,4 +1,5 @@
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
+import { LocaleLink as Link } from "./LocaleLink";
 import { Bed, Bath, Square, MapPin, X, ArrowRight } from "lucide-react";
 import { useState, useCallback } from "react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
@@ -224,7 +225,7 @@ export function PropertyCard({
   const [previewOpen, setPreviewOpen] = useState(false);
   const ed = variant === "editorial";
   const navigate = useNavigate();
-  const { locale } = useLocale();
+  const { locale, localePath, t } = useLocale();
 
   const openPreview = useCallback(() => {
     if (!disablePreview) setPreviewOpen(true);
@@ -235,7 +236,7 @@ export function PropertyCard({
   }, [onMapSearchSelect]);
 
   const goToDetails = useCallback(() => {
-    navigate(`/propiedades/${property.id}`, { state: { property } });
+    navigate(localePath(`/propiedades/${property.id}`), { state: { property } });
   }, [navigate, property]);
 
   return (
@@ -295,7 +296,7 @@ export function PropertyCard({
                   : "border-slate-200 bg-white/90 px-3 py-1.5 text-slate-900 rounded-none"
               )}
             >
-              {property.type}
+              {translatePropertyType(property.type, locale)}
             </span>
           </div>
         </div>
@@ -341,13 +342,13 @@ export function PropertyCard({
             <div className="flex items-center gap-1.5">
               <Bed className={cn(ed ? "h-3.5 w-3.5" : "w-4 h-4")} strokeWidth={1.5} />
               <span className={cn("tabular-nums", ed ? "text-[11px] font-normal uppercase tracking-[0.12em]" : "text-sm font-light")}>
-                {property.bedrooms} Recámaras
+                {property.bedrooms} {t("card.bedrooms")}
               </span>
             </div>
             <div className="flex items-center gap-1.5">
               <Bath className={cn(ed ? "h-3.5 w-3.5" : "w-4 h-4")} strokeWidth={1.5} />
               <span className={cn("tabular-nums", ed ? "text-[11px] font-normal uppercase tracking-[0.12em]" : "text-sm font-light")}>
-                {property.bathrooms} Baños
+                {property.bathrooms} {t("card.bathrooms")}
               </span>
             </div>
           </div>
@@ -368,7 +369,7 @@ export function PropertyCard({
                     ed ? "text-brand-navy/50" : "text-slate-500"
                   )}
                 >
-                  Se puede comprar o rentar
+                  {t("card.dualOperation")}
                 </p>
               )}
               {(property.status === "venta" || property.status === "venta_y_alquiler") && (
@@ -384,7 +385,7 @@ export function PropertyCard({
                   ${property.price.toLocaleString()}
                   {property.status === "venta_y_alquiler" && (
                     <span className={cn("ml-1.5 text-xs font-medium not-italic", ed ? "font-heading text-brand-navy/45" : "text-slate-500")}>
-                      venta
+                      {t("card.saleSuffix")}
                     </span>
                   )}
                 </p>
@@ -401,7 +402,7 @@ export function PropertyCard({
                 >
                   ${property.rentalPrice?.toLocaleString() || property.price.toLocaleString()}
                   <span className={cn("ml-1 text-xs font-medium not-italic", ed ? "font-heading text-brand-navy/45" : "text-slate-500")} style={!ed ? { fontWeight: 500 } : undefined}>
-                    / mes
+                    {t("card.perMonth")}
                   </span>
                 </p>
               )}
@@ -434,7 +435,7 @@ export function PropertyCard({
                   onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#a00d25")}
                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#C8102E")}
                 >
-                  Ver detalles
+                  {t("card.seeDetails")}
                 </Link>
               </div>
             ) : disablePreview ? (
@@ -446,7 +447,7 @@ export function PropertyCard({
                 onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#a00d25")}
                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#C8102E")}
               >
-                Ver detalles
+                {t("card.seeDetails")}
               </Link>
             ) : (
               <button
@@ -483,7 +484,7 @@ export function PropertyCard({
                   {propertyStatusLabel(property.status, locale)}
                 </span>
                 <span className="rounded-sm border border-white/60 bg-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-brand-navy">
-                  {property.type}
+                  {translatePropertyType(property.type, locale)}
                 </span>
               </div>
             </div>
@@ -502,11 +503,11 @@ export function PropertyCard({
               <div className="mt-3 flex border border-slate-300 bg-slate-50/80 text-[11px] text-slate-800 sm:text-xs">
                 <div className="flex flex-1 flex-col items-center gap-1 border-r border-slate-300 py-2.5">
                   <Bed className="h-3.5 w-3.5 text-brand-navy" strokeWidth={1.5} />
-                  <span className="font-medium tabular-nums">{property.bedrooms} rec.</span>
+                  <span className="font-medium tabular-nums">{property.bedrooms} {t("card.bedroomsShort")}</span>
                 </div>
                 <div className="flex flex-1 flex-col items-center gap-1 border-r border-slate-300 py-2.5">
                   <Bath className="h-3.5 w-3.5 text-brand-navy" strokeWidth={1.5} />
-                  <span className="font-medium tabular-nums">{property.bathrooms} baños</span>
+                  <span className="font-medium tabular-nums">{property.bathrooms} {t("card.bathroomsShort")}</span>
                 </div>
                 <div className="flex flex-1 flex-col items-center gap-1 py-2.5">
                   <Square className="h-3.5 w-3.5 text-brand-navy" strokeWidth={1.5} />
@@ -532,7 +533,7 @@ export function PropertyCard({
                     </p>
                     <p className="font-heading mt-1 text-xl font-semibold tabular-nums text-brand-navy sm:text-2xl">
                       ${property.rentalPrice?.toLocaleString() || property.price.toLocaleString()}
-                      <span className="ml-1.5 font-heading text-sm font-normal not-italic text-slate-600">/ mes</span>
+                      <span className="ml-1.5 font-heading text-sm font-normal not-italic text-slate-600">{t("card.perMonth")}</span>
                     </p>
                   </div>
                 )}

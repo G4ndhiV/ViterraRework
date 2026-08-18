@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, Link, useLocation } from "react-router";
+import { useParams, useLocation } from "react-router";
+import { LocaleLink as Link } from "../components/LocaleLink";
 import type { Map as LeafletMap } from "leaflet";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
