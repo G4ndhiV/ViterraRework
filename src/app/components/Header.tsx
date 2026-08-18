@@ -8,6 +8,9 @@ import { PreviewSectionChrome } from "./admin/siteEditor/PreviewSectionChrome";
 import { SocialNavIcons } from "./SocialNavIcons";
 import { cn } from "./ui/utils";
 import { VITERRA_NAV_ITEMS, isActiveNavPath } from "../config/siteNav";
+import { stripLocaleFromPathname } from "../i18n/locale";
+import { useLocale } from "../i18n/LocaleContext";
+import { LanguageToggle } from "./LanguageToggle";
 
 /** Recorrido de scroll (px) para interpolar header (home e internas) */
 const SCROLL_RANGE = 200;
@@ -148,8 +151,13 @@ export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrollP, setScrollP] = useState(0);
   const location = useLocation();
-  /** En el iframe del editor la URL real es `/admin/...`; la ruta simulada viene del contexto. */
-  const routePath = sitePreviewPath ?? location.pathname;
+  const { t, localePath } = useLocale();
+  /**
+   * En el iframe del editor la URL real es `/admin/...`; la ruta simulada viene del contexto.
+   * Se normaliza sin prefijo de idioma para que las comparaciones de abajo
+   * (`isHome`, `isRentPage`, …) funcionen igual en `/renta` y en `/en/renta`.
+   */
+  const routePath = stripLocaleFromPathname(sitePreviewPath ?? location.pathname);
   const isHome = routePath === "/";
   const isRentPage = routePath === "/renta";
   const isSalePage = routePath === "/venta";
@@ -330,6 +338,13 @@ export function Header() {
                 </span>
               </PreviewSectionChrome>
             </div>
+            {/* Espejo del bloque de redes: la franja derecha estaba libre. */}
+            <div
+              className="pointer-events-auto absolute right-8 top-0 z-[56] flex h-full items-center justify-end sm:right-10"
+              style={{ width: markBoxW }}
+            >
+              <LanguageToggle />
+            </div>
           </div>
           <nav
             className="absolute inset-0 flex items-stretch"
@@ -340,17 +355,17 @@ export function Header() {
             }}
           >
             <div className="flex min-w-0 flex-1 items-center justify-center" style={{ gap: `${navGap}px` }}>
-              {VITERRA_NAV_ITEMS.map(([to, label]) => {
+              {VITERRA_NAV_ITEMS.map(([to, labelKey]) => {
                 const active = isActiveNavPath(routePath, to);
                 return (
                   <Link
                     key={`c-${to}`}
-                    to={to}
+                    to={localePath(to)}
                     className={cn(navLinkClass, active && navLinkActiveClassCenter)}
                     style={{ fontSize: `${navFontPx}px`, letterSpacing: `${navTrackEm}em` }}
                     aria-current={active ? "page" : undefined}
                   >
-                    {label}
+                    {t(labelKey)}
                   </Link>
                 );
               })}
@@ -451,12 +466,12 @@ export function Header() {
           }}
         >
           <div className="mx-auto max-w-7xl space-y-1 px-4 py-5 sm:px-6 sm:py-6">
-            {VITERRA_NAV_ITEMS.map(([to, label]) => {
+            {VITERRA_NAV_ITEMS.map(([to, labelKey]) => {
               const active = isActiveNavPath(routePath, to);
               return (
                 <Link
                   key={to}
-                  to={to}
+                  to={localePath(to)}
                   onClick={() => setIsMenuOpen(false)}
                   className={cn(
                     "block border-l-[3px] py-3 pl-4 text-sm uppercase tracking-[0.14em] transition-colors",
@@ -466,12 +481,15 @@ export function Header() {
                   )}
                   aria-current={active ? "page" : undefined}
                 >
-                  {label}
+                  {t(labelKey)}
                 </Link>
               );
             })}
             <div className="pt-3">
               <div className="border-t border-white/10 pt-3">
+                <div className="flex items-center justify-center pb-3">
+                  <LanguageToggle />
+                </div>
                 <div className="flex items-center justify-center">
                   <SocialNavIcons iconSize="sm" />
                 </div>

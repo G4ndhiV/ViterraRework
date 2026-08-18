@@ -1,0 +1,81 @@
+/**
+ * Idiomas del sitio público. El español vive en la raíz (`/renta`) y el inglés
+ * bajo un prefijo (`/en/renta`), para que Google indexe ambas versiones y un
+ * enlace compartido conserve el idioma.
+ *
+ * Los segmentos de ruta siguen en español en ambos idiomas (`/en/propiedades`,
+ * no `/en/properties`): traducir los slugs obligaría a mantener alias en el
+ * router, el sitemap y el puente `/p/` de Tokko. Se puede hacer después sin
+ * romper nada de lo que hay aquí.
+ */
+export const LOCALES = ["es", "en"] as const;
+
+export type Locale = (typeof LOCALES)[number];
+
+export const DEFAULT_LOCALE: Locale = "es";
+
+/** Prefijo de ruta por idioma; el idioma por defecto no lleva prefijo. */
+export const LOCALE_PATH_PREFIX: Record<Locale, string> = {
+  es: "",
+  en: "/en",
+};
+
+/** Valor del atributo `lang` / `hreflang`. */
+export const LOCALE_HTML_LANG: Record<Locale, string> = {
+  es: "es-MX",
+  en: "en",
+};
+
+/** Etiqueta del idioma en su propio idioma, para el selector. */
+export const LOCALE_LABEL: Record<Locale, string> = {
+  es: "Español",
+  en: "English",
+};
+
+export function isLocale(value: string): value is Locale {
+  return (LOCALES as readonly string[]).includes(value);
+}
+
+/** Primer segmento de la ruta, sin barras. `/en/renta` → `en`. */
+function firstSegment(pathname: string): string {
+  return pathname.replace(/^\/+/, "").split("/")[0] ?? "";
+}
+
+/**
+ * Idioma que codifica una ruta. `/en` y `/en/renta` son inglés; `/renta` y
+ * `/english-course` son español (se compara el segmento completo, no un
+ * prefijo de texto).
+ */
+export function localeFromPathname(pathname: string): Locale {
+  const seg = firstSegment(pathname);
+  return isLocale(seg) && seg !== DEFAULT_LOCALE ? seg : DEFAULT_LOCALE;
+}
+
+/** Ruta canónica sin prefijo de idioma. `/en/renta` → `/renta`; `/en` → `/`. */
+export function stripLocaleFromPathname(pathname: string): string {
+  const seg = firstSegment(pathname);
+  if (!isLocale(seg) || seg === DEFAULT_LOCALE) return pathname || "/";
+  const rest = pathname.replace(/^\/+/, "").slice(seg.length);
+  const next = rest.startsWith("/") ? rest : `/${rest}`;
+  return next === "/" ? "/" : next.replace(/\/+$/, "") || "/";
+}
+
+/**
+ * Antepone el prefijo del idioma a una ruta canónica.
+ * `("/renta", "en")` → `/en/renta`; `("/renta", "es")` → `/renta`.
+ */
+export function localizePathname(pathname: string, locale: Locale): string {
+  const canonical = stripLocaleFromPathname(pathname);
+  const prefix = LOCALE_PATH_PREFIX[locale];
+  if (!prefix) return canonical;
+  return canonical === "/" ? prefix : `${prefix}${canonical}`;
+}
+
+/** Idioma preferido del navegador, si es uno de los soportados. */
+export function preferredLocaleFromNavigator(languages: readonly string[]): Locale | null {
+  for (const raw of languages) {
+    const base = raw.trim().toLowerCase().split("-")[0];
+    if (isLocale(base)) return base;
+  }
+  return null;
+}
