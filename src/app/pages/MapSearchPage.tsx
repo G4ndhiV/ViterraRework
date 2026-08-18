@@ -12,6 +12,7 @@ import {
   propertyPriceForOperation,
   propertyStatusLabel,
 } from "../components/PropertyCard";
+import { useLocale } from "../i18n/LocaleContext";
 import { useCatalogProperties } from "../hooks/useCatalogProperties";
 import { useTokkoPropertyTypes } from "../hooks/useTokkoPropertyTypes";
 import { propertyMatchesTypeFilter } from "../lib/propertyTypesCatalog";
@@ -227,6 +228,7 @@ function statusFromSearchParams(searchParams: URLSearchParams): "" | "venta" | "
 }
 
 export function MapSearchPage() {
+  const { locale } = useLocale();
   const { properties: catalogProperties } = useCatalogProperties();
   const catalogPropertyTypes = useMemo(
     () => catalogProperties.map((p) => p.type).filter(Boolean),
@@ -1167,7 +1169,7 @@ export function MapSearchPage() {
                     </button>
                     <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-2.5rem)] flex-wrap gap-1">
                       <span className="bg-primary px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-white">
-                        {propertyStatusLabel(selectedProperty.status)}
+                        {propertyStatusLabel(selectedProperty.status, locale)}
                       </span>
                       <span className="border border-white/60 bg-white px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.1em] text-brand-navy">
                         {selectedProperty.type}

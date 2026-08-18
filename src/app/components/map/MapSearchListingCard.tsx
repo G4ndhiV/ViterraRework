@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ImageWithFallback } from "../figma/ImageWithFallback";
 import { cn } from "../ui/utils";
 import { propertyStatusLabel, type Property } from "../PropertyCard";
+import { useLocale } from "../../i18n/LocaleContext";
 
 function demoRating(id: string): string {
   const n = id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
@@ -17,6 +18,7 @@ type Props = {
 };
 
 export function MapSearchListingCard({ property, selected, onSelect }: Props) {
+  const { locale } = useLocale();
   const [saved, setSaved] = useState(false);
   const rating = demoRating(property.id);
   const isDual = property.status === "venta_y_alquiler";
@@ -47,7 +49,7 @@ export function MapSearchListingCard({ property, selected, onSelect }: Props) {
           optimizeWidth={320}
         />
         <span className="absolute left-2 top-2 border border-slate-200 bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-slate-900 shadow-sm">
-          {propertyStatusLabel(property.status)}
+          {propertyStatusLabel(property.status, locale)}
         </span>
         <button
           type="button"

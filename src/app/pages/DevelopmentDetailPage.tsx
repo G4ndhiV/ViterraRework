@@ -39,6 +39,8 @@ import {
 import { resolveTelHref, formatPhoneForDisplay } from "../lib/phoneLink";
 import { resolveWhatsappHref, whatsappDisplayLabel } from "../lib/whatsappLink";
 import { appendListingLinkToMessage, developmentPublicUrl } from "../lib/publicListingUrl";
+import { useLocale } from "../i18n/LocaleContext";
+import type { TranslationKey } from "../i18n/dictionaries";
 import { useSiteContent } from "../../contexts/SiteContentContext";
 import { mergeSiteSection } from "../../lib/siteContentMerge";
 import { PropertyVideoPlayer } from "../components/PropertyVideoPlayer";
@@ -109,12 +111,20 @@ function propertyCardHeadline(p: Property) {
   return p.publicationTitle?.trim() || p.title;
 }
 
-function developmentContactMessage(dev: { id?: string; tokkoId?: string; name: string; referenceCode?: string }, extra: string): string {
+function developmentContactMessage(
+  dev: { id?: string; tokkoId?: string; name: string; referenceCode?: string },
+  extra: string,
+  t: (key: TranslationKey, vars?: Record<string, string | number>) => string,
+): string {
   const ref = dev.referenceCode?.trim();
-  const parts = [`Hola, me interesa el desarrollo ${dev.name}.`];
-  if (ref) parts.push(`Referencia: ${ref}.`);
+  const parts = [t("wa.developmentInterest", { name: dev.name })];
+  if (ref) parts.push(t("wa.reference", { code: ref }));
   parts.push(extra);
-  return appendListingLinkToMessage(parts.join(" "), developmentPublicUrl(dev.id, dev.tokkoId));
+  return appendListingLinkToMessage(
+    parts.join(" "),
+    developmentPublicUrl(dev.id, dev.tokkoId),
+    t("wa.listingLabel"),
+  );
 }
 
 /* ─── Page ───────────────────────────────────────────────────────────────── */
@@ -122,6 +132,7 @@ export function DevelopmentDetailPage() {
   const { id } = useParams();
   const { development, linkedProperties, loading, error } = useDevelopmentDetail(id);
   const { content } = useSiteContent();
+  const { t } = useLocale();
   const contactSite = mergeSiteSection("contact", content.contact);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<DevelopmentDetailTabId>("descripcion");
@@ -200,8 +211,8 @@ export function DevelopmentDetailPage() {
     return development.referenceCode?.trim() || previewDevelopmentReferenceCode(development.referenceCode, development.tokkoId, development.id);
   }, [development]);
 
-  const whatsappInterestMessage = useMemo(() => development ? developmentContactMessage({ id: development.id, tokkoId: development.tokkoId, name: development.name, referenceCode: displayReference }, "¿Podrían darme más información?") : "", [development, displayReference]);
-  const whatsappVisitMessage    = useMemo(() => development ? developmentContactMessage({ id: development.id, tokkoId: development.tokkoId, name: development.name, referenceCode: displayReference }, "Me gustaría agendar una visita.") : "", [development, displayReference]);
+  const whatsappInterestMessage = useMemo(() => development ? developmentContactMessage({ id: development.id, tokkoId: development.tokkoId, name: development.name, referenceCode: displayReference }, t("wa.moreInfo"), t) : "", [development, displayReference, t]);
+  const whatsappVisitMessage    = useMemo(() => development ? developmentContactMessage({ id: development.id, tokkoId: development.tokkoId, name: development.name, referenceCode: displayReference }, t("wa.scheduleVisit"), t) : "", [development, displayReference, t]);
   const whatsappContactHref = useMemo(() => resolveWhatsappHref(undefined, siteWhatsappFallback, whatsappInterestMessage), [siteWhatsappFallback, whatsappInterestMessage]);
   const whatsappVisitHref   = useMemo(() => resolveWhatsappHref(undefined, siteWhatsappFallback, whatsappVisitMessage), [siteWhatsappFallback, whatsappVisitMessage]);
   const waDisplay = "(33) 1445 7122";
@@ -593,9 +604,9 @@ export function DevelopmentDetailPage() {
                       <div className="space-y-8">
                         {development.amenities.length + development.services.length + development.additionalFeatures.length > 0 ? (
                           <div className="space-y-7 dd-features">
-                            <FeatureSection variant="amenity" title="Amenidades" items={development.amenities} keyPrefix="dev-am" />
-                            <FeatureSection variant="service" title="Servicios" items={development.services} keyPrefix="dev-sv" />
-                            <FeatureSection variant="extra" title="Características adicionales" items={development.additionalFeatures} keyPrefix="dev-af" />
+                            <FeatureSection variant="amenity" items={development.amenities} keyPrefix="dev-am" />
+                            <FeatureSection variant="service" items={development.services} keyPrefix="dev-sv" />
+                            <FeatureSection variant="extra" items={development.additionalFeatures} keyPrefix="dev-af" />
                           </div>
                         ) : (
                           <div className="px-5 py-10 text-center" style={{ borderRadius: 8, border: `1px dashed ${T.border}`, background: T.canvas }}>
@@ -1029,6 +1040,7 @@ function DevContactSection({
   submitting: boolean; submitted: boolean; submitError: string | null;
   showGlobalWhatsappHint?: boolean;
 }) {
+  const { t } = useLocale();
   return (
     <div className="space-y-4">
       <div>
@@ -1042,14 +1054,14 @@ function DevContactSection({
         {telContactHref ? (
           <a href={telContactHref} className="flex flex-col items-center justify-center gap-0.5 text-sm transition-all"
             style={{ padding: "11px 8px", borderRadius: 7, border: `1.5px solid ${T.border}`, background: T.canvas, color: T.navy, fontWeight: 700 }}>
-            <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" strokeWidth={2} />Llamar</span>
+            <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" strokeWidth={2} />{t("contact.call")}</span>
             {phoneDisplay ? <span style={{ fontSize: "0.65rem", color: T.muted, fontWeight: 400 }}>{phoneDisplay}</span> : null}
           </a>
         ) : (
           <span className="flex flex-col items-center justify-center gap-0.5 text-sm"
             style={{ padding: "11px 8px", borderRadius: 7, border: `1.5px dashed ${T.border}`, background: T.canvas, color: T.muted, cursor: "default" }}
             title="Configura un teléfono en el admin">
-            <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" strokeWidth={2} />Llamar</span>
+            <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" strokeWidth={2} />{t("contact.call")}</span>
           </span>
         )}
         <a href={whatsappContactHref} target="_blank" rel="noopener noreferrer"

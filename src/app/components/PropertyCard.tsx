@@ -3,6 +3,9 @@ import { Bed, Bath, Square, MapPin, X, ArrowRight } from "lucide-react";
 import { useState, useCallback } from "react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { cn } from "./ui/utils";
+import { DEFAULT_LOCALE, type Locale } from "../i18n/locale";
+import { translatePropertyStatus, translatePropertyType } from "../i18n/catalogTerms";
+import { useLocale } from "../i18n/LocaleContext";
 import {
   Dialog,
   DialogContent,
@@ -24,8 +27,16 @@ export type { PropertyVideoEntry, PropertyTour3dEntry };
 
 export type PropertyStatus = "venta" | "alquiler" | "venta_y_alquiler";
 
-/** Etiqueta legible para badges y filas (evita mostrar `venta_y_alquiler` crudo). */
-export function propertyStatusLabel(status: PropertyStatus): string {
+/**
+ * Etiqueta legible para badges y filas (evita mostrar `venta_y_alquiler` crudo).
+ * El idioma es opcional y por defecto español, así que el admin —que no se
+ * traduce— y las pruebas existentes siguen viendo las mismas cadenas.
+ */
+export function propertyStatusLabel(
+  status: PropertyStatus,
+  locale: Locale = DEFAULT_LOCALE,
+): string {
+  if (locale !== DEFAULT_LOCALE) return translatePropertyStatus(status, locale);
   if (status === "venta") return "En venta";
   if (status === "venta_y_alquiler") return "Venta y Renta";
   return "En renta";
@@ -213,6 +224,7 @@ export function PropertyCard({
   const [previewOpen, setPreviewOpen] = useState(false);
   const ed = variant === "editorial";
   const navigate = useNavigate();
+  const { locale } = useLocale();
 
   const openPreview = useCallback(() => {
     if (!disablePreview) setPreviewOpen(true);
@@ -273,7 +285,7 @@ export function PropertyCard({
               )}
               style={!ed ? { backgroundColor: "rgba(200, 16, 46, 0.9)", borderColor: "var(--primary)" } : undefined}
             >
-              {propertyStatusLabel(property.status)}
+              {propertyStatusLabel(property.status, locale)}
             </span>
             <span
               className={cn(
@@ -468,7 +480,7 @@ export function PropertyCard({
               </button>
               <div className="absolute bottom-2.5 left-2.5 flex max-w-[calc(100%-2.75rem)] flex-wrap gap-1.5">
                 <span className="rounded-sm bg-primary px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-white">
-                  {propertyStatusLabel(property.status)}
+                  {propertyStatusLabel(property.status, locale)}
                 </span>
                 <span className="rounded-sm border border-white/60 bg-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-brand-navy">
                   {property.type}

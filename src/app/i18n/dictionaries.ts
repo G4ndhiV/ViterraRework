@@ -38,7 +38,12 @@ export const es = {
   "wa.reference": "Referencia: {code}.",
   "wa.moreInfo": "¿Podrían darme más información?",
   "wa.scheduleVisit": "Me gustaría agendar una visita.",
-  "wa.listingLink": "Ficha: {url}",
+  "wa.listingLabel": "Ficha",
+
+  /* Secciones de características del catálogo */
+  "catalog.amenities": "Amenidades",
+  "catalog.services": "Servicios",
+  "catalog.additionalFeatures": "Características adicionales",
 
   /* Estados genéricos */
   "common.loading": "Cargando…",
@@ -74,7 +79,11 @@ export const en: Record<TranslationKey, string> = {
   "wa.reference": "Reference: {code}.",
   "wa.moreInfo": "Could you send me more information?",
   "wa.scheduleVisit": "I'd like to schedule a visit.",
-  "wa.listingLink": "Listing: {url}",
+  "wa.listingLabel": "Listing",
+
+  "catalog.amenities": "Amenities",
+  "catalog.services": "Services",
+  "catalog.additionalFeatures": "Additional features",
 
   "common.loading": "Loading…",
   "common.notFound": "Not found",

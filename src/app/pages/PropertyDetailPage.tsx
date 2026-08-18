@@ -41,6 +41,8 @@ import { useSiteContent } from "../../contexts/SiteContentContext";
 import { mergeSiteSection } from "../../lib/siteContentMerge";
 import { resolveWhatsappHref, whatsappDisplayLabel } from "../lib/whatsappLink";
 import { appendListingLinkToMessage, propertyPublicUrl } from "../lib/publicListingUrl";
+import { useLocale } from "../i18n/LocaleContext";
+import { translateCatalogFeatures, translatePropertyType } from "../i18n/catalogTerms";
 import { resolveTelHref, formatPhoneForDisplay } from "../lib/phoneLink";
 import { hasRichDescription, RICH_DESCRIPTION_HTML_CLASS, sanitizeRichHtml } from "../lib/propertyDescription";
 import { IFRAME_SANDBOX_ATTR } from "../lib/safeEmbed";
@@ -142,6 +144,7 @@ const PROPERTIES_GLOBAL_WA_HREF  = "https://wa.me/523331991774";
 export function PropertyDetailPage() {
   const { id } = useParams();
   const location = useLocation();
+  const { locale, t } = useLocale();
   const { properties, loading } = useCatalogProperties();
   const { content } = useSiteContent();
   const contactSite = mergeSiteSection("contact", content.contact);
@@ -229,9 +232,15 @@ export function PropertyDetailPage() {
   const hasTour3d = resolvedTours3d.length > 0;
 
   const whatsappInterestMessage = useMemo(() => {
-    const base = `Hola, me interesa la propiedad ${property?.publicationTitle?.trim() || property?.title || ""}.`;
-    return appendListingLinkToMessage(base, propertyPublicUrl(property?.id, property?.tokkoId));
-  }, [property?.publicationTitle, property?.title, property?.id, property?.tokkoId]);
+    const base = t("wa.propertyInterest", {
+      title: property?.publicationTitle?.trim() || property?.title || "",
+    });
+    return appendListingLinkToMessage(
+      base,
+      propertyPublicUrl(property?.id, property?.tokkoId),
+      t("wa.listingLabel"),
+    );
+  }, [t, property?.publicationTitle, property?.title, property?.id, property?.tokkoId]);
   const telHref = useMemo(() => {
     const fromProp = resolveTelHref(property?.contactPhone);
     if (fromProp) return fromProp;
@@ -250,8 +259,12 @@ export function PropertyDetailPage() {
   }, [property?.contactWhatsapp, contactSite.quickWhatsappHref, whatsappInterestMessage]);
 
   const propertyTags = useMemo(
-    () => (property?.tags ?? []).map((t) => t.trim()).filter(Boolean),
-    [property?.tags],
+    () =>
+      translateCatalogFeatures(
+        (property?.tags ?? []).map((t) => t.trim()).filter(Boolean),
+        locale,
+      ),
+    [property?.tags, locale],
   );
 
   const propertyDetailTabs = useMemo(() => {
@@ -549,7 +562,7 @@ export function PropertyDetailPage() {
                     fontSize: "0.62rem", letterSpacing: "0.14em", fontWeight: 700,
                     color: T.gold, textTransform: "uppercase",
                   }}>
-                    {propertyStatusLabel(property.status)}
+                    {propertyStatusLabel(property.status, locale)}
                   </span>
                   <span style={{
                     padding: "4px 11px", borderRadius: 4,
@@ -558,7 +571,7 @@ export function PropertyDetailPage() {
                     fontSize: "0.62rem", letterSpacing: "0.1em", fontWeight: 600,
                     color: T.navy, textTransform: "uppercase",
                   }}>
-                    {property.type}
+                    {translatePropertyType(property.type, locale)}
                   </span>
                   {property.featured ? (
                     <span style={{
@@ -736,9 +749,9 @@ export function PropertyDetailPage() {
                             ) : null}
                             <GoldRule />
                             <div className="space-y-7 pd-features-light">
-                              <FeatureSection variant="amenity" title="Amenidades" items={linkedDevelopment.amenities} keyPrefix="dev-am" />
-                              <FeatureSection variant="service" title="Servicios" items={linkedDevelopment.services} keyPrefix="dev-sv" />
-                              <FeatureSection variant="extra" title="Características adicionales" items={linkedDevelopment.additionalFeatures} keyPrefix="dev-af" />
+                              <FeatureSection variant="amenity" items={linkedDevelopment.amenities} keyPrefix="dev-am" />
+                              <FeatureSection variant="service" items={linkedDevelopment.services} keyPrefix="dev-sv" />
+                              <FeatureSection variant="extra" items={linkedDevelopment.additionalFeatures} keyPrefix="dev-af" />
                             </div>
                           </div>
                         ) : (
@@ -791,9 +804,9 @@ export function PropertyDetailPage() {
                       <div className="space-y-6">
                         {hasCatalogFeatureLists ? (
                           <div className="space-y-7 pd-features-light">
-                            <FeatureSection variant="amenity" title="Amenidades" items={property.amenities ?? []} keyPrefix="u-am" layout="list" />
-                            <FeatureSection variant="service" title="Servicios" items={property.services ?? []} keyPrefix="u-sv" layout="list" />
-                            <FeatureSection variant="extra" title="Características adicionales" items={property.additionalFeatures ?? []} keyPrefix="u-af" layout="list" />
+                            <FeatureSection variant="amenity" items={property.amenities ?? []} keyPrefix="u-am" layout="list" />
+                            <FeatureSection variant="service" items={property.services ?? []} keyPrefix="u-sv" layout="list" />
+                            <FeatureSection variant="extra" items={property.additionalFeatures ?? []} keyPrefix="u-af" layout="list" />
                           </div>
                         ) : (
                           <div className="px-5 py-10 text-center" style={{ borderRadius: 8, border: `1px dashed ${T.border}`, background: T.canvas }}>
@@ -1016,7 +1029,7 @@ export function PropertyDetailPage() {
                 <div className="mt-3" style={{ borderTop: `1px solid ${T.border}` }}>
                   <DetailRow label="Referencia">{property.referenceCode ?? "—"}</DetailRow>
                   <div style={{ height: 1, background: T.border }} />
-                  <DetailRow label="Tipo"><span className="capitalize">{property.type}</span></DetailRow>
+                  <DetailRow label="Tipo"><span className="capitalize">{translatePropertyType(property.type, locale)}</span></DetailRow>
                   {orientationLabel(property.orientation) ? (
                     <>
                       <div style={{ height: 1, background: T.border }} />
@@ -1024,7 +1037,7 @@ export function PropertyDetailPage() {
                     </>
                   ) : null}
                   <div style={{ height: 1, background: T.border }} />
-                  <DetailRow label="Estado">{propertyStatusLabel(property.status)}</DetailRow>
+                  <DetailRow label="Estado">{propertyStatusLabel(property.status, locale)}</DetailRow>
                   <div style={{ height: 1, background: T.border }} />
                   <DetailRow label="Actualizado">
                     <span className="inline-flex items-center gap-1.5">
@@ -1184,6 +1197,7 @@ function ContactSection({
   submitting: boolean; submitted: boolean; submitError: string | null;
   showGlobalWhatsappHint?: boolean; phoneInvalidHint?: string;
 }) {
+  const { t } = useLocale();
   const phoneDisplay = formatPhoneForDisplay(property.contactPhone?.trim() ?? "");
   const waDisplay    = whatsappDisplayLabel(property.contactWhatsapp);
 
@@ -1206,7 +1220,7 @@ function ContactSection({
           >
             <span className="flex items-center gap-1.5">
               <Phone className="h-3.5 w-3.5" strokeWidth={2} />
-              Llamar
+              {t("contact.call")}
             </span>
             {phoneDisplay ? <span style={{ fontSize: "0.65rem", color: T.muted, fontWeight: 400 }}>{phoneDisplay}</span> : null}
           </a>
@@ -1216,7 +1230,7 @@ function ContactSection({
             style={{ padding: "11px 8px", borderRadius: 7, border: `1.5px dashed ${T.border}`, background: T.canvas, color: T.muted, cursor: "default" }}
             title={phoneInvalidHint ?? "Configura un teléfono en el admin"}
           >
-            <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" strokeWidth={2} />Llamar</span>
+            <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" strokeWidth={2} />{t("contact.call")}</span>
           </span>
         )}
         <a
