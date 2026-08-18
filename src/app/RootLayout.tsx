@@ -3,7 +3,17 @@ import { Outlet, useLocation } from "react-router";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { trackPageView } from "./lib/googleAnalytics";
-import { LocaleProvider } from "./i18n/LocaleContext";
+import { LocaleProvider, useLocale } from "./i18n/LocaleContext";
+import { SiteContentLocaleSync } from "../contexts/SiteContentContext";
+
+/**
+ * Puente entre el idioma de la ruta y el contenido del CMS: `SiteContentProvider`
+ * está por encima del router y no puede leer la ubicación.
+ */
+function ContentLocaleBridge() {
+  const { locale } = useLocale();
+  return <SiteContentLocaleSync locale={locale} />;
+}
 
 /**
  * Sin Motion/AnimatePresence en el shell: en Safari el contenedor absoluto + animación
@@ -23,6 +33,7 @@ export function RootLayout() {
     <div className="relative isolate min-h-[100dvh] bg-brand-canvas">
       <ScrollToTop />
       <LocaleProvider>
+        <ContentLocaleBridge />
         <AuthProvider>
           <div
             key={pageKey}
