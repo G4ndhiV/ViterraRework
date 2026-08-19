@@ -280,7 +280,7 @@ export function SearchBar({
             <label className={labelClass}>{t("search.operationLabel")}</label>
             <div
               role="group"
-              aria-label="Venta o alquiler"
+              aria-label={t("search.operationGroupLabel")}
               className={cn(
                 "flex w-full rounded-xl border p-1 shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)]",
                 !previewCanvas && !compactAmbient && "max-w-md",
@@ -304,7 +304,7 @@ export function SearchBar({
                       : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                Venta
+                {t("search.operationSale")}
               </button>
               <button
                 type="button"
@@ -320,7 +320,7 @@ export function SearchBar({
                       : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                Renta
+                {t("search.operationRent")}
               </button>
             </div>
           </div>
@@ -360,9 +360,9 @@ export function SearchBar({
               )}
               style={selectChevronStyle}
             >
-              <option value="">Todos</option>
-              <option value="venta">Venta</option>
-              <option value="alquiler">Renta</option>
+              <option value="">{t("search.typeAll")}</option>
+              <option value="venta">{t("search.operationSale")}</option>
+              <option value="alquiler">{t("search.operationRent")}</option>
             </select>
           </div>
         ) : null}

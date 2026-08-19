@@ -52,11 +52,26 @@ export const es = {
   "card.bathroomsShort": "baños",
   "card.seeDetails": "Ver detalles",
   "card.perMonth": "/ mes",
+  "card.priceLabel": "Precio",
   "card.saleSuffix": "venta",
   "card.dualOperation": "Se puede comprar o rentar",
 
+  /* Portada */
+  "home.instagramCaptionFallback": "Descubre más detalles en nuestra publicación de Instagram.",
+  "home.instagramAlt": "Publicación de Instagram",
+  "home.mapLoading": "Cargando mapa...",
+  "home.mapLoadingDetail": "Cargando mapa y ubicaciones del catálogo...",
+  "home.mapCount": "{count} propiedades",
+  "home.mapCountOne": "1 propiedad",
+  "home.featuredError":
+    "No pudimos cargar las propiedades destacadas. Comprueba tu conexión e inténtalo de nuevo.",
+  "home.featuredEmpty": "No hay propiedades destacadas en este momento.",
+
   /* Buscador y listados */
   "search.operationLabel": "Operación",
+  "search.operationSale": "Venta",
+  "search.operationRent": "Renta",
+  "search.operationGroupLabel": "Venta o renta",
   "search.statusLabel": "Estado",
   "search.typeFieldLabel": "Tipo",
   "search.typeAll": "Todos",
@@ -128,10 +143,24 @@ export const en: Record<TranslationKey, string> = {
   "card.bathroomsShort": "ba",
   "card.seeDetails": "View details",
   "card.perMonth": "/ month",
+  "card.priceLabel": "Price",
   "card.saleSuffix": "sale",
   "card.dualOperation": "Available to buy or rent",
 
+  "home.instagramCaptionFallback": "See more on our Instagram post.",
+  "home.instagramAlt": "Instagram post",
+  "home.mapLoading": "Loading map…",
+  "home.mapLoadingDetail": "Loading map and catalog locations…",
+  "home.mapCount": "{count} properties",
+  "home.mapCountOne": "1 property",
+  "home.featuredError":
+    "We couldn't load the featured properties. Check your connection and try again.",
+  "home.featuredEmpty": "There are no featured properties right now.",
+
   "search.operationLabel": "Operation",
+  "search.operationSale": "Sale",
+  "search.operationRent": "Rent",
+  "search.operationGroupLabel": "Sale or rent",
   "search.statusLabel": "Status",
   "search.typeFieldLabel": "Type",
   "search.typeAll": "All",

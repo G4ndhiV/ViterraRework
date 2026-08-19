@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { LocaleLink as Link } from "../components/LocaleLink";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
-import { PropertyCard, propertyMatchesOperation } from "../components/PropertyCard";
+import { propertyMatchesOperation, propertyStatusLabel } from "../components/PropertyCard";
 import { SearchBar, SearchFilters } from "../components/SearchBar";
 import { PropertyMap } from "../components/PropertyMap";
 import { useFeaturedHomeProperties } from "../hooks/useFeaturedHomeProperties";
@@ -22,6 +22,8 @@ import { Reveal } from "../components/Reveal";
 import { cn } from "../components/ui/utils";
 import { useInstagramFeed, type InstagramPost } from "../hooks/useInstagramFeed";
 import { optimizedImageUrl } from "../lib/supabaseImageUrl";
+import { useLocale } from "../i18n/LocaleContext";
+import { translatePropertyType } from "../i18n/catalogTerms";
 
 function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?: "dark" | "light" }) {
   return (
@@ -40,7 +42,7 @@ function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?
 }
 
 export function LazyInstagramCard({ post }: { post: InstagramPost }) {
-
+  const { t } = useLocale();
   const { shortcode, type, videoUrl, thumbnail, caption } = post;
   const [inView, setInView] = useState(false);
   const [useIframeFallback, setUseIframeFallback] = useState(false);
@@ -88,7 +90,7 @@ export function LazyInstagramCard({ post }: { post: InstagramPost }) {
             {thumbnail ? (
               <img
                 src={thumbnail}
-                alt={caption || "Publicación de Instagram"}
+                alt={caption || t("home.instagramAlt")}
                 className="absolute inset-0 h-full w-full object-cover opacity-30 blur-[2px]"
                 loading="lazy"
               />
@@ -113,7 +115,7 @@ export function LazyInstagramCard({ post }: { post: InstagramPost }) {
               src={`https://www.instagram.com/${type}/${shortcode}/embed/captioned`}
               scrolling="no"
               allow="encrypted-media; clipboard-write; picture-in-picture"
-              title={`Publicación de Instagram ${shortcode}`}
+              title={`${t("home.instagramAlt")} ${shortcode}`}
               style={{
                 display: "block",
                 width: "100%",
@@ -147,7 +149,7 @@ export function LazyInstagramCard({ post }: { post: InstagramPost }) {
               <div className="relative h-full w-full">
                 <img
                   src={thumbnail ?? ""}
-                  alt={caption || "Publicación de Instagram"}
+                  alt={caption || t("home.instagramAlt")}
                   className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                   onError={() => setUseIframeFallback(true)}
                 />
@@ -162,10 +164,10 @@ export function LazyInstagramCard({ post }: { post: InstagramPost }) {
       {!(useIframeFallback || !hasMedia) && (
         <div className="p-4 border-t border-slate-100 min-h-[92px] flex flex-col justify-between">
           <p className="line-clamp-2 text-[13px] leading-relaxed text-slate-700 font-light">
-            {caption || "Descubre más detalles en nuestra publicación de Instagram."}
+            {caption || t("home.instagramCaptionFallback")}
           </p>
           <p className="mt-2 text-[10px] text-primary font-medium tracking-wide">
-            Ver detalles →
+            {t("card.seeDetails")} →
           </p>
         </div>
       )}
@@ -214,6 +216,7 @@ function HeroLoader() {
 
 export function HomePage() {
   const pl = usePreviewLayout();
+  const { locale, t } = useLocale();
   const reduceMotion = useReducedMotion();
   const { content, loading } = useSiteContent();
   const { posts: igPosts, loading: igLoading, error: igError, profileUrl: igProfileUrl } = useInstagramFeed(3);
@@ -552,14 +555,16 @@ export function HomePage() {
                 <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span>
                   {catalogLoading
-                    ? "Cargando mapa..."
-                    : `${filteredHomeMapProperties.length} ${filteredHomeMapProperties.length === 1 ? "propiedad" : "propiedades"}`}
+                    ? t("home.mapLoading")
+                    : filteredHomeMapProperties.length === 1
+                      ? t("home.mapCountOne")
+                      : t("home.mapCount", { count: filteredHomeMapProperties.length })}
                 </span>
               </div>
 
               {catalogLoading ? (
                 <div className="flex h-[320px] sm:h-[360px] lg:h-[400px] items-center justify-center bg-slate-900 text-white/70 text-sm font-light">
-                  Cargando mapa y ubicaciones del catálogo...
+                  {t("home.mapLoadingDetail")}
                 </div>
               ) : (
                 <PropertyMap
@@ -624,9 +629,7 @@ export function HomePage() {
             ) : featuredProperties.length === 0 ? (
               <div className="space-y-3 text-center">
                 <p className="text-sm text-brand-navy/60" style={{ fontWeight: 500 }}>
-                  {featuredError
-                    ? "No pudimos cargar las propiedades destacadas. Comprueba tu conexión e inténtalo de nuevo."
-                    : "No hay propiedades destacadas en este momento."}
+                  {featuredError ? t("home.featuredError") : t("home.featuredEmpty")}
                 </p>
                 {featuredError ? (
                   <button
@@ -683,11 +686,11 @@ export function HomePage() {
                           {/* Badges Flotantes sobre la foto */}
                           <div className="absolute top-3.5 left-3.5 flex flex-wrap gap-2 z-10">
                             <span className="text-[10px] font-semibold uppercase tracking-wider text-white bg-primary/90 backdrop-blur-md px-2.5 py-1 rounded-md shadow-sm">
-                              {property.status === 'venta' ? 'En Venta' : 'En Renta'}
+                              {propertyStatusLabel(property.status, locale)}
                             </span>
                             {property.type && (
                               <span className="text-[10px] font-medium uppercase tracking-wider text-slate-900 bg-white/90 backdrop-blur-md px-2.5 py-1 rounded-md shadow-sm">
-                                {property.type}
+                                {translatePropertyType(property.type, locale)}
                               </span>
                             )}
                           </div>
@@ -712,12 +715,12 @@ export function HomePage() {
                             <div className="flex items-center gap-4 text-xs font-medium text-brand-navy/70 border-t border-slate-100 pt-3.5 mb-4">
                               {property.bedrooms > 0 && (
                                 <span className="flex items-center gap-1.5 tabular-nums">
-                                  <Bed className="w-4 h-4 text-brand-navy/45 stroke-[1.5]"/> {property.bedrooms} hab.
+                                  <Bed className="w-4 h-4 text-brand-navy/45 stroke-[1.5]"/> {property.bedrooms} {t("card.bedroomsShort")}
                                 </span>
                               )}
                               {property.bathrooms > 0 && (
                                 <span className="flex items-center gap-1.5 tabular-nums">
-                                  <Bath className="w-4 h-4 text-brand-navy/45 stroke-[1.5]"/> {property.bathrooms} baños
+                                  <Bath className="w-4 h-4 text-brand-navy/45 stroke-[1.5]"/> {property.bathrooms} {t("card.bathroomsShort")}
                                 </span>
                               )}
                               {property.area > 0 && (
@@ -730,16 +733,16 @@ export function HomePage() {
                             {/* Fila de precio y llamada a la acción */}
                             <div className="flex items-end justify-between border-t border-slate-100 pt-3.5">
                               <div>
-                                <p className="text-[10px] uppercase font-semibold tracking-wider text-brand-navy/45 mb-0.5">Precio</p>
+                                <p className="text-[10px] uppercase font-semibold tracking-wider text-brand-navy/45 mb-0.5">{t("card.priceLabel")}</p>
                                 <p className="text-xl sm:text-2xl font-light text-brand-navy tabular-nums" style={{ fontFamily: "var(--font-heading)" }}>
                                   ${property.price?.toLocaleString()}
                                   {property.status === 'alquiler' && (
-                                    <span className="text-xs text-brand-navy/50 ml-1 font-normal">/ mes</span>
+                                    <span className="text-xs text-brand-navy/50 ml-1 font-normal">{t("card.perMonth")}</span>
                                   )}
                                 </p>
                               </div>
                               <span className="inline-flex items-center gap-1 text-xs font-medium text-primary tracking-wide transition-transform group-hover:translate-x-1">
-                                Ver detalles
+                                {t("card.seeDetails")}
                                 <ArrowRight className="w-3.5 h-3.5" />
                               </span>
                             </div>
