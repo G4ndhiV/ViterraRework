@@ -48,7 +48,7 @@ export const es = {
   /* Tarjetas de propiedad */
   "card.bedrooms": "Recámaras",
   "card.bathrooms": "Baños",
-  "card.bedroomsShort": "rec.",
+  "card.bedroomsShort": "hab.",
   "card.bathroomsShort": "baños",
   "card.seeDetails": "Ver detalles",
   "card.perMonth": "/ mes",
