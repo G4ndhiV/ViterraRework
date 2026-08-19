@@ -9,11 +9,20 @@ import {
   type LinkedPropertyStats,
 } from "../lib/supabaseDevelopments";
 import { fetchPropertiesByDevelopmentTokkoId } from "../lib/supabaseProperties";
+import {
+  DETAIL_FIELDS,
+  LIST_FIELDS,
+  applyDevelopmentTranslations,
+  applyPropertyTranslations,
+  fetchCatalogTranslations,
+} from "../lib/catalogTranslations";
+import { useLocale } from "../i18n/LocaleContext";
 
 /** Tamaño de página al listar desarrollos en el sitio público (scroll infinito). */
 export const DEVELOPMENTS_CATALOG_PAGE_SIZE = 8;
 
 export function useDevelopmentsCatalog(publicOnly = false) {
+  const { locale } = useLocale();
   const [developments, setDevelopments] = useState<Development[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,10 +43,17 @@ export function useDevelopmentsCatalog(publicOnly = false) {
       setError(qErr.message);
       setDevelopments([]);
     } else {
-      setDevelopments(data ?? []);
+      const list = data ?? [];
+      const translations = await fetchCatalogTranslations(client, {
+        entity: "development",
+        ids: list.map((d) => d.id),
+        fields: LIST_FIELDS,
+        locale,
+      });
+      setDevelopments(list.map((d) => applyDevelopmentTranslations(d, translations)));
     }
     setLoading(false);
-  }, [publicOnly]);
+  }, [publicOnly, locale]);
 
   useEffect(() => {
     void reload();
@@ -166,6 +182,7 @@ export function useDevelopmentsCatalogInfinite(publicOnly = false, pageSize = DE
 }
 
 export function useDevelopmentDetail(id: string | undefined) {
+  const { locale } = useLocale();
   const [development, setDevelopment] = useState<Development | null>(null);
   const [linkedProperties, setLinkedProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
@@ -198,19 +215,37 @@ export function useDevelopmentDetail(id: string | undefined) {
       setLoading(false);
       return;
     }
-    setDevelopment(data);
+    if (data) {
+      const devTranslations = await fetchCatalogTranslations(client, {
+        entity: "development",
+        ids: [data.id],
+        fields: DETAIL_FIELDS,
+        locale,
+      });
+      setDevelopment(applyDevelopmentTranslations(data, devTranslations));
+    } else {
+      setDevelopment(data);
+    }
     if (data?.tokkoId) {
       const { data: props, error: pErr } = await fetchPropertiesByDevelopmentTokkoId(client, data.tokkoId);
       if (pErr) {
         setLinkedProperties([]);
       } else {
-        setLinkedProperties(props ?? []);
+        /** Las unidades enlazadas se listan por título: basta con LIST_FIELDS. */
+        const list = props ?? [];
+        const propTranslations = await fetchCatalogTranslations(client, {
+          entity: "property",
+          ids: list.map((p) => p.id),
+          fields: LIST_FIELDS,
+          locale,
+        });
+        setLinkedProperties(list.map((p) => applyPropertyTranslations(p, propTranslations)));
       }
     } else {
       setLinkedProperties([]);
     }
     setLoading(false);
-  }, [id]);
+  }, [id, locale]);
 
   useEffect(() => {
     void reload();
