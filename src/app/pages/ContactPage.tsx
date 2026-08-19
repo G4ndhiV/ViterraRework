@@ -965,7 +965,7 @@ export function ContactPage() {
             </Reveal>
 
             <Reveal y={16} delay={0.12} className="mt-12">
-              <p className="text-center text-[11px] font-light uppercase tracking-[0.18em] text-white/55">{contactFixed.advisorCta}</p>
+              <p className="text-center text-[11px] font-light uppercase tracking-[0.18em] text-white/55">{t("contact.advisorCta")}</p>
             </Reveal>
 
           </div>
