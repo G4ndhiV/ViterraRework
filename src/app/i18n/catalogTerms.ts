@@ -36,6 +36,24 @@ const TYPE_EN: Record<string, string> = {
   "quinta": "Country house",
   "campo": "Farmland",
   "cochera": "Parking space",
+  /* Tipos que solo aparecen en `developments.type`. */
+  "condominio": "Condominium",
+  "condominio industrial": "Industrial condominium",
+  "barrio privado": "Gated community",
+  "otro": "Other",
+};
+
+/**
+ * Avance de obra de un desarrollo (`developments.status`). Tabla aparte de
+ * STATUS_EN, que describe la operación (venta/renta) de una propiedad: son
+ * dimensiones distintas que coinciden en nombre de columna.
+ */
+const DEVELOPMENT_STATUS_EN: Record<string, string> = {
+  "en construcción": "Under construction",
+  "disponible": "Available",
+  "próximamente": "Coming soon",
+  "entregado": "Delivered",
+  "preventa": "Pre-sale",
 };
 
 /** Estatus interno (`properties.status`), no viene de Tokko como texto libre. */
@@ -208,6 +226,14 @@ export function translatePropertySituation(raw: string | undefined | null, local
   return translateWith(SITUATION_EN, raw, locale);
 }
 
+/** Avance de obra de un desarrollo ("En Construcción", "Disponible"…). */
+export function translateDevelopmentStatus(
+  raw: string | undefined | null,
+  locale: Locale,
+): string {
+  return translateWith(DEVELOPMENT_STATUS_EN, raw, locale);
+}
+
 /** Amenidad, servicio, etiqueta o característica adicional. */
 export function translateCatalogFeature(raw: string | undefined | null, locale: Locale): string {
   return translateWith(FEATURE_EN, raw, locale);
@@ -227,6 +253,7 @@ export function translateCatalogFeatures(
 export const CATALOG_TERM_TABLES = {
   type: TYPE_EN,
   status: STATUS_EN,
+  developmentStatus: DEVELOPMENT_STATUS_EN,
   situation: SITUATION_EN,
   feature: FEATURE_EN,
 } as const;

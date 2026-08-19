@@ -44,10 +44,17 @@ export function useDevelopmentsCatalog(publicOnly = false) {
       setDevelopments([]);
     } else {
       const list = data ?? [];
+      /**
+       * DETAIL_FIELDS y no LIST_FIELDS: a diferencia del listado de
+       * propiedades, las tarjetas de desarrollos muestran la descripción, así
+       * que pidiendo solo los nombres la ficha salía con el título en inglés y
+       * el cuerpo en español. El peso extra es despreciable —son ~24
+       * desarrollos, no los cientos de propiedades del otro catálogo—.
+       */
       const translations = await fetchCatalogTranslations(client, {
         entity: "development",
         ids: list.map((d) => d.id),
-        fields: LIST_FIELDS,
+        fields: DETAIL_FIELDS,
         locale,
       });
       setDevelopments(list.map((d) => applyDevelopmentTranslations(d, translations)));

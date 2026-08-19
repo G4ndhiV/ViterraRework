@@ -12,10 +12,20 @@ import {
 import { DICTIONARIES, interpolate, type TranslationKey } from "./dictionaries";
 import { publicSiteOrigin } from "../lib/publicListingUrl";
 
+/**
+ * Tipo de la función de traducción, exportado para las funciones auxiliares
+ * que viven fuera de un componente y reciben `t` como argumento (formateo de
+ * fechas relativas, etiquetas derivadas de datos).
+ */
+export type TranslateFn = (
+  key: TranslationKey,
+  vars?: Record<string, string | number>,
+) => string;
+
 type LocaleContextValue = {
   locale: Locale;
   /** Traduce una clave del chrome; admite `{placeholders}`. */
-  t: (key: TranslationKey, vars?: Record<string, string | number>) => string;
+  t: TranslateFn;
   /** Ruta canónica (sin prefijo) de la ubicación actual. */
   canonicalPath: string;
   /** Antepone el prefijo del idioma activo a una ruta canónica. */

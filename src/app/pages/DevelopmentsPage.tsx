@@ -5,7 +5,9 @@ import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { SearchBar, type SearchFilters } from "../components/SearchBar";
 import { ArrowRight, MapPin, CheckCircle, SlidersHorizontal } from "lucide-react";
-import { Link } from "react-router";
+import { LocaleLink as Link } from "../components/LocaleLink";
+import { useLocale } from "../i18n/LocaleContext";
+import { translateDevelopmentStatus } from "../i18n/catalogTerms";
 import { useDevelopmentsCatalog } from "../hooks/useDevelopmentsCatalog";
 import {
   developmentsCatalogPrices,
@@ -71,6 +73,7 @@ function GridCardSkeleton() {
 }
 
 export function DevelopmentsPage() {
+  const { t, locale } = useLocale();
   const reduceMotion = useReducedMotion();
   const pl = usePreviewLayout();
   const { content } = useSiteContent();
@@ -222,10 +225,13 @@ export function DevelopmentsPage() {
           <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
             <SlidersHorizontal className="h-5 w-5 text-primary" strokeWidth={1.5} aria-hidden />
             <p className="font-heading text-sm font-medium text-brand-navy/90 not-italic">
-              {filteredDevelopments.length} desarrollo
-              {filteredDevelopments.length !== 1 ? "s" : ""}{" "}
-              {hasActiveFilters ? "coinciden con tu búsqueda" : "disponible"}
-              {filteredDevelopments.length !== 1 && !hasActiveFilters ? "s" : ""}
+              {hasActiveFilters
+                ? filteredDevelopments.length === 1
+                  ? t("dev.countMatchOne")
+                  : t("dev.countMatch", { count: filteredDevelopments.length })
+                : filteredDevelopments.length === 1
+                  ? t("dev.countOne")
+                  : t("dev.count", { count: filteredDevelopments.length })}
             </p>
           </div>
         </section>
@@ -321,7 +327,7 @@ export function DevelopmentsPage() {
                       />
                       <div className="absolute left-4 top-4 sm:left-6 sm:top-6">
                         <span className={`font-heading rounded-lg px-3 py-1.5 text-xs font-semibold ${statusBadgeClass}`}>
-                          {dev.status}
+                          {translateDevelopmentStatus(dev.status, locale)}
                         </span>
                       </div>
                     </Link>
@@ -343,15 +349,15 @@ export function DevelopmentsPage() {
 
                     <div className={cn("mb-6 grid gap-4 rounded-lg border border-brand-navy/10 bg-brand-canvas p-4 sm:p-6", pl.gridCols("grid-cols-1 sm:grid-cols-2"))}>
                       <div>
-                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Unidades</p>
+                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">{t("detail.units")}</p>
                         <p className="font-heading text-lg font-semibold text-brand-navy">{dev.units}</p>
                       </div>
                       <div>
-                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Entrega</p>
+                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">{t("detail.delivery")}</p>
                         <p className="font-heading text-lg font-semibold text-brand-navy">{displayDeliveryDate(dev.deliveryDate)}</p>
                       </div>
                       <div className={pl.colSpan("col-span-2")}>
-                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Rango de Precios</p>
+                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">{t("detail.priceRange")}</p>
                         <p className="font-heading text-lg font-semibold text-brand-navy">{dev.priceRange}</p>
                       </div>
                     </div>
@@ -377,7 +383,7 @@ export function DevelopmentsPage() {
                         to={`/desarrollos/${dev.id}`}
                         className="font-heading inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 font-medium text-white transition-all duration-300 hover:bg-brand-red-hover hover:shadow-lg sm:w-auto"
                       >
-                        Ver Detalles Completos
+                        {t("detail.seeFullDetails")}
                         <ArrowRight className="w-4 h-4" strokeWidth={2} />
                       </Link>
                     </motion.div>
@@ -396,9 +402,9 @@ export function DevelopmentsPage() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <Reveal className="mb-8 sm:mb-12" y={20}>
               <div>
-                <p className="font-heading mb-2 text-xs uppercase tracking-[0.1em] text-brand-navy/60 sm:mb-3 sm:text-sm">Más Proyectos</p>
+                <p className="font-heading mb-2 text-xs uppercase tracking-[0.1em] text-brand-navy/60 sm:mb-3 sm:text-sm">{t("detail.moreProjects")}</p>
                 <h2 className="font-heading text-2xl font-semibold tracking-tight text-brand-navy sm:text-3xl md:text-4xl">
-                  Otros Desarrollos
+                  {t("detail.otherDevelopments")}
                 </h2>
               </div>
             </Reveal>
@@ -421,7 +427,7 @@ export function DevelopmentsPage() {
                       />
                       <div className="absolute left-6 top-6">
                         <span className={`font-heading rounded-lg px-3 py-1.5 text-xs font-semibold ${statusBadgeClass}`}>
-                          {dev.status}
+                          {translateDevelopmentStatus(dev.status, locale)}
                         </span>
                       </div>
                     </Link>
@@ -442,18 +448,18 @@ export function DevelopmentsPage() {
 
                     <div className="mb-5 grid grid-cols-2 gap-3 border-b border-brand-navy/10 pb-5 sm:mb-6 sm:gap-4 sm:pb-6">
                       <div>
-                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Unidades</p>
+                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">{t("detail.units")}</p>
                         <p className="font-heading text-base font-semibold text-brand-navy">{dev.units}</p>
                       </div>
                       <div>
-                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">Entrega</p>
+                        <p className="font-heading text-xs text-brand-navy/60 uppercase tracking-[0.05em] mb-1">{t("detail.delivery")}</p>
                         <p className="font-heading text-base font-semibold text-brand-navy">{displayDeliveryDate(dev.deliveryDate)}</p>
                       </div>
                     </div>
 
                     <div className={cn("flex flex-col gap-4", !pl.preview && "sm:flex-row sm:items-center sm:justify-between")}>
                       <div>
-                        <p className="font-heading mb-1 text-xs uppercase tracking-[0.05em] text-brand-navy/60">Desde</p>
+                        <p className="font-heading mb-1 text-xs uppercase tracking-[0.05em] text-brand-navy/60">{t("detail.priceFrom")}</p>
                         <p className="font-heading text-lg font-semibold text-brand-navy">
                           {dev.priceRange.split(' - ')[0]}
                         </p>
@@ -462,7 +468,7 @@ export function DevelopmentsPage() {
                         to={`/desarrollos/${dev.id}`}
                         className="font-heading inline-flex items-center justify-center gap-2 text-sm font-medium text-brand-navy transition-colors hover:text-brand-burgundy sm:justify-end"
                       >
-                        Ver Detalles
+                        {t("detail.seeDetailsLong")}
                         <ArrowRight className="h-4 w-4" strokeWidth={2} />
                       </Link>
                     </div>
