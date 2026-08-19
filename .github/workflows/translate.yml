@@ -3,19 +3,23 @@ name: Traducción automática ES→EN
 # GitHub Actions y no un cron de Vercel a propósito: el Batch API puede tardar
 # desde minutos hasta horas en resolver un lote, y las funciones serverless de
 # Vercel tienen tope de duración. Un job de Actions puede esperar sin cortarse.
+#
+# SOLO DISPARO MANUAL, a propósito: cada corrida gasta créditos de la API, así
+# que el gasto queda bajo control explícito en vez de ocurrir solo. Para
+# automatizarlo por horario más adelante, añade aquí:
+#
+#   schedule:
+#     - cron: "0 7 * * *"   # 07:00 UTC ≈ 01:00 en Guadalajara
+#
+# Antes de hacerlo conviene correr una vez con dry_run para ver el costo típico
+# de un día de cambios de Tokko.
 on:
-  schedule:
-    # 07:00 UTC ≈ 01:00 en Guadalajara: traduce de madrugada lo que Tokko
-    # sincronizó durante el día.
-    - cron: "0 7 * * *"
-  # Permite dispararlo a mano desde la pestaña Actions tras una importación
-  # grande, sin esperar al horario.
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Solo reportar qué traduciría y cuánto costaría"
+        description: "Solo reportar qué traduciría y cuánto costaría (no gasta créditos)"
         type: boolean
-        default: false
+        default: true
 
 jobs:
   translate:

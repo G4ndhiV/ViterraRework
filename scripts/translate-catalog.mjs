@@ -88,6 +88,11 @@ REGLAS ABSOLUTAS:
 4. Si el texto empieza con un prefijo de icono tipo "#pool:", consérvalo sin cambios y traduce solo lo que sigue.
 5. Conserva números, medidas y monedas tal cual. "120 m²" sigue siendo "120 m²". No conviertas pesos a dólares ni metros a pies.
 6. Conserva los saltos de línea y la estructura de párrafos del original.
+7. Numeración de pisos y unidades, SIEMPRE con esta forma exacta (aparecen juntas en los listados, así que la inconsistencia se nota):
+   - "Piso 6" → "6th Floor"  (ordinal + "Floor" con F mayúscula; nunca "Floor 6" ni "6th floor")
+   - "Piso 1/2/3" → "1st Floor" / "2nd Floor" / "3rd Floor"
+   - "Departamento 604" → "Unit 604"
+   - "Planta Baja" → "Ground Floor"
 
 ESTILO:
 - Inglés natural de bienes raíces, no traducción literal.
