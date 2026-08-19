@@ -345,6 +345,15 @@ async function main() {
     { auth: { persistSession: false } },
   );
 
+  /**
+   * Se exige la clave aquí y no donde se usa, a propósito. Si solo se pidiera al
+   * momento de traducir, una corrida sin fichas pendientes terminaría en verde
+   * sin haberla leído nunca: el día que entre inventario nuevo, el job fallaría
+   * por una secret mal puesta que llevaba semanas sin detectarse. Pedirla al
+   * arranque hace que cualquier dry-run sirva de prueba de las credenciales.
+   */
+  required("ANTHROPIC_API_KEY");
+
   console.log("Catálogo (propiedades y desarrollos):");
   const { jobs, skippedFresh, skippedManual } = await collectPending(supabase, { limit });
 
