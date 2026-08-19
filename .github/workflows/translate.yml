@@ -1,0 +1,45 @@
+name: Traducción automática ES→EN
+
+# GitHub Actions y no un cron de Vercel a propósito: el Batch API puede tardar
+# desde minutos hasta horas en resolver un lote, y las funciones serverless de
+# Vercel tienen tope de duración. Un job de Actions puede esperar sin cortarse.
+on:
+  schedule:
+    # 07:00 UTC ≈ 01:00 en Guadalajara: traduce de madrugada lo que Tokko
+    # sincronizó durante el día.
+    - cron: "0 7 * * *"
+  # Permite dispararlo a mano desde la pestaña Actions tras una importación
+  # grande, sin esperar al horario.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Solo reportar qué traduciría y cuánto costaría"
+        type: boolean
+        default: false
+
+jobs:
+  translate:
+    runs-on: ubuntu-latest
+    # El lote puede tardar; sin esto el job moriría a las 6 horas por defecto.
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+
+      - name: Traducir contenido pendiente
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # Necesaria para escribir: RLS solo permite escritura a admin o service role.
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            node scripts/translate-catalog.mjs --dry-run
+          else
+            node scripts/translate-catalog.mjs
+          fi
