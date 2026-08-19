@@ -104,3 +104,4 @@ Desktop.ini
 *.db
 *.dump
 *.sql.gz
+.vercel
