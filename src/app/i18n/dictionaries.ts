@@ -59,6 +59,7 @@ export const es = {
   /* Portada */
   "home.instagramCaptionFallback": "Descubre más detalles en nuestra publicación de Instagram.",
   "home.instagramAlt": "Publicación de Instagram",
+  "home.viewOnInstagram": "Ver en Instagram",
   "home.mapLoading": "Cargando mapa...",
   "home.mapLoadingDetail": "Cargando mapa y ubicaciones del catálogo...",
   "home.mapCount": "{count} propiedades",
@@ -239,6 +240,7 @@ export const en: Record<TranslationKey, string> = {
 
   "home.instagramCaptionFallback": "See more on our Instagram post.",
   "home.instagramAlt": "Instagram post",
+  "home.viewOnInstagram": "View on Instagram",
   "home.mapLoading": "Loading map…",
   "home.mapLoadingDetail": "Loading map and catalog locations…",
   "home.mapCount": "{count} properties",

@@ -38,6 +38,7 @@ export const EDITOR_PAGE_BLOCKS: Record<SiteKey, { id: string; label: string }[]
     { id: "home-hero", label: "Portada principal" },
     { id: "home-search", label: "Búsqueda" },
     { id: "home-selection", label: "Selección de propiedades" },
+    { id: "home-social", label: "Síguenos (Instagram)" },
     { id: "home-experience", label: "Experiencia" },
     { id: "home-closing", label: "Cierre" },
   ],

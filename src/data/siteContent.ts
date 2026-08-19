@@ -188,6 +188,16 @@ export interface SiteContent {
     selectionCatalogLink: string;
     selectionRentLabel: string;
     selectionSaleLabel: string;
+    /**
+     * Encabezado de la sección del feed de Instagram. Solo el texto: las
+     * publicaciones se traen de la API y el enlace al perfil sale de la
+     * configuración de la empresa, así que no hay nada más que editar aquí.
+     */
+    socialKicker: string;
+    socialTitle: string;
+    socialSubtitle: string;
+    socialCta: string;
+    socialEmpty: string;
     experienceImage: string;
     experienceKicker: string;
     experienceTitle: string;
@@ -350,6 +360,13 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     selectionCatalogLink: "Ver catálogo",
     selectionRentLabel: "Propiedades en renta",
     selectionSaleLabel: "Propiedades en venta",
+    socialKicker: "Síguenos",
+    socialTitle: "Lo último en redes",
+    socialSubtitle:
+      "Mantente al día con nuestras publicaciones más recientes, proyectos y estilo de vida.",
+    socialCta: "Síguenos en Instagram",
+    socialEmpty:
+      "No pudimos cargar las 3 publicaciones ahora. Reintenta en unos segundos o ábrelo en Instagram.",
     experienceImage:
       "https://images.unsplash.com/photo-1758448511322-8bfc73daf606?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwyfHxsdXh1cnklMjBwZW50aG91c2UlMjBpbnRlcmlvciUyMGxpdmluZyUyMHJvb218ZW58MXx8fHwxNzc2MDk1NzU3fDA&ixlib=rb-4.1.0&q=80&w=1600",
     experienceKicker: "Experiencia",

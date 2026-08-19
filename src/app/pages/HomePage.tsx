@@ -183,7 +183,7 @@ export function LazyInstagramCard({ post }: { post: InstagramPost }) {
           <span className="text-xs text-slate-500">@viterrainmobiliaria</span>
         </div>
         <span className="text-xs font-medium text-primary transition-colors group-hover:text-primary/70" style={{ fontWeight: 500 }}>
-          Ver en Instagram →
+          {t("home.viewOnInstagram")} →
         </span>
       </div>
     </a>
@@ -789,18 +789,25 @@ export function HomePage() {
       </PreviewSectionChrome>
 
       {/* Redes sociales — feed dinámico optimizado con Lazy Load */}
+      <PreviewSectionChrome blockId="home-social" label="Síguenos (Instagram)">
       <section className="relative bg-brand-canvas py-20 md:py-28 border-t border-brand-navy/10">
         <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Reveal className="mb-14 text-center" y={24}>
             <p className="mb-4 text-[10px] font-normal uppercase tracking-[0.32em] text-brand-navy/55">
-              Síguenos
+              <PreviewFieldPulse blockId="home-social" fieldKey="home-social-kicker" layout="inline" className="inline-block">
+                {h.socialKicker}
+              </PreviewFieldPulse>
             </p>
             <span className="mx-auto mb-6 block h-px w-10 bg-primary" aria-hidden />
             <h2 className="font-heading text-3xl font-light leading-[1.12] tracking-tight text-brand-navy sm:text-4xl md:text-5xl">
-              Lo último en redes
+              <PreviewFieldPulse blockId="home-social" fieldKey="home-social-title" layout="inline" className="inline-block">
+                {h.socialTitle}
+              </PreviewFieldPulse>
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-[15px] font-light leading-relaxed text-brand-navy/70 md:text-base">
-              Mantente al día con nuestras publicaciones más recientes, proyectos y estilo de vida.
+              <PreviewFieldPulse blockId="home-social" fieldKey="home-social-subtitle" className="block">
+                {h.socialSubtitle}
+              </PreviewFieldPulse>
             </p>
           </Reveal>
 
@@ -822,7 +829,9 @@ export function HomePage() {
           ) : (
             <Reveal className="mx-auto max-w-lg text-center" y={16}>
               <p className="text-[15px] font-light text-brand-navy/70">
-                No pudimos cargar las 3 publicaciones ahora. Reintenta en unos segundos o ábrelo en Instagram.
+                <PreviewFieldPulse blockId="home-social" fieldKey="home-social-empty" className="block">
+                  {h.socialEmpty}
+                </PreviewFieldPulse>
               </p>
               <a
                 href={igProfileUrl}
@@ -831,7 +840,7 @@ export function HomePage() {
                 className="mt-5 inline-flex items-center gap-2 border border-brand-navy/15 bg-white px-5 py-2.5 text-[13px] uppercase tracking-[0.14em] text-brand-navy transition-colors hover:border-primary/40"
                 style={{ fontWeight: 500 }}
               >
-                Ver en Instagram
+                {t("home.viewOnInstagram")}
                 <ArrowRight className="h-4 w-4" />
               </a>
             </Reveal>
@@ -850,12 +859,15 @@ export function HomePage() {
                 <circle cx="12" cy="12" r="5" />
                 <circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none" />
               </svg>
-              Síguenos en Instagram
+              <PreviewFieldPulse blockId="home-social" fieldKey="home-social-cta" layout="inline" className="inline-block">
+                {h.socialCta}
+              </PreviewFieldPulse>
               <ArrowRight className="h-4 w-4" />
             </a>
           </Reveal>
         </div>
       </section>
+      </PreviewSectionChrome>
 
       {/* Experiencia — navy marca + imagen */}
       <PreviewSectionChrome blockId="home-experience" label="Experiencia">
