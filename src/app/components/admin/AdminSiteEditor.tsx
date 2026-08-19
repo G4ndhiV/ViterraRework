@@ -26,7 +26,6 @@ import {
 import { cn } from "../ui/utils";
 import { mergeSiteSection } from "../../../lib/siteContentMerge";
 import { LOCALES } from "../../i18n/locale";
-import { useSearchParams } from "react-router";
 
 const SITE_LABELS: Record<SiteKey, string> = {
   home: "Inicio",
@@ -73,13 +72,6 @@ function cloneSection<K extends SiteKey>(key: K, data: SiteContent): SiteContent
 }
 
 export function AdminSiteEditor() {
-  const [searchParams] = useSearchParams();
-  /**
-   * El selector ES/EN queda oculto: el contenido en inglés lo genera el
-   * pipeline automático. Se muestra solo con `?i18n=1` en la URL del editor,
-   * como escotilla para corregir a mano una traducción que quedó mal.
-   */
-  const showLocaleOverride = searchParams.has("i18n");
   const {
     content,
     setSection,
@@ -477,9 +469,9 @@ export function AdminSiteEditor() {
     <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50/90 px-2 py-1.5">
       <span
         className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-xs"
-        title="Override manual: el inglés se genera automáticamente. Edítalo solo para corregir una traducción."
+        title="Idioma que estás editando. El contenido en inglés se escribe a mano: elige EN y edita la página."
       >
-        Idioma (override)
+        Idioma
       </span>
       <div className="inline-flex overflow-hidden rounded-md border border-slate-300">
         {LOCALES.map((l) => {
@@ -713,7 +705,7 @@ export function AdminSiteEditor() {
               mobileSplitTab !== "edit" && "hidden lg:flex",
             )}
           >
-            {showLocaleOverride ? <div className="shrink-0">{localeControls}</div> : null}
+            <div className="shrink-0">{localeControls}</div>
             <div
               className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain rounded-lg border border-slate-200 bg-white p-2.5 shadow-inner sm:p-3 [overscroll-behavior-y:contain]"
               onPointerDown={(e) => {

@@ -1,13 +1,22 @@
 #!/usr/bin/env node
 /**
- * Traducción automática ES→EN del catálogo y del contenido del CMS.
+ * Traducción automática ES→EN del CATÁLOGO (propiedades y desarrollos).
+ *
+ * Alcance deliberado: solo el catálogo, es decir el texto que entra por la
+ * importación de Tokko y que nadie puede traducir a mano porque llega solo.
+ * Los textos del sitio (`site_content_sections`: home, header, footer, etc.)
+ * NO se tocan aquí: esos se traducen a mano desde el editor del admin con el
+ * selector de idioma. Si algún día se quiere automatizar también el CMS, va en
+ * un script aparte — no reabriendo este, para que el gasto siga acotado a lo
+ * que de verdad no tiene alternativa manual.
  *
  * Corre en Node (local o CI), nunca en el navegador: la ANTHROPIC_API_KEY no
  * lleva prefijo VITE_, así que Vite no la incluye en el bundle.
  *
  * Diseño:
  * - Solo traduce lo que cambió. Guarda un SHA-256 del texto original por campo;
- *   si el hash coincide con el almacenado, se salta (costo cero).
+ *   si el hash coincide con el almacenado, se salta (costo cero). En la práctica
+ *   esto significa que una corrida normal solo paga por las fichas nuevas.
  * - Nunca pisa una corrección manual (`origin = 'manual'`).
  * - Usa el Batch API: la traducción no es sensible a latencia y sale a mitad de
  *   precio. Con --sync fuerza peticiones normales (útil para probar pocas).
@@ -26,7 +35,6 @@ import { createClient } from "@supabase/supabase-js";
 
 const MODEL = "claude-opus-5";
 const TARGET_LOCALE = "en";
-const DEFAULT_SOURCE_LOCALE = "es";
 
 /** Campos de texto libre que se traducen, por entidad. */
 const FIELDS = {
@@ -124,15 +132,38 @@ function buildSchema(fieldNames) {
 
 /* ─── Recolección de trabajo pendiente ───────────────────────────────────── */
 
+/**
+ * PostgREST corta cualquier respuesta en 1.000 filas. Sin paginar, las filas
+ * que quedan fuera del corte parecen "no traducidas" y se vuelven a pagar en
+ * cada corrida — un gasto silencioso que además crece con el catálogo. Se pide
+ * un elemento extra por página para saber si quedan más sin una consulta de
+ * conteo aparte.
+ */
+const PAGE = 1000;
+
+async function fetchAllRows(query, label) {
+  const out = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await query().range(from, from + PAGE - 1);
+    if (error) throw new Error(`Leyendo ${label}: ${error.message}`);
+    out.push(...(data ?? []));
+    if ((data?.length ?? 0) < PAGE) return out;
+  }
+}
+
 async function collectPending(supabase, { limit }) {
-  const { data: existing, error: exErr } = await supabase
-    .from("catalog_translations")
-    .select("entity,entity_id,field,source_hash,origin")
-    .eq("locale", TARGET_LOCALE);
-  if (exErr) throw new Error(`Leyendo traducciones: ${exErr.message}`);
+  const existing = await fetchAllRows(
+    () =>
+      supabase
+        .from("catalog_translations")
+        .select("entity,entity_id,field,source_hash,origin")
+        .eq("locale", TARGET_LOCALE)
+        .order("entity_id"),
+    "traducciones",
+  );
 
   const known = new Map();
-  for (const r of existing ?? []) {
+  for (const r of existing) {
     known.set(`${r.entity}|${r.entity_id}|${r.field}`, r);
   }
 
@@ -142,12 +173,12 @@ async function collectPending(supabase, { limit }) {
 
   for (const [entity, fields] of Object.entries(FIELDS)) {
     const table = entity === "property" ? "properties" : "developments";
-    const { data: rows, error } = await supabase
-      .from(table)
-      .select(["id", ...fields].join(","));
-    if (error) throw new Error(`Leyendo ${table}: ${error.message}`);
+    const rows = await fetchAllRows(
+      () => supabase.from(table).select(["id", ...fields].join(",")).order("id"),
+      table,
+    );
 
-    for (const row of rows ?? []) {
+    for (const row of rows) {
       const pending = {};
       for (const field of fields) {
         const source = String(row[field] ?? "");
@@ -176,163 +207,6 @@ async function collectPending(supabase, { limit }) {
     skippedFresh,
     skippedManual,
   };
-}
-
-/* ─── Contenido del CMS (site_content_sections) ──────────────────────────── */
-
-/**
- * Claves cuyo valor nunca se traduce aunque sea texto: identificadores, rutas,
- * iconos y slugs que el código compara literalmente.
- */
-const CMS_SKIP_KEYS = new Set([
-  "href",
-  "url",
-  "src",
-  "slug",
-  "icon",
-  "iconKey",
-  "platform",
-  "id",
-  "primaryListingHref",
-  "heroImage",
-  "searchImage",
-  "image",
-  "backgroundImage",
-  "videoUrl",
-]);
-
-/**
- * Recorre el payload y devuelve las cadenas traducibles indexadas por su ruta
- * (`hero.title`, `cards.0.description`). Trabajar con rutas planas permite
- * pedirle al modelo un objeto JSON simple y luego reconstruir la estructura.
- */
-function collectCmsStrings(node, path = "", out = {}) {
-  if (typeof node === "string") {
-    if (isTranslatable(node)) out[path] = node;
-    return out;
-  }
-  if (Array.isArray(node)) {
-    node.forEach((v, i) => collectCmsStrings(v, path ? `${path}.${i}` : String(i), out));
-    return out;
-  }
-  if (node && typeof node === "object") {
-    for (const [k, v] of Object.entries(node)) {
-      if (CMS_SKIP_KEYS.has(k)) continue;
-      collectCmsStrings(v, path ? `${path}.${k}` : k, out);
-    }
-  }
-  return out;
-}
-
-/** Aplica las traducciones sobre una copia del payload, respetando la forma. */
-function applyCmsStrings(payload, translations) {
-  const next = structuredClone(payload);
-  for (const [path, text] of Object.entries(translations)) {
-    const parts = path.split(".");
-    let cur = next;
-    for (let i = 0; i < parts.length - 1; i++) {
-      cur = cur?.[parts[i]];
-      if (cur == null) break;
-    }
-    const last = parts[parts.length - 1];
-    if (cur != null && typeof cur === "object" && last in cur) cur[last] = text;
-  }
-  return next;
-}
-
-async function collectCmsPending(supabase) {
-  const { data, error } = await supabase
-    .from("site_content_sections")
-    .select("page,locale,payload,source_hash,manual_override");
-  if (error) throw new Error(`Leyendo site_content_sections: ${error.message}`);
-
-  const es = new Map();
-  const target = new Map();
-  for (const row of data ?? []) {
-    if (row.locale === DEFAULT_SOURCE_LOCALE) es.set(row.page, row);
-    else if (row.locale === TARGET_LOCALE) target.set(row.page, row);
-  }
-
-  const jobs = [];
-  let skippedFresh = 0;
-  let skippedManual = 0;
-
-  for (const [page, esRow] of es) {
-    const strings = collectCmsStrings(esRow.payload ?? {});
-    if (Object.keys(strings).length === 0) continue;
-
-    const hash = sha256(JSON.stringify(esRow.payload ?? {}));
-    const existing = target.get(page);
-    if (existing?.manual_override) {
-      skippedManual++;
-      continue;
-    }
-    if (existing?.source_hash === hash) {
-      skippedFresh++;
-      continue;
-    }
-    jobs.push({ page, payload: esRow.payload ?? {}, strings, hash });
-  }
-  return { jobs, skippedFresh, skippedManual };
-}
-
-function cmsRequestFor(job) {
-  const paths = Object.keys(job.strings);
-  const listado = paths.map((p) => `<campo nombre="${p}">\n${job.strings[p]}\n</campo>`).join("\n\n");
-  return {
-    model: MODEL,
-    max_tokens: 16000,
-    system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-    output_config: {
-      format: {
-        type: "json_schema",
-        schema: {
-          type: "object",
-          properties: Object.fromEntries(paths.map((p) => [p, { type: "string" }])),
-          required: paths,
-          additionalProperties: false,
-        },
-      },
-    },
-    messages: [
-      {
-        role: "user",
-        content: `Traduce al inglés el contenido de cada campo. Son textos de la interfaz del sitio (títulos, subtítulos, etiquetas de botones): mantén la brevedad del original, no lo alargues.\n\n${listado}`,
-      },
-    ],
-  };
-}
-
-async function runCms(anthropic, supabase, jobs) {
-  let saved = 0;
-  for (const [i, job] of jobs.entries()) {
-    process.stdout.write(`  [${i + 1}/${jobs.length}] página "${job.page}" … `);
-    const message = await anthropic.messages.create(cmsRequestFor(job));
-    const translated = parseTranslated(message);
-    if (!translated) {
-      console.log("sin JSON válido, se omite");
-      continue;
-    }
-    const payload = applyCmsStrings(job.payload, translated);
-    const { error } = await supabase.from("site_content_sections").upsert(
-      {
-        page: job.page,
-        locale: TARGET_LOCALE,
-        payload,
-        source_hash: job.hash,
-        manual_override: false,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "page,locale" },
-    );
-    if (error) {
-      console.log(`error al guardar: ${error.message}`);
-      continue;
-    }
-    saved++;
-    console.log(`ok (${Object.keys(translated).length} cadenas)`);
-  }
-  return saved;
 }
 
 /* ─── Estimación ─────────────────────────────────────────────────────────── */
@@ -470,19 +344,6 @@ async function main() {
     process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || required("VITE_SUPABASE_ANON_KEY"),
     { auth: { persistSession: false } },
   );
-
-  /* ── Contenido del CMS ── */
-  if (!args.includes("--solo-catalogo")) {
-    console.log("CMS (site_content_sections):");
-    const cms = await collectCmsPending(supabase);
-    console.log(`  al día: ${cms.skippedFresh} · corregidas a mano: ${cms.skippedManual} · pendientes: ${cms.jobs.length}`);
-    if (cms.jobs.length > 0 && !dryRun) {
-      const anthropicCms = new Anthropic({ apiKey: required("ANTHROPIC_API_KEY") });
-      const n = await runCms(anthropicCms, supabase, cms.jobs);
-      console.log(`  ${n} páginas traducidas.`);
-    }
-    console.log("");
-  }
 
   console.log("Catálogo (propiedades y desarrollos):");
   const { jobs, skippedFresh, skippedManual } = await collectPending(supabase, { limit });

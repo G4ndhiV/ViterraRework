@@ -120,8 +120,7 @@ async function main() {
     process.exit(1);
   }
   console.log(`\nListo. ${rows.length} páginas sembradas: ${missing.join(", ")}`);
-  console.log("Ahora corre el pipeline para traducirlas:");
-  console.log("  node scripts/translate-catalog.mjs");
+  console.log("Ahora tradúcelas a mano desde el editor del sitio (selector de idioma → EN).");
 }
 
 main().catch((e) => {
