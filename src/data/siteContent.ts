@@ -321,6 +321,12 @@ export interface SiteContent {
     heroSubtitle: string;
     featuredKicker: string;
     featuredTitle: string;
+    ctaTitle: string;
+    ctaSubtitle: string;
+    ctaPrimaryLabel: string;
+    ctaSecondaryLabel: string;
+    /** Teléfono del botón «Llamar ahora»; se usa tal cual en el `tel:`. */
+    ctaPhone: string;
   };
   /** Cabecera de `/renta` (listado; el catálogo sigue en Supabase). */
   rent: {
@@ -669,6 +675,12 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
       "Descubre nuestros desarrollos inmobiliarios exclusivos con arquitectura vanguardista y amenidades de clase mundial.",
     featuredKicker: "Destacados",
     featuredTitle: "Proyectos Exclusivos",
+    ctaTitle: "Contáctanos",
+    ctaSubtitle:
+      "Agenda una visita o escríbenos: con gusto te orientamos sobre disponibilidad, precios y opciones en nuestros desarrollos exclusivos.",
+    ctaPrimaryLabel: "Agendar cita",
+    ctaSecondaryLabel: "Llamar ahora",
+    ctaPhone: "+523314457122",
   },
   rent: {
     heroImage:

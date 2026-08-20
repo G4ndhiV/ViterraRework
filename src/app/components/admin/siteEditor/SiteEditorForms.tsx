@@ -2355,6 +2355,30 @@ export function DevelopmentsEditorForm({
         </LabeledField>
       </EditorSection>
       )}
+
+      {s("dev-cta") && (
+      <EditorSection title="Llamado a la acción" sectionId="dev-cta">
+        <LabeledField label="Título" editorFieldKey="dev-cta-title">
+          <TextInput value={draft.ctaTitle} onChange={(v) => p({ ctaTitle: v })} />
+        </LabeledField>
+        <LabeledField label="Descripción" editorFieldKey="dev-cta-subtitle">
+          <TextArea value={draft.ctaSubtitle} onChange={(v) => p({ ctaSubtitle: v })} rows={3} />
+        </LabeledField>
+        <LabeledField label="Botón principal" editorFieldKey="dev-cta-primary">
+          <TextInput value={draft.ctaPrimaryLabel} onChange={(v) => p({ ctaPrimaryLabel: v })} />
+        </LabeledField>
+        <LabeledField label="Botón secundario" editorFieldKey="dev-cta-secondary">
+          <TextInput value={draft.ctaSecondaryLabel} onChange={(v) => p({ ctaSecondaryLabel: v })} />
+        </LabeledField>
+        <LabeledField label="Teléfono del botón «Llamar ahora»" editorFieldKey="dev-cta-phone">
+          <TextInput value={draft.ctaPhone} onChange={(v) => p({ ctaPhone: v })} />
+        </LabeledField>
+        <p className="text-xs text-slate-500">
+          El botón principal siempre lleva a /contacto. El teléfono se usa tal cual en el enlace de
+          llamada: escríbelo con lada internacional, por ejemplo +523314457122.
+        </p>
+      </EditorSection>
+      )}
     </div>
   );
 }

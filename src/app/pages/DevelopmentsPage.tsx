@@ -495,23 +495,27 @@ export function DevelopmentsPage() {
         <section className="border-b border-brand-navy/10 bg-white py-16">
           <div className="mx-auto max-w-xl px-4 text-center text-brand-navy/75">
             <p className="font-heading text-lg" style={{ fontWeight: 500 }}>
-              No hay desarrollos que coincidan con tu búsqueda.
+              {t("dev.noMatches")}
             </p>
-            <p className="mt-2 text-sm">Prueba con otra ubicación o ajusta el rango de precios.</p>
+            <p className="mt-2 text-sm">{t("dev.noMatchesHint")}</p>
           </div>
         </section>
       )}
 
       {/* CTA Section */}
+      <PreviewSectionChrome blockId="dev-cta" label="Llamado a la acción">
       <section className="border-t border-brand-navy/10 bg-gradient-to-b from-[#f5f3ef] via-white to-brand-canvas py-12 sm:py-16 md:py-24">
         <Reveal className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8" y={26}>
           <div>
             <h2 className="font-heading mb-4 text-2xl font-semibold tracking-tight text-brand-navy sm:mb-6 sm:text-4xl md:text-5xl">
-              Contáctanos
+              <PreviewFieldPulse blockId="dev-cta" fieldKey="dev-cta-title" layout="inline" className="inline-block">
+                {page.ctaTitle}
+              </PreviewFieldPulse>
             </h2>
             <p className="font-heading mx-auto mb-8 max-w-2xl text-base font-normal leading-relaxed text-brand-navy/70 not-italic sm:mb-10 sm:text-lg">
-              Agenda una visita o escríbenos: con gusto te orientamos sobre disponibilidad, precios y opciones en
-              nuestros desarrollos exclusivos.
+              <PreviewFieldPulse blockId="dev-cta" fieldKey="dev-cta-subtitle" className="block">
+                {page.ctaSubtitle}
+              </PreviewFieldPulse>
             </p>
 
             <div className={cn("flex flex-col justify-center gap-4", !pl.preview && "sm:flex-row")}>
@@ -520,22 +524,27 @@ export function DevelopmentsPage() {
                   to="/contacto"
                   className="font-heading inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-8 py-4 font-medium text-white transition-all hover:bg-brand-red-hover"
                 >
-                  Agendar cita
+                  <PreviewFieldPulse blockId="dev-cta" fieldKey="dev-cta-primary" layout="inline" className="inline-block">
+                    {page.ctaPrimaryLabel}
+                  </PreviewFieldPulse>
                   <ArrowRight className="h-5 w-5" strokeWidth={2} />
                 </Link>
               </motion.div>
               <motion.div whileHover={reduceMotion ? undefined : { y: -3 }} transition={{ type: "spring", stiffness: 380, damping: 24 }}>
                 <a
-                  href="tel:+523314457122"
+                  href={`tel:${page.ctaPhone}`}
                   className="font-heading inline-flex items-center justify-center gap-2 rounded-lg border border-brand-navy/25 bg-white px-8 py-4 font-medium text-brand-navy transition-all hover:border-brand-navy/40 hover:bg-brand-navy/[0.04]"
                 >
-                  Llamar ahora
+                  <PreviewFieldPulse blockId="dev-cta" fieldKey="dev-cta-secondary" layout="inline" className="inline-block">
+                    {page.ctaSecondaryLabel}
+                  </PreviewFieldPulse>
                 </a>
               </motion.div>
             </div>
           </div>
         </Reveal>
       </section>
+      </PreviewSectionChrome>
 
       </main>
 

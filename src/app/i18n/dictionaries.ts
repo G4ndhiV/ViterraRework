@@ -119,6 +119,8 @@ export const es = {
   "dev.countOne": "1 desarrollo disponible",
   "dev.count": "{count} desarrollos disponibles",
   "dev.countMatchOne": "1 desarrollo coincide con tu búsqueda",
+  "dev.noMatches": "No hay desarrollos que coincidan con tu búsqueda.",
+  "dev.noMatchesHint": "Prueba con otra ubicación o ajusta el rango de precios.",
   "dev.countMatch": "{count} desarrollos coinciden con tu búsqueda",
 
   /* Formularios */
@@ -299,6 +301,8 @@ export const en: Record<TranslationKey, string> = {
   "dev.countOne": "1 development available",
   "dev.count": "{count} developments available",
   "dev.countMatchOne": "1 development matches your search",
+  "dev.noMatches": "No developments match your search.",
+  "dev.noMatchesHint": "Try another location or adjust the price range.",
   "dev.countMatch": "{count} developments match your search",
 
   "form.name": "Name",

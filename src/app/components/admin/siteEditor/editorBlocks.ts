@@ -64,6 +64,7 @@ export const EDITOR_PAGE_BLOCKS: Record<SiteKey, { id: string; label: string }[]
   developments: [
     { id: "dev-hero", label: "Cabecera" },
     { id: "dev-featured", label: "Proyectos destacados (títulos)" },
+    { id: "dev-cta", label: "Llamado a la acción" },
   ],
   rent: [{ id: "rent-hero", label: "Cabecera" }],
   sale: [{ id: "sale-hero", label: "Cabecera" }],
